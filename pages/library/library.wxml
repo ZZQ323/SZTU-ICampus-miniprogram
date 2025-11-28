@@ -1,0 +1,291 @@
+<view class="container">
+  <custom-navbar 
+    title="图书馆" 
+    background="#4a90e2"
+    color="#ffffff"
+  />
+  
+  <view class="library-container">
+    <!-- 图书馆概览卡片 -->
+    <view class="overview-card">
+      <view class="overview-header">
+        <view class="overview-title">📊 今日概览</view>
+        <view class="overview-time">{{todayCheckInCount}} 人已进馆</view>
+      </view>
+      <view class="overview-stats">
+        <view class="stat-item">
+          <view class="stat-number">{{availableSeats}}</view>
+          <view class="stat-label">可用座位</view>
+        </view>
+        <view class="stat-divider"></view>
+        <view class="stat-item">
+          <view class="stat-number">{{currentBorrow}}/{{maxBorrow}}</view>
+          <view class="stat-label">借阅数量</view>
+        </view>
+        <view class="stat-divider"></view>
+        <view class="stat-item">
+          <view class="stat-number" wx:if="{{overdueBooksCount > 0}}" style="color: #e34d59;">{{overdueBooksCount}}</view>
+          <view class="stat-number" wx:else style="color: #00a870;">0</view>
+          <view class="stat-label">逾期图书</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 公告栏 -->
+    <view class="announcement-bar" wx:if="{{announcements.length > 0}}">
+      <t-icon name="notification" size="16" color="#0052d9" />
+      <view class="announcement-text">{{announcements[0].title}}</view>
+    </view>
+
+    <!-- 标签页导航 -->
+    <t-tabs value="{{activeTab}}" bind:change="onTabChange" sticky sticky-offset="{{0}}">
+      <t-tab-panel label="📖 借阅" value="borrow">
+        <!-- 借阅信息区域 -->
+        <view class="borrow-section">
+          <!-- 当前借阅 -->
+          <view class="section-header">
+            <view class="section-title">当前借阅 ({{currentBorrow}}/{{maxBorrow}})</view>
+            <view class="section-action" bindtap="refreshBorrowInfo">
+              <t-icon name="refresh" size="16" color="#0052d9" />
+              <text>刷新</text>
+            </view>
+          </view>
+
+          <view wx:if="{{loading}}" class="loading-container">
+            <t-loading size="24" />
+            <text>加载中...</text>
+          </view>
+
+          <view wx:elif="{{borrowList.length === 0}}" class="empty-state">
+            <t-icon name="book" size="48" color="#ccc" />
+            <view class="empty-text">暂无借阅图书</view>
+            <view class="empty-subtitle">去搜索页面找找喜欢的书吧</view>
+          </view>
+
+          <view wx:else>
+            <view class="book-item" wx:for="{{borrowList}}" wx:key="id">
+              <view class="book-cover">
+                <image src="{{item.cover}}" mode="aspectFit" />
+                <view wx:if="{{item.isOverdue}}" class="overdue-badge">逾期</view>
+              </view>
+              <view class="book-info">
+                <view class="book-title">{{item.title}}</view>
+                <view class="book-author">{{item.author}}</view>
+                <view class="book-meta">
+                  <view class="meta-item">
+                    <text>借阅：{{item.borrowDate}}</text>
+                  </view>
+                  <view class="meta-item">
+                    <text>到期：{{item.dueDate}}</text>
+                  </view>
+                  <view class="meta-item" wx:if="{{item.isOverdue}}">
+                    <text style="color: #e34d59;">已逾期 {{-item.daysLeft}} 天</text>
+                  </view>
+                  <view class="meta-item" wx:else>
+                    <text style="color: {{item.daysLeft <= 3 ? '#ff9500' : '#00a870'}};">
+                      还有 {{item.daysLeft}} 天到期
+                    </text>
+                  </view>
+                </view>
+                <view class="book-actions">
+                  <t-button size="extra-small" theme="light" data-book="{{item}}" bindtap="renewBook" 
+                    disabled="{{item.renewCount >= item.maxRenew}}">
+                    续借 ({{item.renewCount}}/{{item.maxRenew}})
+                  </t-button>
+                  <t-button size="extra-small" shape="round" theme="outline" data-book="{{item}}" bindtap="onViewBookDetail">
+                    详情  
+                  </t-button>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <!-- 借阅历史 -->
+          <view class="section-header" style="margin-top: 24px;">
+            <view class="section-title">借阅历史</view>
+          </view>
+          <view class="history-list">
+            <view class="history-item" wx:for="{{borrowHistory}}" wx:key="id">
+              <view class="history-info">
+                <view class="history-title">{{item.title}}</view>
+                <view class="history-meta">{{item.borrowDate}} - {{item.returnDate}}</view>
+              </view>
+              <view class="history-rating">
+                <t-rate value="{{item.rating}}" size="14" disabled />
+              </view>
+            </view>
+          </view>
+        </view>
+      </t-tab-panel>
+
+      <t-tab-panel label="🔍 搜索" value="search">
+        <!-- 搜索区域 -->
+        <view class="search-section">
+          <view class="search-bar">
+            <t-input 
+              value="{{searchKeyword}}" 
+              placeholder="搜索图书、作者、ISBN..."
+              prefix-icon="search"
+              bind:input="onSearchInput"
+              bind:confirm="onSearch"
+              confirm-type="search"
+            />
+            <t-button theme="primary" size="small" bindtap="onSearch">搜索</t-button>
+          </view>
+
+          <!-- 搜索结果 -->
+          <view wx:if="{{showSearchResults}}" class="search-results">
+            <view class="section-header">
+              <view class="section-title">搜索结果 ({{searchResults.length}})</view>
+            </view>
+            <view class="book-grid">
+              <view class="book-card" wx:for="{{searchResults}}" wx:key="id" data-book="{{item}}" bindtap="onViewBookDetail">
+                <view class="book-cover">
+                  <image src="{{item.cover}}" mode="aspectFit" />
+                  <view class="book-status {{item.status === 'available' ? 'available' : 'borrowed'}}">
+                    {{item.status === 'available' ? '可借' : '已借'}}
+                  </view>
+                </view>
+                <view class="book-details">
+                  <view class="book-title">{{item.title}}</view>
+                  <view class="book-author">{{item.author}}</view>
+                  <view class="book-location">{{item.location}}</view>
+                  <view class="book-stats">
+                    <view class="rating">
+                      <t-rate value="{{item.rating}}" size="12" disabled />
+                      <text class="rating-text">{{item.rating}}</text>
+                    </view>
+                    <view class="borrow-count">借阅 {{item.borrowCount}} 次</view>
+                  </view>
+                  <view class="book-actions">
+                    <t-button size="small" theme="primary" wx:if="{{item.status === 'available'}}">
+                      借阅
+                    </t-button>
+                    <t-button size="small" theme="light" wx:else data-book="{{item}}" bindtap="reserveBook">
+                      预约
+                    </t-button>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <!-- 热门图书 -->
+          <view wx:else>
+            <view class="section-header">
+              <view class="section-title">🔥 热门图书</view>
+            </view>
+            <view class="book-grid">
+              <view class="book-card" wx:for="{{popularBooks}}" wx:key="id" data-book="{{item}}" bindtap="onViewBookDetail">
+                <view class="book-cover">
+                  <image src="{{item.cover}}" mode="aspectFit" />
+                  <view class="book-status {{item.status === 'available' ? 'available' : 'borrowed'}}">
+                    {{item.status === 'available' ? '可借' : '已借'}}
+                  </view>
+                </view>
+                <view class="book-details">
+                  <view class="book-title">{{item.title}}</view>
+                  <view class="book-author">{{item.author}}</view>
+                  <view class="book-stats">
+                    <view class="rating">
+                      <t-rate value="{{item.rating}}" size="12" disabled />
+                    </view>
+                    <view class="borrow-count">{{item.borrowCount}} 次借阅</view>
+                  </view>
+                </view>
+              </view>
+            </view>
+
+            <!-- 新书推荐 -->
+            <view class="section-header" style="margin-top: 24px;">
+              <view class="section-title">📚 新书推荐</view>
+            </view>
+            <view class="new-books-list">
+              <view class="new-book-item" wx:for="{{newArrivals}}" wx:key="id" data-book="{{item}}" bindtap="onViewBookDetail">
+                <view class="book-cover">
+                  <image src="{{item.cover}}" mode="aspectFit" />
+                  <view class="new-badge">NEW</view>
+                </view>
+                <view class="book-info">
+                  <view class="book-title">{{item.title}}</view>
+                  <view class="book-author">{{item.author}}</view>
+                  <view class="arrival-date">{{item.arrivalDate}} 新到</view>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </t-tab-panel>
+
+      <t-tab-panel label="💺 座位" value="seat">
+        <!-- 座位预约区域 -->
+        <view class="seat-section">
+          <view class="seat-overview">
+            <view class="overview-title">📍 座位概览</view>
+            <view class="seat-stats">
+              <view class="seat-progress">
+                <view class="progress-bar">
+                  <view class="progress-fill" style="width: {{(totalSeats - availableSeats) / totalSeats * 100}}\%;"></view>
+                </view>
+                <view class="progress-text">{{totalSeats - availableSeats}}/{{totalSeats}} 已占用</view>
+              </view>
+            </view>
+          </view>
+
+          <view class="floors-list">
+            <view class="floor-item" wx:for="{{floors}}" wx:key="id" data-floor="{{item}}" bindtap="onSelectFloor">
+              <view class="floor-info">
+                <view class="floor-name">{{item.name}}</view>
+                <view class="floor-description">{{item.description}}</view>
+                <view class="floor-stats">
+                  <view class="available-seats">可用: {{item.availableSeats}} 个</view>
+                  <view class="occupancy-rate">占用率: {{item.occupancyRate}}%</view>
+                </view>
+              </view>
+              <view class="floor-indicator">
+                <view class="seats-circle {{item.availableSeats < 10 ? 'low' : item.availableSeats < 30 ? 'medium' : 'high'}}">
+                  {{item.availableSeats}}
+                </view>
+                <t-icon name="chevron-right" size="16" color="#ccc" />
+              </view>
+            </view>
+          </view>
+        </view>
+      </t-tab-panel>
+
+      <t-tab-panel label="💡 荐购" value="recommend">
+        <!-- 图书荐购区域 -->
+        <view class="recommend-section">
+          <view class="recommend-header">
+            <view class="section-title">📝 图书荐购</view>
+            <view class="section-subtitle">推荐您希望图书馆购买的图书</view>
+          </view>
+
+          <view class="recommend-form">
+            <t-textarea 
+              value="{{recommendInfo}}"
+              placeholder="请输入图书名称、作者、ISBN或相关信息..."
+              maxlength="500"
+              indicator
+              bind:input="onRecommendInput"
+            />
+            <t-button theme="primary" block bindtap="onRecommend" disabled="{{!recommendInfo.trim()}}">
+              提交荐购
+            </t-button>
+          </view>
+
+          <!-- 荐购说明 -->
+          <view class="recommend-tips">
+            <view class="tips-title">💡 荐购说明</view>
+            <view class="tips-content">
+              <view class="tip-item">• 请提供准确的图书信息，包括书名、作者、出版社等</view>
+              <view class="tip-item">• 优先考虑学术价值高、读者需求量大的图书</view>
+              <view class="tip-item">• 荐购结果将在7个工作日内反馈</view>
+              <view class="tip-item">• 如有疑问，请联系图书馆咨询台</view>
+            </view>
+          </view>
+        </view>
+      </t-tab-panel>
+    </t-tabs>
+  </view>
+</view> 

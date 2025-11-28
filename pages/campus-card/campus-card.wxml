@@ -1,0 +1,185 @@
+<view class="campus-card-container">
+  <!-- 自定义导航栏 -->
+  <custom-navbar 
+    title="校园卡" 
+    background="#7c4dff"
+    color="#ffffff"
+  />
+
+  <!-- 校园卡卡片 -->
+  <view class="card-section">
+    <view class="campus-card {{cardInfo.status === 'lost' ? 'card-lost' : ''}}">
+      <!-- 卡片状态指示器 -->
+      <view class="card-status" wx:if="{{cardInfo.status !== 'normal'}}">
+        <view class="status-indicator {{cardInfo.status}}">
+          {{cardInfo.status === 'lost' ? '已挂失' : '已冻结'}}
+        </view>
+      </view>
+      
+      <!-- 用户信息 -->
+      <view class="card-header">
+        <view class="user-avatar">
+          <image src="{{userInfo.avatar}}" mode="aspectFill" />
+        </view>
+        <view class="user-info">
+          <view class="user-name">{{userInfo.name}}</view>
+          <view class="user-id">学号：{{userInfo.studentId}}</view>
+          <view class="card-number">卡号：{{cardInfo.cardNumber}}</view>
+        </view>
+        <view class="card-logo">
+          <text>SZTU</text>
+        </view>
+      </view>
+
+      <!-- 余额信息 -->
+      <view class="balance-section">
+        <view class="balance-label">账户余额</view>
+        <view class="balance-amount">¥{{cardInfo.balance}}</view>
+        <view class="last-update">最后更新：{{cardInfo.lastUpdateTime}}</view>
+      </view>
+
+      <!-- 操作按钮 -->
+      <view class="card-actions">
+        <view class="action-btn primary" bindtap="onRecharge">
+          <t-icon name="add" size="18" color="white" />
+          <text>充值</text>
+        </view>
+        <view class="action-btn secondary" bindtap="onViewRecords">
+          <t-icon name="format-list-bulleted" size="18" color="#0052d9" />
+          <text>记录</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 消费统计 -->
+  <view class="stats-section">
+    <view class="section-header">
+      <view class="section-title">📊 消费统计</view>
+    </view>
+    
+    <view class="stats-cards">
+      <view class="stat-card">
+        <view class="stat-amount">¥{{todaySpending}}</view>
+        <view class="stat-label">今日消费</view>
+      </view>
+      <view class="stat-card">
+        <view class="stat-amount">¥{{monthlySpending}}</view>
+        <view class="stat-label">本月消费</view>
+      </view>
+      <view class="stat-card">
+        <view class="stat-amount">{{recentRecords.length}}</view>
+        <view class="stat-label">近期交易</view>
+      </view>
+    </view>
+
+    <!-- 消费分类统计 -->
+    <view class="category-stats">
+      <view class="category-header">消费分类</view>
+      <view class="category-list">
+        <view class="category-item" wx:for="{{spendingStats.categories}}" wx:key="name">
+          <view class="category-info">
+            <view class="category-name">{{item.name}}</view>
+            <view class="category-amount">¥{{item.amount}}</view>
+          </view>
+          <view class="category-bar">
+            <view class="bar-fill" style="width: {{item.percentage}}%; background: {{item.color}};"></view>
+          </view>
+          <view class="category-percentage">{{item.percentage}}%</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 近期交易记录 -->
+  <view class="records-section">
+    <view class="section-header">
+      <view class="section-title">💰 近期交易</view>
+      <view class="section-action" bindtap="onViewRecords">
+        <text>查看全部</text>
+        <t-icon name="chevron-right" size="16" color="#0052d9" />
+      </view>
+    </view>
+
+    <view wx:if="{{loading}}" class="loading-container">
+      <t-loading size="24" />
+      <text>加载中...</text>
+    </view>
+
+    <view wx:elif="{{recentRecords.length === 0}}" class="empty-state">
+      <t-icon name="receipt" size="48" color="#ccc" />
+      <view class="empty-text">暂无交易记录</view>
+    </view>
+
+    <view wx:else class="records-list">
+      <view class="record-item" wx:for="{{recentRecords}}" wx:key="id" wx:if="{{index < 5}}">
+        <view class="record-icon">
+          <t-icon name="{{item.type === 'recharge' ? 'add-circle' : 'remove-circle'}}" 
+                  size="20" 
+                  color="{{item.type === 'recharge' ? '#00a870' : '#0052d9'}}" />
+        </view>
+        <view class="record-info">
+          <view class="record-location">{{item.location}}</view>
+          <view class="record-time">{{item.time}}</view>
+          <view class="record-description">{{item.description}}</view>
+        </view>
+        <view class="record-amount {{item.type}}">
+          {{item.amount}}
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 服务功能 -->
+  <view class="services-section">
+    <view class="section-header">
+      <view class="section-title">🛠️ 服务功能</view>
+    </view>
+
+    <view class="services-grid">
+      <view class="service-item" 
+            wx:for="{{services}}" 
+            wx:key="id" 
+            data-service="{{item}}" 
+            bindtap="onServiceTap">
+        <view class="service-icon">
+          <t-icon name="{{item.icon}}" size="24" color="#0052d9" />
+        </view>
+        <view class="service-info">
+          <view class="service-name">{{item.name}}</view>
+          <view class="service-desc">{{item.desc}}</view>
+        </view>
+        <t-icon name="chevron-right" size="16" color="#ccc" />
+      </view>
+    </view>
+  </view>
+
+  <!-- 常用地点统计 -->
+  <view class="locations-section">
+    <view class="section-header">
+      <view class="section-title">📍 常用地点</view>
+    </view>
+
+    <view class="locations-list">
+      <view class="location-item" wx:for="{{spendingStats.locations}}" wx:key="name">
+        <view class="location-info">
+          <view class="location-name">{{item.name}}</view>
+          <view class="location-stats">
+            <text class="visit-count">{{item.count}}次消费</text>
+            <text class="total-amount">总计¥{{item.amount}}</text>
+          </view>
+        </view>
+        <view class="location-indicator">
+          <view class="amount-circle">¥{{item.amount}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 快捷操作悬浮按钮 -->
+  <view class="fab-container">
+    <view class="fab-button" bindtap="onRecharge">
+      <t-icon name="add" size="24" color="white" />
+    </view>
+  </view>
+</view> 

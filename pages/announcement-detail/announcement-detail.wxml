@@ -1,0 +1,57 @@
+<view class="announcement-detail">
+  <custom-navbar title="校园公告" showBack="{{true}}" background="{{'#668B8B'}}"></custom-navbar>
+  <view wx:if="{{loading}}" class="loading-container">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">加载中...</text>
+  </view>
+
+  <view wx:else class="detail-container">
+    <!-- 公告标题和基本信息 -->
+    <view class="announcement-header">
+      <text class="announcement-title">{{announcement.title}}</text>
+      <view class="announcement-meta">
+        <view class="meta-item">
+          <text class="meta-label">发布部门</text>
+          <text class="meta-value">{{announcement.department}}</text>
+        </view>
+        <view class="meta-item">
+          <text class="meta-label">发布时间</text>
+          <text class="meta-value">{{announcement.fullTime}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 公告内容 -->
+    <view class="announcement-content">
+      <text class="content-text">{{announcement.content}}</text>
+    </view>
+
+    <!-- 操作按钮 -->
+    <view class="action-buttons">
+      <button class="action-btn {{isCollected ? 'collected' : 'secondary'}}" bind:tap="onCollect">
+        <text class="btn-icon">{{isCollected ? '⭐' : '☆'}}</text>
+        <text class="btn-text">{{isCollected ? '已收藏' : '收藏'}}</text>
+      </button>
+      
+      <button class="action-btn secondary" bind:tap="onCopy">
+        <text class="btn-icon">📋</text>
+        <text class="btn-text">复制</text>
+      </button>
+      
+      <button class="action-btn primary" open-type="share">
+        <text class="btn-icon">🔗</text>
+        <text class="btn-text">分享</text>
+      </button>
+    </view>
+
+    <!-- 相关信息 -->
+    <view class="related-info" wx:if="{{announcement.stream_type}}">
+      <view class="info-item">
+        <text class="info-label">数据来源</text>
+        <text class="info-value {{announcement.stream_type === 'realtime_push' ? 'realtime' : 'normal'}}">
+          {{announcement.stream_type === 'realtime_push' ? '🌊 实时推送' : '📡 常规数据'}}
+        </text>
+      </view>
+    </view>
+  </view>
+</view> 

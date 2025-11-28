@@ -1,0 +1,90 @@
+<view class="event-detail">
+  <custom-navbar title="活动详情" showBack="{{true}}" background="#9c27b0"></custom-navbar>
+  
+  <view wx:if="{{loading}}" class="loading-container">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">加载中...</text>
+  </view>
+
+  <view wx:else class="detail-container">
+    <!-- 活动标题和基本信息 -->
+    <view class="event-header">
+      <text class="event-title">{{event.title}}</text>
+      <view class="event-meta">
+        <view class="meta-item">
+          <text class="meta-label">活动时间</text>
+          <text class="meta-value">{{event.startTime}}</text>
+        </view>
+        <view class="meta-item">
+          <text class="meta-label">活动地点</text>
+          <text class="meta-value">{{event.location}}</text>
+        </view>
+        <view class="meta-item">
+          <text class="meta-label">主办方</text>
+          <text class="meta-value">{{event.organizer}}</text>
+        </view>
+        <view class="meta-item">
+          <text class="meta-label">参与人数</text>
+          <text class="meta-value">{{event.participants}}</text>
+        </view>
+        <view class="meta-item">
+          <text class="meta-label">活动状态</text>
+          <text class="meta-value {{event.status === 'ongoing' ? 'status-ongoing' : (event.status === 'upcoming' ? 'status-upcoming' : 'status-ended')}}">
+            {{event.status === 'upcoming' ? '🟡 即将开始' : (event.status === 'ongoing' ? '🟢 进行中' : '🔴 已结束')}}
+          </text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 活动内容 -->
+    <view class="event-content">
+      <text class="content-text">{{event.description}}</text>
+      
+      <view wx:if="{{event.agenda}}" class="content-section">
+        <view class="section-title">📅 活动安排</view>
+        <text class="section-content">{{event.agenda}}</text>
+      </view>
+
+      <view wx:if="{{event.requirements}}" class="content-section">
+        <view class="section-title">⚠️ 参与要求</view>
+        <text class="section-content">{{event.requirements}}</text>
+      </view>
+
+      <view wx:if="{{event.contact}}" class="content-section">
+        <view class="section-title">📞 联系方式</view>
+        <text class="section-content">{{event.contact}}</text>
+      </view>
+
+      <view wx:if="{{event.reward}}" class="content-section">
+        <view class="section-title">🎁 活动奖励</view>
+        <text class="section-content">{{event.reward}}</text>
+      </view>
+    </view>
+
+    <!-- 操作按钮 -->
+    <view class="action-buttons">
+      <button class="action-btn {{isFollowed ? 'followed' : 'secondary'}}" bind:tap="onFollow">
+        <text class="btn-icon">{{isFollowed ? '⭐' : '☆'}}</text>
+        <text class="btn-text">{{isFollowed ? '已关注' : '关注'}}</text>
+      </button>
+      
+      <button class="action-btn {{isRegistered ? 'registered' : 'primary'}}" bind:tap="onRegister">
+        <text class="btn-icon">{{isRegistered ? '✅' : '📝'}}</text>
+        <text class="btn-text">{{isRegistered ? '已报名' : '报名'}}</text>
+      </button>
+      
+      <button class="action-btn secondary" bind:tap="onShare">
+        <text class="btn-icon">🔗</text>
+        <text class="btn-text">分享</text>
+      </button>
+    </view>
+
+    <!-- 相关信息 -->
+    <view class="related-info">
+      <view class="info-item">
+        <text class="info-label">数据来源</text>
+        <text class="info-value realtime">🌊 实时更新</text>
+      </view>
+    </view>
+  </view>
+</view> 
