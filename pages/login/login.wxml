@@ -1,0 +1,14 @@
+
+<view class="main">
+	<form bindsubmit="loginSubmit">
+		<!-- 示例：添加账号和密码输入框，你可以根据实际需求调整 -->
+		<view>技大师生，欢迎登录！</view>
+		<view class="input-item">
+			<input name="username" placeholder="请输入账号" type="text" />
+		</view>
+		<view class="input-item">
+			<input name="password" placeholder="请输入密码" type="password" />
+		</view>
+		<button type="primary" form-type="submit" plain="true">提交</button>
+	</form>
+</view>
