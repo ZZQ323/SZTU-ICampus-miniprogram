@@ -9,301 +9,361 @@ page {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 20rpx 20rpx !important; /* 进一步缩小左右内边距 */
+	padding: 20rpx 20rpx !important;
+	/* 进一步缩小左右内边距 */
 	overflow: hidden;
 	position: relative;
-	box-sizing: border-box; /* 关键：padding不占额外宽度 */
-  }
-  
-  /* 渐变动画 */
-  @keyframes gradientFlow {
-	0% { background-position: 0% 50%; }
-	50% { background-position: 100% 50%; }
-	100% { background-position: 0% 50%; }
-  }
-  
-  /* 装饰性背景元素：缩小尺寸，避免溢出屏幕 */
-  .bg-decoration {
+	box-sizing: border-box;
+	/* 关键：padding不占额外宽度 */
+}
+
+/* 渐变动画 */
+@keyframes gradientFlow {
+	0% {
+		background-position: 0% 50%;
+	}
+
+	50% {
+		background-position: 100% 50%;
+	}
+
+	100% {
+		background-position: 0% 50%;
+	}
+}
+
+/* 装饰性背景元素：缩小尺寸，避免溢出屏幕 */
+.bg-decoration {
 	position: absolute;
 	border-radius: 50%;
 	opacity: 0.1;
 	animation: float 20s ease-in-out infinite;
-  }
-  
-  .bg-decoration-1 {
-	width: 400rpx !important; /* 原600rpx，大幅缩小 */
+}
+
+.bg-decoration-1 {
+	width: 400rpx !important;
+	/* 原600rpx，大幅缩小 */
 	height: 400rpx !important;
-	background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 70%);
+	background: radial-gradient(circle, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0) 70%);
 	top: -150rpx;
 	left: -150rpx;
 	animation-delay: 0s;
-  }
-  
-  .bg-decoration-2 {
-	width: 300rpx !important; /* 原400rpx */
+}
+
+.bg-decoration-2 {
+	width: 300rpx !important;
+	/* 原400rpx */
 	height: 300rpx !important;
-	background: radial-gradient(circle, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 70%);
+	background: radial-gradient(circle, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 70%);
 	bottom: -80rpx;
 	right: -80rpx;
 	animation-delay: 5s;
-  }
-  
-  .bg-decoration-3 {
-	width: 200rpx !important; /* 原300rpx */
+}
+
+.bg-decoration-3 {
+	width: 200rpx !important;
+	/* 原300rpx */
 	height: 200rpx !important;
-	background: radial-gradient(circle, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 70%);
+	background: radial-gradient(circle, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0) 70%);
 	top: 50%;
 	right: 5%;
 	animation-delay: 10s;
-  }
-  
-  @keyframes float {
-	0%, 100% { transform: translate(0, 0) scale(1); }
-	33% { transform: translate(40rpx, -40rpx) scale(1.1); } /* 缩小位移 */
-	66% { transform: translate(-30rpx, 30rpx) scale(0.9); }
-  }
-  
-  /* 登录容器：适配iPhone 12/13 Pro（780rpx宽度）的核心调整 */
-  .login-container {
+}
+
+@keyframes float {
+
+	0%,
+	100% {
+		transform: translate(0, 0) scale(1);
+	}
+
+	33% {
+		transform: translate(40rpx, -40rpx) scale(1.1);
+	}
+
+	/* 缩小位移 */
+	66% {
+		transform: translate(-30rpx, 30rpx) scale(0.9);
+	}
+}
+
+/* 登录容器：适配iPhone 12/13 Pro（780rpx宽度）的核心调整 */
+.login-container {
 	background: rgba(255, 255, 255, 0.95);
 	backdrop-filter: blur(40rpx);
 	border-radius: 48rpx;
-	padding: 50rpx 30rpx !important; /* 进一步缩小内边距 */
-	width: 90%; /* 基于屏幕宽度的百分比 */
-	max-width: 650rpx !important; /* 适配780rpx屏幕，留足边距 */
+	padding: 50rpx 30rpx !important;
+	/* 进一步缩小内边距 */
+	width: 90%;
+	/* 基于屏幕宽度的百分比 */
+	max-width: 650rpx !important;
+	/* 适配780rpx屏幕，留足边距 */
 	box-shadow: 0 30rpx 80rpx rgba(0, 0, 0, 0.12),
-				0 0 0 2rpx rgba(255, 255, 255, 0.3) inset;
+		0 0 0 2rpx rgba(255, 255, 255, 0.3) inset;
 	animation: slideUp 0.6s ease-out;
 	position: relative;
 	overflow: hidden;
-	box-sizing: border-box !important; /* 关键：padding/border不占额外宽度 */
-  }
-  
-  @keyframes slideUp {
-	from { opacity: 0; transform: translateY(60rpx); }
-	to { opacity: 1; transform: translateY(0); }
-  }
-  
-  /* 顶部光晕：适配缩小后的容器 */
-  .login-container::before {
+	box-sizing: border-box !important;
+	/* 关键：padding/border不占额外宽度 */
+}
+
+@keyframes slideUp {
+	from {
+		opacity: 0;
+		transform: translateY(60rpx);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* 顶部光晕：适配缩小后的容器 */
+.login-container::before {
 	content: '';
 	position: absolute;
 	top: 0;
 	left: 0;
 	right: 0;
-	height: 250rpx; /* 原300rpx，进一步缩小 */
+	height: 250rpx;
+	/* 原300rpx，进一步缩小 */
 	background: linear-gradient(180deg, rgba(102, 126, 234, 0.08) 0%, rgba(102, 126, 234, 0) 100%);
 	border-radius: 48rpx 48rpx 0 0;
 	pointer-events: none;
-  }
-  
-  /* 校徽区域 */
-  .logo-section {
+}
+
+/* 校徽区域 */
+.logo-section {
 	text-align: center;
-	margin-bottom: 60rpx !important; /* 原80rpx */
+	margin-bottom: 60rpx !important;
+	/* 原80rpx */
 	animation: fadeIn 0.8s ease-out 0.2s both;
-  }
-  
-  @keyframes fadeIn {
-	from { opacity: 0; transform: translateY(-20rpx); }
-	to { opacity: 1; transform: translateY(0); }
-  }
-  
-  /* logo：适配iPhone 12/13 Pro的尺寸 */
-  .logo {
-	width: 90rpx !important; /* 原100rpx */
+}
+
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+		transform: translateY(-20rpx);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* logo：适配iPhone 12/13 Pro的尺寸 */
+.logo {
+	width: 90rpx !important;
+	/* 原100rpx */
 	height: 90rpx !important;
 	background: linear-gradient(135deg, #1e5bce 0%, #4a90e2 100%);
-	border-radius: 28rpx !important; /* 原32rpx */
-	margin: 0 auto 25rpx !important; /* 原30rpx */
+	border-radius: 28rpx !important;
+	/* 原32rpx */
+	margin: 0 auto 25rpx !important;
+	/* 原30rpx */
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 50rpx !important; /* 原56rpx */
+	font-size: 50rpx !important;
+	/* 原56rpx */
 	color: white;
 	font-weight: 700;
 	box-shadow: 0 10rpx 30rpx rgba(30, 91, 206, 0.3);
 	transform: rotate(-5deg);
 	transition: transform 0.3s ease;
-  }
-  
-  .logo:active {
+}
+
+.logo:active {
 	transform: rotate(0deg) scale(1.05);
-  }
-  
-  /* 标题文字：进一步缩小 */
-  .title, .title-sub {
-	font-size: 34rpx !important; /* 原36rpx */
+}
+
+/* 标题文字：进一步缩小 */
+.title,
+.title-sub {
+	font-size: 34rpx !important;
+	/* 原36rpx */
 	font-weight: 600;
 	color: #1a1a2e;
-	line-height: 1.3 !important; /* 缩小行高 */
+	line-height: 1.3 !important;
+	/* 缩小行高 */
 	letter-spacing: 0.4rpx !important;
 	display: block;
-  }
-  
-  .title-sub {
+}
+
+.title-sub {
 	margin-top: 5rpx !important;
-  }
-  
-  /* 表单组 */
-  .form-group {
-	margin-bottom: 30rpx !important; /* 原36rpx */
+}
+
+/* 表单组 */
+.form-group {
+	margin-bottom: 30rpx !important;
+	/* 原36rpx */
 	animation: fadeIn 0.8s ease-out 0.4s both;
-  }
-  
-  .form-group:nth-child(2) {
+}
+
+.form-group:nth-child(2) {
 	animation-delay: 0.5s;
-  }
-  
-  /* 表单标签 */
-  .form-label {
+}
+
+/* 表单标签 */
+.form-label {
 	display: block;
-	margin-bottom: 14rpx !important; /* 原16rpx */
-	font-size: 24rpx !important; /* 原26rpx */
+	margin-bottom: 14rpx !important;
+	/* 原16rpx */
+	font-size: 24rpx !important;
+	/* 原26rpx */
 	font-weight: 500;
 	color: #1a1a2e;
 	letter-spacing: 0.3rpx !important;
-  }
-  
-  .input-wrapper {
+}
+
+.input-wrapper {
 	position: relative;
-  }
-  
-  /* 输入框：核心缩小，适配小屏 */
-  input {
+}
+
+/* 输入框：核心缩小，适配小屏 */
+input {
 	width: 100%;
 	padding: 10px;
 	height: 50px;
-	border: 3rpx solid transparent !important; /* 原4rpx，缩小边框 */
+	border: 3rpx solid transparent !important;
+	/* 原4rpx，缩小边框 */
 	background: linear-gradient(white, white) padding-box,
-				linear-gradient(135deg, #e5e7eb 0%, #f3f4f6 100%) border-box;
-	border-radius: 28rpx !important; /* 原32rpx */
-	font-size: 26rpx !important; /* 原28rpx */
+		linear-gradient(135deg, #e5e7eb 0%, #f3f4f6 100%) border-box;
+	border-radius: 28rpx !important;
+	/* 原32rpx */
+	font-size: 26rpx !important;
+	/* 原28rpx */
 	color: #1a1a2e;
 	outline: none;
 	transition: all 0.3s ease;
 	box-sizing: border-box !important;
-  }
-  
-  input:focus {
+}
+
+input:focus {
 	border: 3rpx solid transparent !important;
 	background: linear-gradient(white, white) padding-box,
-				linear-gradient(135deg, #1e5bce 0%, #00d4ff 100%) border-box;
+		linear-gradient(135deg, #1e5bce 0%, #00d4ff 100%) border-box;
 	box-shadow: 0 12rpx 36rpx rgba(30, 91, 206, 0.15);
 	transform: translateY(-3rpx);
-  }
-  
-  input::placeholder {
+}
+
+input::placeholder {
 	color: #9ca3af;
 	font-size: 26rpx !important;
-  }
-  
-  /* 记住密码 & 忘记密码 */
-  .remember-forgot {
+}
+
+/* 记住密码 & 忘记密码 */
+.remember-forgot {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 40rpx !important; /* 原48rpx */
+	margin-bottom: 40rpx !important;
+	/* 原48rpx */
 	animation: fadeIn 0.8s ease-out 0.6s both;
-  }
-  
-  .remember-me {
+}
+
+.remember-me {
 	display: flex;
 	align-items: center;
-	gap: 16rpx !important; /* 原20rpx */
-	user-select: none;
-  }
-  
-  .checkbox-wrapper {
+	gap: 20rpx;
+	/* user-select: none; */
+}
+
+.checkbox-wrapper {
 	position: relative;
-	width: 36rpx !important; /* 原40rpx */
-	height: 36rpx !important;
-  }
-  
-  checkbox {
-	position: absolute;
-	opacity: 0;
-	width: 100%;
-	height: 100%;
-  }
-  
-  .checkbox-custom {
+	width: 40rpx;
+	height: 40rpx;
+}
+
+/* 恢复原生checkbox定位（覆盖在自定义样式下，但可点击） */
+
+/* 恢复自定义checkbox样式（层级在原生下方，仅做视觉展示） */
+.checkbox-custom {
 	position: absolute;
 	top: 0;
 	left: 0;
-	width: 36rpx !important;
-	height: 36rpx !important;
-	border: 3rpx solid #d1d5db !important; /* 原4rpx */
-	border-radius: 10rpx !important; /* 原12rpx */
+	width: 40rpx;
+	height: 40rpx;
+	border: 4rpx solid #d1d5db;
+	border-radius: 12rpx;
 	background: white;
 	transition: all 0.3s ease;
-  }
-  
-  .checkbox-custom.checked {
+	z-index: 1;
+}
+
+.checkbox-custom.checked {
 	background: linear-gradient(135deg, #1e5bce 0%, #4a90e2 100%);
 	border-color: #1e5bce;
-  }
-  
-  .checkbox-custom::after {
+}
+
+.checkbox-custom::after {
 	content: '';
 	position: absolute;
 	display: none;
-	left: 10rpx !important; /* 原12rpx */
-	top: 3rpx !important; /* 原4rpx */
-	width: 8rpx !important; /* 原10rpx */
-	height: 16rpx !important; /* 原20rpx */
+	left: 12rpx;
+	top: 4rpx;
+	width: 10rpx;
+	height: 20rpx;
 	border: solid white;
-	border-width: 0 3rpx 3rpx 0 !important; /* 原4rpx */
+	border-width: 0 4rpx 4rpx 0;
 	transform: rotate(45deg);
-  }
-  
-  .checkbox-custom.checked::after {
+}
+
+.checkbox-custom.checked::after {
 	display: block;
-  }
-  
-  .remember-label {
-	font-size: 26rpx !important; /* 原28rpx */
+}
+
+.remember-label {
+	font-size: 28rpx;
 	color: #6b7280;
-  }
-  
-  .forgot-password {
+}
+
+.forgot-password {
 	color: #1e5bce;
 	font-size: 26rpx !important;
 	font-weight: 500;
 	position: relative;
-	padding-bottom: 3rpx !important; /* 原4rpx */
-  }
-  
-  .forgot-password::after {
+	padding-bottom: 3rpx !important;
+	/* 原4rpx */
+}
+
+.forgot-password::after {
 	content: '';
 	position: absolute;
 	bottom: 0;
 	left: 0;
 	width: 0;
-	height: 3rpx !important; /* 原4rpx */
+	height: 3rpx !important;
+	/* 原4rpx */
 	background: linear-gradient(90deg, #1e5bce 0%, #00d4ff 100%);
 	transition: width 0.3s ease;
-  }
-  
-  .forgot-password:active::after {
+}
+
+.forgot-password:active::after {
 	width: 100%;
-  }
-  
-  .forgot-password:active {
+}
+
+.forgot-password:active {
 	color: #4a90e2;
-  }
-  
-  /* 登录按钮 */
-  .login-button {
+}
+
+/* 登录按钮 */
+.login-button {
 	width: 100%;
-	padding: 24rpx !important; /* 原28rpx */
+	padding: 24rpx !important;
+	/* 原28rpx */
 	background: linear-gradient(135deg, #1e5bce 0%, #4a90e2 50%, #00d4ff 100%);
 	background-size: 200% 100%;
 	background-position: 0% 0%;
 	color: white;
 	border: none;
-	border-radius: 28rpx !important; /* 原32rpx */
-	font-size: 28rpx !important; /* 原30rpx */
+	border-radius: 28rpx !important;
+	/* 原32rpx */
+	font-size: 28rpx !important;
+	/* 原30rpx */
 	font-weight: 600;
 	box-shadow: 0 10rpx 30rpx rgba(30, 91, 206, 0.2);
 	letter-spacing: 0.8rpx !important;
@@ -311,48 +371,53 @@ page {
 	position: relative;
 	overflow: hidden;
 	box-sizing: border-box !important;
-  }
-  
-  .login-button::before {
+}
+
+.login-button::before {
 	content: '';
 	position: absolute;
 	top: 0;
 	left: -100%;
 	width: 100%;
 	height: 100%;
-	background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+	background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
 	transition: left 0.5s ease;
-  }
-  
-  .login-button:active {
+}
+
+.login-button:active {
 	background-position: 100% 0%;
 	box-shadow: 0 18rpx 48rpx rgba(30, 91, 206, 0.2);
 	transform: translateY(-3rpx);
-  }
-  
-  .login-button:active::before {
+}
+
+.login-button:active::before {
 	left: 100%;
-  }
-  
-  /* 专门适配iPhone 12/13 Pro（780rpx宽度）的媒体查询 */
-  @media (max-width: 780rpx) {
+}
+
+/* 专门适配iPhone 12/13 Pro（780rpx宽度）的媒体查询 */
+@media (max-width: 780rpx) {
 	.login-container {
-	  max-width: 92% !important; /* 进一步贴合屏幕 */
-	  padding: 40rpx 25rpx !important;
+		max-width: 92% !important;
+		/* 进一步贴合屏幕 */
+		padding: 40rpx 25rpx !important;
 	}
+
 	.logo {
-	  width: 80rpx !important;
-	  height: 80rpx !important;
-	  font-size: 46rpx !important;
+		width: 80rpx !important;
+		height: 80rpx !important;
+		font-size: 46rpx !important;
 	}
-	.title, .title-sub {
-	  font-size: 32rpx !important;
+
+	.title,
+	.title-sub {
+		font-size: 32rpx !important;
 	}
+
 	input {
-	  padding: 18rpx 24rpx !important;
+		padding: 18rpx 24rpx !important;
 	}
+
 	.login-button {
-	  padding: 22rpx !important;
+		padding: 22rpx !important;
 	}
-  }
-  
+}
