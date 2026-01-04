@@ -1,0 +1,35 @@
+<form bindsubmit="formSubmit">
+  <view class="form-group">
+    <label class="form-label">学号</label>
+    <view class="input-wrapper">
+      <input type="text" placeholder="请输入学号" value="{{studentId}}" bindinput="onStudentIdInput" required />
+    </view>
+  </view>
+
+  <view class="form-group">
+    <label class="form-label">验证码</label>
+    <view class="input-wrapper">
+      <input type="password" placeholder="请输入验证码" value="{{password}}" bindinput="onCodeInput" required />
+      <button type="primary" bind:tap="onSendSmsCode">
+        <!-- 倒计时显示 -->
+        <block wx:if="{{countdown > 0}}">
+          重新发送({{countdown}}s)
+        </block>
+        <block wx:else>
+          {{isSending ? '发送中...' : '发送验证码'}}
+        </block>
+      </button>
+    </view>
+  </view>
+
+  <view class="remember-forgot">
+    <view class="remember-me">
+      <checkbox-group bindchange="onRememberChange">
+        <checkbox value="remAc" />
+        <label class="remember-label">记忆账号</label>
+      </checkbox-group>
+    </view>
+    <text class="forgot-password" bindtap="forgotPassword">忘记密码？</text>
+  </view>
+  <button form-type="submit" class="login-button">登录</button>
+</form>

@@ -1,16 +1,14 @@
 {
   "pages": [
-	  "pages/loginv2/login",
-	"pages/login/login",
+    "pages/loginv2/login",
+    "pages/login/login",
     "pages/index/index"
   ],
   "window": {
-    "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#0052d9",
-    "navigationBarTitleText": "深技大校园服务",
-    "navigationBarTextStyle": "white",
-    "navigationStyle": "default"
+    "navigationBarBackgroundColor": "#9a48e6",
+    "enablePullDownRefresh": true,
+    "navigationBarTitleText": "首页"
   },
   "style": "v2",
   "sitemapLocation": "sitemap.json"
-} 
+}

@@ -1,0 +1,26 @@
+<form bindsubmit="formSubmit">
+  <view class="form-group">
+    <label class="form-label">学号</label>
+    <view class="input-wrapper">
+      <input type="text" placeholder="请输入学号" value="{{studentId}}" bindinput="onStudentIdInput" required />
+    </view>
+  </view>
+
+  <view class="form-group">
+    <label class="form-label">密码</label>
+    <view class="input-wrapper">
+      <input type="password" placeholder="请输入密码" value="{{password}}" bindinput="onPasswordInput" required />
+    </view>
+  </view>
+
+  <view class="remember-forgot">
+    <view class="remember-me">
+      <checkbox-group bindchange="onRememberChange">
+        <checkbox value="cb" />
+        <label class="remember-label">记忆账号</label>
+      </checkbox-group>
+    </view>
+    <text class="forgot-password" bindtap="forgotPassword">忘记密码？</text>
+  </view>
+  <button form-type="submit" class="login-button">登录</button>
+</form>

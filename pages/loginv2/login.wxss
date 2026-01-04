@@ -2,7 +2,16 @@
 page {
 	font-family: 'PingFang SC', 'Noto Sans SC', sans-serif;
 	min-height: 100vh;
-	background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%);
+	/* background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%); */
+	background: linear-gradient(135deg,
+			#667eea 0%,
+			#764ba2 15%,
+			#f093fb 30%,
+			#ff6ec4 45%,
+			#ff8a00 60%,
+			#4facfe 75%,
+			#00f2fe 90%,
+			#00ff7f 100%);
 	background-size: 400% 400%;
 	animation: gradientFlow 15s ease infinite;
 	/* 核心：添加overflow-x:hidden防止横向溢出，flex居中更稳健 */
@@ -15,6 +24,10 @@ page {
 	position: relative;
 	box-sizing: border-box;
 	/* 关键：padding不占额外宽度 */
+}
+
+.disappear {
+	display: none;
 }
 
 /* 渐变动画 */
@@ -221,6 +234,12 @@ page {
 
 .input-wrapper {
 	position: relative;
+	display: flex;
+}
+
+.input-wrapper button {
+	padding: 10px;
+	margin-left: 20px;
 }
 
 /* 输入框：核心缩小，适配小屏 */
