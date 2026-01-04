@@ -2,14 +2,14 @@
   <view class="form-group">
     <label class="form-label">学号</label>
     <view class="input-wrapper">
-      <input type="text" placeholder="请输入学号" value="{{studentId}}" bindinput="onStudentIdInput" required />
+      <input type="text" placeholder="请输入学号" value="{{studentId}}" bindchange="onUsrIdInput" required />
     </view>
   </view>
 
   <view class="form-group">
     <label class="form-label">验证码</label>
     <view class="input-wrapper">
-      <input type="password" placeholder="请输入验证码" value="{{password}}" bindinput="onCodeInput" required />
+      <input type="password" placeholder="请输入验证码" value="{{password}}" bindchange="onCodeInput" required />
       <button type="primary" bind:tap="onSendSmsCode">
         <!-- 倒计时显示 -->
         <block wx:if="{{countdown > 0}}">
@@ -31,5 +31,5 @@
     </view>
     <text class="forgot-password" bindtap="forgotPassword">忘记密码？</text>
   </view>
-  <button form-type="submit" class="login-button">登录</button>
+  <button form-type="submit" class="login-button" bindtap="onTapSubmit">登录</button>
 </form>

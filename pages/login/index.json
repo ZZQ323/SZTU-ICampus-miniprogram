@@ -1,8 +1,6 @@
 {
   "navigationBarTextStyle": "white",
-  "backgroundColor": "#eeeeee",
-  "backgroundTextStyle": "light",
-  "navigationBarTitleText": "请登录~~~",
+  "navigationBarTitleText": "请登录~~~", 
   "usingComponents": {
     "username-password": "/components/login/usrid-login/index",
     "sms-verification": "/components/login/sms-login/index"

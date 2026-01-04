@@ -1,13 +1,49 @@
 {
   "pages": [
-    "pages/loginv2/login",
-    "pages/login/login",
-    "pages/index/index"
+    "pages/home/index",
+    "pages/login/index",
+    "pages/announcement/index",
+    "pages/calendar/index",
+    "pages/person/index"
   ],
   "window": {
-    "navigationBarBackgroundColor": "#9a48e6",
-    "enablePullDownRefresh": true,
-    "navigationBarTitleText": "首页"
+    "navigationBarBackgroundColor": "#023591",
+    "backgroundColor": "#023591",
+    "backgroundTextStyle": "light",
+    "enablePullDownRefresh": true
+  },
+  "tabBar": {
+    "borderStyle": "white",
+    "color":"#ffffff",
+    "selectedColor": "#ea986c",
+    "backgroundColor": "#023591", 
+    "position": "bottom",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页",
+        "iconPath": "/assets/image/tab/normal/home.png",
+        "selectedIconPath": "/assets/image/tab/active/home.png"
+      },
+      {
+        "pagePath": "pages/calendar/index",
+        "text": "日历",
+        "iconPath": "/assets/image/tab/normal/calendar.png",
+        "selectedIconPath": "/assets/image/tab/active/calendar.png"
+      },
+      {
+        "pagePath": "pages/announcement/index",
+        "text": "通知推送",
+        "iconPath": "/assets/image/tab/normal/notification.png",
+        "selectedIconPath": "/assets/image/tab/active/notification.png"
+      },
+      {
+        "pagePath": "pages/person/index",
+        "text": "个人",
+        "iconPath": "/assets/image/tab/normal/user.png",
+        "selectedIconPath": "/assets/image/tab/active/user.png"
+      }
+    ]
   },
   "style": "v2",
   "sitemapLocation": "sitemap.json"

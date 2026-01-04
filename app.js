@@ -2,13 +2,33 @@
 
 App({
   globalData: {
-    userInfo: null,
-    baseURL: 'http://localhost:8000',
+    cookies: null,
+    userInfo: {
+      // 最小必要身份信息
+      userId: '',        // 内部用户ID（不要用学号）
+      nickname: '',      // 昵称，沿用微信昵称
+      avatarUrl: '',     // 头像，沿用微信头像
+      userRole: '',      // 用户角色：student/teacher/admin 等
+      schoolName: '',    // 学校名称
+      campus: '',        // 校区
+      department: '',    // 院系
+      major: '',         // 专业
+      className: '',     // 班级
+      grade: ''          // xx级录取
+    },
+    // 登录状态
+    isLoggedIn: false,
+    loginTime: null,
+    baseURL: 'http://localhost:8080',
+    // 用户设置
+    settings: {
+      theme: 'light',
+      notifyEnabled: true,
+      autoLogin: false   // 记住密码选项
+    },
     streamManager: null
   },
-  
   onLaunch() {
-    
     // 检查更新
     if (wx.canIUse('getUpdateManager')) {
       const updateManager = wx.getUpdateManager()
@@ -35,7 +55,7 @@ App({
         this.globalData.StatusBar = e.statusBarHeight
       }
     })
-    
+
     wx.getDeviceInfo({
       success: e => {
         this.globalData.CustomBar = e.platform == 'android' ? this.globalData.StatusBar + 50 : this.globalData.StatusBar + 45

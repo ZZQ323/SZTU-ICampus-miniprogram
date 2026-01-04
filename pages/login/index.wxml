@@ -1,0 +1,52 @@
+<!-- 装饰性背景元素 -->
+<view class="bg-decoration bg-decoration-1"></view>
+<view class="bg-decoration bg-decoration-2"></view>
+<view class="bg-decoration bg-decoration-3"></view>
+
+<!-- 登录容器 -->
+<view class="login-container">
+  <view class="logo-section">
+    <view class="logo">深</view>
+    <text class="title">欢迎使用深圳技术大学</text>
+    <text class="title-sub">校园小程序</text>
+  </view>
+  <!-- 登录表单 -->
+  <cover-view class="{{isInputing?'hint':'disappear'}}">
+    <cover-view  class="hint-item" wx:for="{{filterUsrIds}}" wx:key="index" data-value="{{item}}" bindtap="selectHint">
+        {{item}}
+    </cover-view>
+  </cover-view>
+  <form bindsubmit="formSubmit" class="form-base">
+    <view class="form-group">
+      <label class="form-label">学号</label>
+      <view class="input-wrapper">
+        <input type="text" placeholder="请输入学号" value="{{userInfo.userId}}" bindinput="onUsrIdInput"  bindfocus="onUsrIdFocus" bindblur="onUsrIdBlur" required />
+      </view>
+    </view>
+    <view class="form-group">
+      <label class="form-label">验证码</label>
+      <view class="input-wrapper">
+        <input type="number" placeholder="请输入验证码" value="{{userInfo.code}}" bindinput="onCodeInput" required />
+        <button type="primary" bind:tap="onSendSmsCode">
+          <!-- 倒计时显示 -->
+          <block wx:if="{{countdown > 0}}">
+            重新发送({{countdown}}s)
+          </block>
+          <block wx:else>
+            {{isSending ? '发送中...' : '发送验证码'}}
+          </block>
+        </button>
+      </view>
+    </view>
+    <view class="remember-forgot">
+      <view class="remember-me">
+        <checkbox-group bindchange="onRememberChange">
+          <checkbox value="remAc" />
+          <label class="remember-label">记忆账号</label>
+        </checkbox-group>
+      </view>
+      <text class="forgot-password" bindtap="forgotPassword">忘记密码？</text>
+    </view>
+    <button form-type="submit" class="login-button" bindtap="onTapSubmit">登录</button>
+  </form>
+</view>

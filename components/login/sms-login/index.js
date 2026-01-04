@@ -1,4 +1,5 @@
-import { rememberChangeHandler, studentIdInputHandler, codeInputHandler, postApp } from '../utils.js';
+import { rememberChangeHandler, studentIdInputHandler, codeInputHandler } from '../utils.js';
+import { loginUrl,smsUrl } from '../utils.js';
 
 
 Component({
@@ -6,35 +7,31 @@ Component({
   // 定义允许接收的属性
   // 父组件更新数据，会自动流向子组件
   properties: {
-    // 初始手机号
-    initialStuId: {
-      type: String,
-      value: ''
-    }
+    initialUsrIds: [],
+    rememberAcc: false
   },
-
   data: {
-    stuId: '',          // 手机号
-    code: '',           // 验证码
+    usrId: '',          // 学号
+    code: '',           // 验证码 / 密码
     focusField: '',     // 当前聚焦的字段
     countdown: 0,       // 倒计时秒数
     isSending: false,   // 是否正在发送
     isStuIdValid: false, // 手机号是否有效
     errorMsg: '',       // 错误信息
-    countdownTimer: null // 倒计时定时器
+    countdownTimer: null, // 倒计时定时器
+    originOptions: [], // 原始下拉选项
+    filterOptions: []
   },
 
   lifetimes: {
     attached() {
-      // 组件挂载时，如果有初始手机号，则设置
-      if (this.properties.initialStuId) {
+      // 组件挂载时，如果有初始手机号，则提供选项
+      if (this.properties.initialUsrIds) {
         this.setData({
-          stuId: this.properties.initialStuId
+          originOptions: this.properties.initialUsrIds
         });
-        this.validateStuId(this.properties.initialStuId);
       }
     },
-
     detached() {
       // 组件销毁时清除定时器
       this.clearCountdown();
@@ -43,15 +40,17 @@ Component({
 
   methods: {
     // === 输入处理 ===
-    onStuIdInput(e) {
+    onUsrIdInput(e) {
       const value = e.detail.value;
+      if (remember) wx.setStorageSync('usrId', usrId);
+      else wx.removeStorageSync('usrId');
+      codeInputHandler.call(this, e);
       this.setData({
         stuId: value,
         errorMsg: ''  // 清空错误信息
       });
     },
     onRememberChange(e) { rememberChangeHandler.call(this, e); },
-    onStudentIdInput(e) { codeInputHandler.call(this, e); },
     onCodeInput(e) { codeInputHandler.call(this, e); },
     // === 请求验证码 ===
     onSendSmsCode(e) {
@@ -61,30 +60,7 @@ Component({
       }
       // 请求按钮
 
-      postApp.call(e.target, e, "/usr/sms",
-        function check() {
-          const {studentId,password,remember} = this.data;
-          if (!studentId) {
-            wx.showToast({
-              title: '请输入学号',
-              icon: 'none'
-            });return;
-          }
-          if (!password) {
-            wx.showToast({
-              title: '请输入密码',
-              icon: 'none'
-            });return;
-          }
-          // 记忆账号
-          if (remember) {
-            wx.setStorageSync('savedStudentId', studentId);
-          } else {
-            wx.removeStorageSync('savedStudentId');
-          }
-        },
-          
-      )
+      "/usr/sms";
 
       // 开始发送状态
       this.setData({ isSending: true });
@@ -94,7 +70,7 @@ Component({
       // 这里触发一个带detail的事件
       this.triggerEvent('sendsms', {
         stuId: this.data.stuId
-      }, { 
+      }, {
         bubbles: true,      // 事件是否冒泡
         composed: false,     // 事件是否可穿越组件边界
         capturePhase: false  // 是否在捕获阶段触发 
@@ -162,6 +138,70 @@ Component({
       setTimeout(() => {
         this.setData({ errorMsg: '' });
       }, 3000);
+    },
+
+    onTapSubmit(e) {
+
+      if (!usrId) {
+        wx.showToast({title: '请输入学号',icon: 'none'}); 
+        return;
+      }
+      if (!password) {
+        wx.showToast({title: '请输入密码',icon: 'none'}); 
+        return;
+      }
+
+      wx.showLoading({
+        title: '登录中...',
+        mask: true
+      });
+
+      // 发送POST请求
+      wx.request({
+        url: getApp().globalData.baseURL + loginUrl, // 接口地址
+        method: 'POST', 
+        header: {
+          'Content-Type': 'application/json'
+        },
+        data: {
+          userId: studentId, 
+          password: password
+        },
+        success: (res) => {
+          console.log('登录接口返回：', res.data); 
+          if (res.statusCode === 200) {
+            wx.showToast({
+              title: '登录成功',
+              icon: 'success',
+              duration: 1500
+            });
+            
+            setTimeout(() => {
+              // 延时跳转到首页，首页是tab页
+              wx.switchTab({url: '/pages/home/index'});
+            }, 2000);
+          } else {
+            wx.showToast({
+              title: res.data.msg || '登录失败，请检查账号密码',
+              icon: 'none',
+              duration: 2000
+            });
+          }
+        },
+        // 请求失败回调（网络错误、接口不可达等）
+        fail: (err) => {
+          console.error('登录请求失败：', err);
+          wx.showToast({
+            title: '登录时出现错误，请稍后重试',
+            icon: 'none',
+            duration: 2000
+          });
+        },
+        // 无论成功失败，都隐藏加载提示
+        complete: () => {
+          wx.hideLoading();
+        }
+      });
     }
   }
 });
