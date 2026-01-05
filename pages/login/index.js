@@ -86,8 +86,9 @@ Page({
       wx.showToast({ title: '请先输入工号', icon: 'none' });
       return;
     }
-    // 请求按钮
-    // console.log(getApp().globalData.baseURL + smsUrl);
+    // 防连击
+    
+    // 请求
     wx.request({
       url: getApp().globalData.baseURL + smsUrl, // 接口地址
       method: 'GET',
@@ -117,6 +118,7 @@ Page({
           log.error(err);
       }
     });
+
   },
 
   // === 倒计时处理 ===

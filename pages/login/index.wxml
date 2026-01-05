@@ -6,7 +6,7 @@
 <!-- 登录容器 -->
 <view class="login-container">
   <view class="logo-section">
-    <view class="logo">深</view>
+    <view class="logo">SZTU</view>
     <text class="title">欢迎使用深圳技术大学</text>
     <text class="title-sub">校园小程序</text>
   </view>
@@ -49,4 +49,19 @@
     </view>
     <button form-type="submit" class="login-button" bindtap="onTapSubmit">登录</button>
   </form>
+</view>
+
+<view class="login-container disappear">
+  <view class="logo-section">
+    <view class="logo">SZTU</view>
+    <text class="title">欢迎使用深圳技术大学</text>
+    <text class="title-sub">校园小程序</text>
+  </view>
+  <view class="form-group">
+      <label class="form-label">二次验证码</label>
+      <view class="input-wrapper">
+        <input type="number" placeholder="请输入二次验证码" value="{{}}" bindinput="" required />
+        <image src="" mode="scaleToFill"/>
+      </view>
+    </view>
 </view>
