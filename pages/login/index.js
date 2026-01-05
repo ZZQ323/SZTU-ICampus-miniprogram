@@ -1,4 +1,4 @@
-const { smsUrl } = require("../../components/login/utils");
+const { smsUrl,loginUrl } = require("../../components/login/utils");
 
 // 获取全局 app
 const app = getApp()
@@ -83,11 +83,11 @@ Page({
     if (this.data.isSending || this.data.countdown > 0)
       return;
     if (this.data.userInfo.userId === null || this.data.userInfo.userId.length <= 0) {
-      wx.showToast({ title: '请先输入学号', icon: 'none' });
+      wx.showToast({ title: '请先输入工号', icon: 'none' });
       return;
     }
     // 请求按钮
-    console.log(getApp().globalData.baseURL + smsUrl);
+    // console.log(getApp().globalData.baseURL + smsUrl);
     wx.request({
       url: getApp().globalData.baseURL + smsUrl, // 接口地址
       method: 'GET',
@@ -96,44 +96,26 @@ Page({
         id: this.data.userInfo.userId,
       },
       success: (res) => {
-        console.log('登录接口返回：', res.data);
+        console.log('请求验证码接口返回：', res.data);
         if (res.statusCode === 200) {
           wx.showToast({
-            title: '登录成功',
+            title: '验证码已发送',
             icon: 'success',
             duration: 1500
           });
-
-          setTimeout(() => {
-            // 延时跳转到首页，首页是tab页
-            wx.switchTab({ url: '/pages/home/index' });
-          }, 2000);
-        } else {
+        } 
+        else {
+          // 请求失败回调（网络错误、接口不可达等）
           wx.showToast({
-            title: res.data.msg || '登录失败，请检查账号密码',
-            icon: 'none',
-            duration: 2000
+            title: res.data.msg || '请求验证码异常，请检查账号密码',
+            icon: 'error',
+            duration: 1500
           });
         }
       },
-      // 请求失败回调（网络错误、接口不可达等）
-      fail: (err) => {
-        console.error('登录请求失败：', err);
-        wx.showToast({
-          title: '登录时出现错误，请稍后重试',
-          icon: 'none',
-          duration: 2000
-        });
-      },
-      // 无论成功失败，都隐藏加载提示
-      complete: () => {
-        wx.hideLoading();
+      fail:(err)=>{
+          log.error(err);
       }
-    });
-    wx.showToast({
-      title: '验证码已发送',
-      icon: 'success',
-      duration: 2000
     });
   },
 
@@ -159,7 +141,7 @@ Page({
     }
   },
 
-  // === 重置倒计时（可由外部调用） ===
+  // === 重置倒计时 ===
   resetCountdown() {
     this.clearCountdown();
     this.setData({
@@ -168,7 +150,7 @@ Page({
     });
   },
 
-  // === 获取表单数据（可由外部调用） ===
+  // === 获取表单数据 ===
   getFormData() {
     return {
       stuId: this.data.stuId,
@@ -177,7 +159,7 @@ Page({
     };
   },
 
-  // === 显示错误（可由外部调用） ===
+  // === 显示错误 ===
   showError(message) {
     this.setData({ errorMsg: message });
     setTimeout(() => {
@@ -186,16 +168,14 @@ Page({
   },
 
   onTapSubmit(e) {
-
-    if (!usrId) {
+    if (!this.data.userInfo.userId) {
       wx.showToast({ title: '请输入学号', icon: 'none' });
       return;
     }
-    if (!password) {
+    if (!this.data.userInfo.code) {
       wx.showToast({ title: '请输入密码', icon: 'none' });
       return;
     }
-
     wx.showLoading({
       title: '登录中...',
       mask: true
@@ -208,9 +188,11 @@ Page({
       header: {
         'Content-Type': 'application/json'
       },
+      timeout:6000000000000000,
       data: {
-        userId: studentId,
-        password: password
+        userId:this.data.userInfo.userId,
+        code:this.data.userInfo.code,
+        loginType: "SMS"
       },
       success: (res) => {
         console.log('登录接口返回：', res.data);
@@ -225,7 +207,8 @@ Page({
             // 延时跳转到首页，首页是tab页
             wx.switchTab({ url: '/pages/home/index' });
           }, 2000);
-        } else {
+        } 
+        else {
           wx.showToast({
             title: res.data.msg || '登录失败，请检查账号密码',
             icon: 'none',
@@ -241,10 +224,6 @@ Page({
           icon: 'none',
           duration: 2000
         });
-      },
-      // 无论成功失败，都隐藏加载提示
-      complete: () => {
-        wx.hideLoading();
       }
     });
   }

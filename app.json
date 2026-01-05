@@ -4,6 +4,7 @@
     "pages/login/index",
     "pages/announcement/index",
     "pages/calendar/index",
+    "pages/kaptcha/index",
     "pages/person/index"
   ],
   "window": {
