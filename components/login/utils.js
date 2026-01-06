@@ -1,5 +1,6 @@
 export const loginUrl = "/usr/login";
 export const smsUrl = "/usr/sms";
+export const cookieLoginUrl = "/usr/freelogin";
 
 
 export function rememberChangeHandler(e) 

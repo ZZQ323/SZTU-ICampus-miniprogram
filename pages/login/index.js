@@ -1,4 +1,4 @@
-const { smsUrl,loginUrl } = require("../../components/login/utils");
+const { smsUrl, loginUrl } = require("../../components/login/utils");
 
 // 获取全局 app
 const app = getApp()
@@ -15,6 +15,8 @@ Page({
     rememberAcc: false,
     isInputing: false,
     isSending: false,
+    isLogining: false,
+    countdownTimer: null,
     countdown: 0
   },
   onLoad(options) {
@@ -24,6 +26,7 @@ Page({
         userId: null,
         code: null
       },
+      cookies: [],
       originalUsrIds: [],
       filterUsrIds: [],
       rememberAcc: false,
@@ -33,9 +36,66 @@ Page({
     });
     const usrIds = wx.getStorageSync('usrIds') || [];
     if (usrIds.length > 0) {
-      console.log('usrIds存在');
+      // 本地有历史 usrIds 存在
       this.setData({
         originalUsrIds: usrIds
+      });
+    }
+    const localCookies = wx.getStorageSync('cookies') || [];
+    if (localCookies.length > 0) {
+      // 本地有历史 cookies 存在，可尝试直接登录，无需密码
+      this.setData({
+        cookies: localCookies
+      });
+      wx.request({
+        url: getApp().globalData.baseURL + cookieLoginUrl, // 接口地址
+        method: 'POST',
+        header: {
+          'Content-Type': 'application/json'
+        },
+        data: {
+          cookies,
+        },
+        success: (res) => {
+          console.log('登录接口返回：', res.data);
+          if (res.statusCode === 200) {
+            wx.showToast({
+              title: '登录成功',
+              icon: 'success',
+              duration: 2000
+            });
+            setTimeout(() => {
+              // 延时跳转到首页，首页是tab页
+              wx.switchTab({ url: '/pages/home/index' });
+            }, 2000);
+            // 持久化储存
+            if (rememberAcc) {
+              newArrays = wx.getStorageSync('usrIds');
+              newArrays.push(this.data.userInfo.userId);
+              newArrays = setFunction(newArrays);
+              wx.setStorageSync('usrIds', {
+                acceptedArrays: newArrays
+              });
+              console.log("已进行本地持久化储存");
+            }
+            updateDataset(res.data);
+          } else {
+            wx.showToast({
+              title: res.data.msg || '登录失败，请检查账号密码',
+              icon: 'none',
+              duration: 2000
+            });
+          }
+        },
+        fail: (err) => {
+          // 请求失败回调（网络错误、接口不可达等）
+          console.error('登录请求失败：', err);
+          wx.showToast({
+            title: '登录时出现错误，请稍后重试',
+            icon: 'none',
+            duration: 2000
+          });
+        }
       });
     }
   },
@@ -72,12 +132,7 @@ Page({
       'userInfo.code': inputV
     });
   },
-  // 记忆勾
-  onRememberChange(e) {
-    this.setData({
-      rememberAcc: e.detail.value.length > 0
-    });
-  },
+
   onSendSmsCode(e) {
     // 检查是否正在发送或倒计时中
     if (this.data.isSending || this.data.countdown > 0)
@@ -87,7 +142,9 @@ Page({
       return;
     }
     // 防连击
-    
+    this.setData({ isSending: true });
+    this.startCountdown(60);
+
     // 请求
     wx.request({
       url: getApp().globalData.baseURL + smsUrl, // 接口地址
@@ -102,20 +159,27 @@ Page({
           wx.showToast({
             title: '验证码已发送',
             icon: 'success',
-            duration: 1500
+            duration: 2000
           });
-        } 
+        }
         else {
           // 请求失败回调（网络错误、接口不可达等）
           wx.showToast({
             title: res.data.msg || '请求验证码异常，请检查账号密码',
             icon: 'error',
-            duration: 1500
+            duration: 2000
           });
         }
       },
-      fail:(err)=>{
-          log.error(err);
+      fail: (err) => {
+        console.error('验证码请求失败：', err);
+        wx.showToast({
+          title: '网络异常，请稍后重试',
+          icon: 'error',
+          duration: 2000
+        });
+        // 重置发送状态
+        this.resetCountdown();
       }
     });
 
@@ -123,24 +187,19 @@ Page({
 
   // === 倒计时处理 ===
   startCountdown(seconds) {
-    this.clearCountdown(); // 先清除可能存在的定时器
+    // 先清除可能存在的定时器
+    this.clearCountdown();
     this.setData({ countdown: seconds });
+    // 设置定时器
     const timer = setInterval(() => {
-      let countdown = this.data.countdown - 1;
-      if (countdown <= 0) {
-        this.clearCountdown();
-        countdown = 0;
+      const newCountdown = this.data.countdown - 1;
+      if (newCountdown <= 0) {
+        this.resetCountdown();
+      } else {
+        this.setData({ countdown: newCountdown });
       }
-      this.setData({ countdown });
     }, 1000);
     this.setData({ countdownTimer: timer });
-  },
-
-  clearCountdown() {
-    if (this.data.countdownTimer) {
-      clearInterval(this.data.countdownTimer);
-      this.setData({ countdownTimer: null });
-    }
   },
 
   // === 重置倒计时 ===
@@ -152,13 +211,13 @@ Page({
     });
   },
 
-  // === 获取表单数据 ===
-  getFormData() {
-    return {
-      stuId: this.data.stuId,
-      code: this.data.code,
-      isValid: this.validateStuId(this.data.stuId) && /^\d{6}$/.test(this.data.code)
-    };
+  // === 倒计时终止 ===
+  clearCountdown() {
+    if (this.data.countdownTimer) {
+      // 清除定时器
+      clearInterval(this.data.countdownTimer);
+      this.setData({ countdownTimer: null });
+    }
   },
 
   // === 显示错误 ===
@@ -182,6 +241,9 @@ Page({
       title: '登录中...',
       mask: true
     });
+    this.setData({
+      isLogining: true
+    });
 
     // 发送POST请求
     wx.request({
@@ -190,10 +252,12 @@ Page({
       header: {
         'Content-Type': 'application/json'
       },
-      timeout:6000000000000000,
+      timeout: 60000,
       data: {
-        userId:this.data.userInfo.userId,
-        code:this.data.userInfo.code,
+
+        
+        userId: this.data.userInfo.userId,
+        code: this.data.userInfo.code,
         loginType: "SMS"
       },
       success: (res) => {
@@ -202,15 +266,23 @@ Page({
           wx.showToast({
             title: '登录成功',
             icon: 'success',
-            duration: 1500
+            duration: 2000
           });
-
           setTimeout(() => {
-            // 延时跳转到首页，首页是tab页
             wx.switchTab({ url: '/pages/home/index' });
           }, 2000);
-        } 
-        else {
+          // 持久化储存
+          if (rememberAcc) {
+            newArrays = wx.getStorageSync('usrIds');
+            newArrays.push(this.data.userInfo.userId);
+            newArrays = setFunction(newArrays);
+            wx.setStorageSync('usrIds', {
+              acceptedArrays: newArrays
+            });
+            console.log("已进行本地持久化储存");
+          }
+          updateDataset(res.data);
+        } else {
           wx.showToast({
             title: res.data.msg || '登录失败，请检查账号密码',
             icon: 'none',
@@ -228,6 +300,23 @@ Page({
         });
       }
     });
-  }
+    this.setData({ isLogining: false });
+  },
 
+  // === 记忆勾与持久化储存 ===
+  onRememberChange(e) {
+    this.setData({
+      rememberAcc: e.detail.value.length > 0
+    });
+  },
+
+  updateDataset(resData) {
+    const app = getApp();
+    app.globalData.setData({
+      cookies: this.data.cookies,
+      userInfo: resData.userInfo,
+      loginTimeStamp: Date.now(),
+      isLoggedIn: true,
+    });
+  }
 });

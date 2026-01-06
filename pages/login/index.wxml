@@ -18,7 +18,7 @@
   </cover-view>
   <form bindsubmit="formSubmit" class="form-base">
     <view class="form-group">
-      <label class="form-label">学号</label>
+      <label class="form-label" focus="{{true}}">学号</label>
       <view class="input-wrapper">
         <input type="text" placeholder="请输入学号" value="{{userInfo.userId}}" bindinput="onUsrIdInput"  bindfocus="onUsrIdFocus" bindblur="onUsrIdBlur" required />
       </view>
@@ -27,7 +27,7 @@
       <label class="form-label">验证码</label>
       <view class="input-wrapper">
         <input type="number" placeholder="请输入验证码" value="{{userInfo.code}}" bindinput="onCodeInput" required />
-        <button type="primary" bind:tap="onSendSmsCode">
+        <button type="primary" bind:tap="onSendSmsCode" disabled="{{isLogining}}">
           <!-- 倒计时显示 -->
           <block wx:if="{{countdown > 0}}">
             重新发送({{countdown}}s)
@@ -47,10 +47,11 @@
       </view>
       <text class="forgot-password" bindtap="forgotPassword">忘记密码？</text>
     </view>
-    <button form-type="submit" class="login-button" bindtap="onTapSubmit">登录</button>
+    <button form-type="submit" class="login-button" bindtap="onTapSubmit" loading="{{isLogining}}">登录</button>
   </form>
 </view>
 
+<!-- 二次人工验证 -->
 <view class="login-container disappear">
   <view class="logo-section">
     <view class="logo">SZTU</view>

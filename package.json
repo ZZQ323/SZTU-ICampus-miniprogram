@@ -10,6 +10,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-	"tdesign-miniprogram": "^1.9.4"
+    "tdesign-miniprogram": "^1.9.4"
+  },
+  "tsc": "node ./node_modules/typescript/lib/tsc.js",
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }
