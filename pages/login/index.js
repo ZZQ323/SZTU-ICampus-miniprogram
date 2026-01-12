@@ -1,4 +1,5 @@
-const { smsUrl, loginUrl } = require("../../components/login/utils");
+// const { smsUrl, loginUrl } = require("../../components/login/utils");
+// import { IUserInfo } from '../../types/userInfo';
 
 // 获取全局 app
 const app = getApp()

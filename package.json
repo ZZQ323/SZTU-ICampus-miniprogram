@@ -4,7 +4,10 @@
   "description": "深圳技术大学校园服务小程序",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "check-types": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
@@ -12,8 +15,12 @@
   "dependencies": {
     "tdesign-miniprogram": "^1.9.4"
   },
-  "tsc": "node ./node_modules/typescript/lib/tsc.js",
   "devDependencies": {
+    "@types/wechat-miniprogram": "^3.4.9",
     "typescript": "^5.9.3"
+  },
+  "scripts": {
+    "type-check": "node ./node_modules/typescript/lib/tsc.js --noEmit",
+    "type-check-watch": "node ./node_modules/typescript/lib/tsc.js --noEmit --watch"
   }
 }
