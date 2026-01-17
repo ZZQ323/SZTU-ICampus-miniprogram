@@ -1,0 +1,1 @@
+<view class="content"><image class="logo" src="{{a}}"></image><view class="text-area"><text class="title">{{b}}</text></view></view><navigator url="/pages/login/index">转到login页面</navigator>
