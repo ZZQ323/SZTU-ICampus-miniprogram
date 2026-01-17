@@ -1,104 +1,14 @@
 // const { smsUrl, loginUrl } = require("../../components/login/utils");
 // import { IUserInfo } from '../../types/userInfo';
 
-// 获取全局 app
-const app = getApp()
-
+// 获取 App 实例
+const app = getApp();
 Page({
   data: {
-    userInfo: {
-      userId: null,
-      code: null
-    },
-    cookies: [],
-    originalUsrIds: [],
-    filterUsrIds: [],
-    rememberAcc: false,
-    isInputing: false,
-    isSending: false,
-    isLogining: false,
-    countdownTimer: null,
-    countdown: 0
   },
   onLoad(options) {
-    // 如果要登录，也即尝试自动登录失败了
-    this.setData({
-      userInfo: {
-        userId: null,
-        code: null
-      },
-      cookies: [],
-      originalUsrIds: [],
-      filterUsrIds: [],
-      rememberAcc: false,
-      isInputing: false,
-      isSending: false,
-      countdown: 0
-    });
-    const usrIds = wx.getStorageSync('usrIds') || [];
-    if (usrIds.length > 0) {
-      // 本地有历史 usrIds 存在
-      this.setData({
-        originalUsrIds: usrIds
-      });
-    }
-    const localCookies = wx.getStorageSync('cookies') || [];
-    if (localCookies.length > 0) {
-      // 本地有历史 cookies 存在，可尝试直接登录，无需密码
-      this.setData({
-        cookies: localCookies
-      });
-      wx.request({
-        url: getApp().globalData.baseURL + cookieLoginUrl, // 接口地址
-        method: 'POST',
-        header: {
-          'Content-Type': 'application/json'
-        },
-        data: {
-          cookies,
-        },
-        success: (res) => {
-          console.log('登录接口返回：', res.data);
-          if (res.statusCode === 200) {
-            wx.showToast({
-              title: '登录成功',
-              icon: 'success',
-              duration: 2000
-            });
-            setTimeout(() => {
-              // 延时跳转到首页，首页是tab页
-              wx.switchTab({ url: '/pages/home/index' });
-            }, 2000);
-            // 持久化储存
-            if (rememberAcc) {
-              newArrays = wx.getStorageSync('usrIds');
-              newArrays.push(this.data.userInfo.userId);
-              newArrays = setFunction(newArrays);
-              wx.setStorageSync('usrIds', {
-                acceptedArrays: newArrays
-              });
-              console.log("已进行本地持久化储存");
-            }
-            updateDataset(res.data);
-          } else {
-            wx.showToast({
-              title: res.data.msg || '登录失败，请检查账号密码',
-              icon: 'none',
-              duration: 2000
-            });
-          }
-        },
-        fail: (err) => {
-          // 请求失败回调（网络错误、接口不可达等）
-          console.error('登录请求失败：', err);
-          wx.showToast({
-            title: '登录时出现错误，请稍后重试',
-            icon: 'none',
-            duration: 2000
-          });
-        }
-      });
-    }
+    // todo 重新初始化
+    
   },
   onUsrIdInput(e) {
     const inputV = e.detail.value?.trim() || '';
@@ -256,7 +166,7 @@ Page({
       timeout: 60000,
       data: {
 
-        
+
         userId: this.data.userInfo.userId,
         code: this.data.userInfo.code,
         loginType: "SMS"
