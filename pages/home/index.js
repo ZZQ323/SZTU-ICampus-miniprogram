@@ -1,7 +1,4 @@
 // pages/home/index.js
-
-
-
 const app = getApp();
 
 Page({
@@ -15,50 +12,47 @@ Page({
    * 生命周期函数--监听页面加载
    */
   onLoad(options) {
-  
-    wx.request({
-      url: app.globalData.baseURL + '/acdmadminsys/v1/schedule',
-      method: 'POST',
-      header: {
-        'Content-Type': 'application/json',
-        'token': app.globalData.token
-      },
-      data: { wxCode: res.code },
-      success: (response) => {
-        const { token } = response.data.data;
-        console.log("收到数据：" + token);
-        // 存入本地1
-        wx.setStorageSync('token', token);
-        app.globalData.token = token;
-      }
-    });
   },
   /**
    * 生命周期函数--监听页面初次渲染完成
    */
   onReady() {
-    console.log("生命周期函数--监听页面初次渲染完成");
+    console.log("pages/home/index.js 生命周期函数--监听页面初次渲染完成");
   },
 
   /**
    * 生命周期函数--监听页面显示
    */
   onShow() {
-    console.log("生命周期函数--监听页面显示");
+    console.log("pages/home/index.js 生命周期函数--监听页面显示");
+    if(app.globalData.auth.token){
+      wx.request({
+        url: app.globalData.baseURL + '/acdmadminsys/v1/schedule',
+        method: 'POST',
+        header: {
+          'Content-Type': 'application/json',
+          'token': app.globalData.auth.token
+        },
+        success: (response) => {
+          const text = response.data.data;
+          console.log("收到数据：" + text);
+        }
+      });
+    }
   },
 
   /**
    * 生命周期函数--监听页面隐藏
    */
   onHide() {
-    console.log("生命周期函数--监听页面隐藏");
+    console.log("pages/home/index.js 生命周期函数--监听页面隐藏");
   },
 
   /**
    * 生命周期函数--监听页面卸载
    */
   onUnload() {
-    console.log("生命周期函数--监听页面卸载");
+    console.log("pages/home/index.js 生命周期函数--监听页面卸载");
   },
 
   /**

@@ -1,28 +1,74 @@
-// const { smsUrl, loginUrl } = require("../../components/login/utils");
-// import { IUserInfo } from '../../types/userInfo';
+// login.js
+// import { loginUrl,smsUrl } from '../utils.js';
 
-// 获取 App 实例
-const app = getApp();
+const app = getApp(); // 获取 App 实例
 Page({
   data: {
+    curUsrId:'',
+    curCode:'',
+    loginTypes:[],       // 登录类型
+    isInputing:false,       // 显示学号提示
+    originalUsrIds:[],   // 拉取提示
+    filterUsrIds:[],     // 进行匹配筛选后建议
+    // 防止sms连击
+    countdown:0,        
+    isSending:false,
+    isLogining:false
   },
   onLoad(options) {
-    // todo 重新初始化
-    
+  },
+  onShow: function () {
+    // 页面显示
+    console.log("login.js onLoading");
+    console.log("全局 token:"+app.globalData.auth.token);
+    this.slientIntialize();
+    this.possibleAccountHint();
+  },
+  slientIntialize(){
+    // 重新初始化 redis的cookie
+    wx.request({
+      url: app.globalData.baseURL + '/auth/v1/cookie/refresh',
+      method: 'POST',
+      header: {
+        'Content-Type': 'application/json',
+        'token': app.globalData.auth.token
+      },
+      success: (response) => {
+        const { message, loginTypes } = response.data;
+        this.setData({ loginTypes: loginTypes });
+      }
+    });
+  },
+  possibleAccountHint(){
+    // 取得可能的 userIds
+    wx.request({
+      url: app.globalData.baseURL + '/auth/v1/history',
+      method: 'GET',
+      header: {
+        'Content-Type': 'application/json',
+        'token': app.globalData.auth.token
+      },
+      success: (response) => {
+        let {userIds} = response.data.data;
+        userIds = userIds===null || userIds===undefined?[]:userIds;
+        console.log("userIds:"+userIds);
+        this.setData({ originalUsrIds: userIds });
+      }
+    });
   },
   onUsrIdInput(e) {
     const inputV = e.detail.value?.trim() || '';
+    console.log("inputV:"+inputV);
     this.setData({
-      'userInfo.userId': inputV,
+      curUsrId: inputV,
       isInputing: true
     });
-    // 
   },
   onUsrIdFocus(e) {
-    // 从data中取当前输入的userId  修复作用域问题
-    // const query = this.createSelectorQuery();
-    // console.log(query.selectAll('.hint'));
-    // console.log(query.selectAll('.hint').fields({properties:true}));
+    // 从data中取当前输入的 userId  修复作用域问题
+      // const query = this.createSelectorQuery();
+      // console.log(query.selectAll('.hint'));
+      // console.log(query.selectAll('.hint').fields({properties:true}));
     const inputV = e.detail.value?.trim() || '';
     // 展示提示
     if (inputV.length > 0) {
@@ -40,29 +86,30 @@ Page({
   onCodeInput(e) {
     const inputV = e.detail.value?.trim() || '';
     this.setData({
-      'userInfo.code': inputV
+      curCode: inputV
     });
   },
-
   onSendSmsCode(e) {
     // 检查是否正在发送或倒计时中
     if (this.data.isSending || this.data.countdown > 0)
       return;
-    if (this.data.userInfo.userId === null || this.data.userInfo.userId.length <= 0) {
+    if (this.data.curUsrId === null || this.data.curUsrId.length <= 0) {
       wx.showToast({ title: '请先输入工号', icon: 'none' });
       return;
     }
     // 防连击
     this.setData({ isSending: true });
     this.startCountdown(60);
-
     // 请求
     wx.request({
-      url: getApp().globalData.baseURL + smsUrl, // 接口地址
-      method: 'GET',
-      header: {},
+      url: getApp().globalData.baseURL + "/auth/v1/request/sms", // 接口地址
+      method: 'POST',
+      header: {
+        'Content-Type': 'application/json',
+        'token': app.globalData.auth.token
+      },
       data: {
-        id: this.data.userInfo.userId,
+        userId: this.data.curUsrId,
       },
       success: (res) => {
         console.log('请求验证码接口返回：', res.data);
@@ -93,9 +140,7 @@ Page({
         this.resetCountdown();
       }
     });
-
   },
-
   // === 倒计时处理 ===
   startCountdown(seconds) {
     // 先清除可能存在的定时器
@@ -112,7 +157,6 @@ Page({
     }, 1000);
     this.setData({ countdownTimer: timer });
   },
-
   // === 重置倒计时 ===
   resetCountdown() {
     this.clearCountdown();
@@ -121,7 +165,6 @@ Page({
       isSending: false
     });
   },
-
   // === 倒计时终止 ===
   clearCountdown() {
     if (this.data.countdownTimer) {
@@ -140,11 +183,11 @@ Page({
   },
 
   onTapSubmit(e) {
-    if (!this.data.userInfo.userId) {
+    if (!this.data.curUsrId) {
       wx.showToast({ title: '请输入学号', icon: 'none' });
       return;
     }
-    if (!this.data.userInfo.code) {
+    if (!this.data.curCode) {
       wx.showToast({ title: '请输入密码', icon: 'none' });
       return;
     }
@@ -165,10 +208,8 @@ Page({
       },
       timeout: 60000,
       data: {
-
-
-        userId: this.data.userInfo.userId,
-        code: this.data.userInfo.code,
+        userId: this.data.curUsrId,
+        code: this.data.curCode,
         loginType: "SMS"
       },
       success: (res) => {
@@ -185,7 +226,7 @@ Page({
           // 持久化储存
           if (rememberAcc) {
             newArrays = wx.getStorageSync('usrIds');
-            newArrays.push(this.data.userInfo.userId);
+            newArrays.push(this.data.curUsrId);
             newArrays = setFunction(newArrays);
             wx.setStorageSync('usrIds', {
               acceptedArrays: newArrays
@@ -216,9 +257,7 @@ Page({
 
   // === 记忆勾与持久化储存 ===
   onRememberChange(e) {
-    this.setData({
-      rememberAcc: e.detail.value.length > 0
-    });
+    // todo 还没想好
   },
 
   updateDataset(resData) {
