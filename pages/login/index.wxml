@@ -12,7 +12,7 @@
   </view>
   <!-- 登录表单 -->
   <cover-view class="{{isInputing?'hint':'disappear'}}">
-    <cover-view  class="hint-item" wx:for="{{filterUsrIds}}" wx:key="index" data-value="{{item}}" bindtap="selectHint">
+    <cover-view  class="hint-item" wx:for="{{filterUsrIds}}" wx:key="filterUsrIds" data-value="{{item}}" bindtap="onSelectHint">
         {{item}}
     </cover-view>
   </cover-view>
@@ -50,6 +50,10 @@
     <button form-type="submit" class="login-button" bindtap="onTapSubmit" loading="{{isLogining}}">登录</button>
   </form>
 </view>
+
+<!-- <cover-view  class="hint-item" wx:for="{{filterUsrIds}}" wx:key="filterUsrIds" data-value="{{item}}" bindtap="onSelectHint">
+    {{item}}
+</cover-view> -->
 
 <!-- 二次人工验证 -->
 <!-- <view class="login-container disappear">

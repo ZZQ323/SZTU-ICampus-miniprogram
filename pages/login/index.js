@@ -1,30 +1,31 @@
 // login.js
 // import { loginUrl,smsUrl } from '../utils.js';
+const { performInitialCheck } = require('../../utils/auth');
 
 const app = getApp(); // 获取 App 实例
 Page({
   data: {
-    curUsrId:'',
-    curCode:'',
-    loginTypes:[],       // 登录类型
-    isInputing:false,       // 显示学号提示
-    originalUsrIds:[],   // 拉取提示
-    filterUsrIds:[],     // 进行匹配筛选后建议
+    curUsrId: '',
+    curCode: '',
+    loginTypes: [],       // 登录类型
+    isInputing: false,       // 显示学号提示
+    originalUsrIds: [],   // 拉取提示
+    filterUsrIds: [],     // 进行匹配筛选后建议
     // 防止sms连击
-    countdown:0,        
-    isSending:false,
-    isLogining:false
+    countdown: 0,
+    isSending: false,
+    isLogining: false
   },
   onLoad(options) {
   },
   onShow: function () {
     // 页面显示
     console.log("login.js onLoading");
-    console.log("全局 token:"+app.globalData.auth.token);
+    console.log("全局 token:" + app.globalData.auth.token);
     this.slientIntialize();
     this.possibleAccountHint();
   },
-  slientIntialize(){
+  slientIntialize() {
     // 重新初始化 redis的cookie
     wx.request({
       url: app.globalData.baseURL + '/auth/v1/cookie/refresh',
@@ -34,12 +35,27 @@ Page({
         'token': app.globalData.auth.token
       },
       success: (response) => {
-        const { message, loginTypes } = response.data;
-        this.setData({ loginTypes: loginTypes });
+        const result = response.data.data;
+        console.log("响应数据的所有键:", Object.keys(result));
+        // ["cookies", "content", "loginTypes", "logined"]
+        // console.log("result：" + result);
+        // console.log("result.logined" + result['logined']);
+        if(result['logined']){
+          // 更新基础信息
+          this.updateDataset(result);
+          wx.switchTab({
+            url: '/pages/home/index',
+            success: function(res){},
+            fail: function() {},
+            complete: function() {}
+          })
+        }
+        // TODO 完成带ocr的模块
+        this.setData({ loginTypes: result['loginTypes'] });
       }
     });
   },
-  possibleAccountHint(){
+  possibleAccountHint() {
     // 取得可能的 userIds
     wx.request({
       url: app.globalData.baseURL + '/auth/v1/history',
@@ -49,34 +65,37 @@ Page({
         'token': app.globalData.auth.token
       },
       success: (response) => {
-        let {userIds} = response.data.data;
-        userIds = userIds===null || userIds===undefined?[]:userIds;
-        console.log("userIds:"+userIds);
+        let userIds = response.data.data;
+        userIds = userIds === null || userIds === undefined ? [] : userIds;
         this.setData({ originalUsrIds: userIds });
       }
     });
   },
   onUsrIdInput(e) {
     const inputV = e.detail.value?.trim() || '';
-    console.log("inputV:"+inputV);
+    // console.log("inputV:"+inputV);
     this.setData({
       curUsrId: inputV,
       isInputing: true
     });
-  },
-  onUsrIdFocus(e) {
-    // 从data中取当前输入的 userId  修复作用域问题
-      // const query = this.createSelectorQuery();
-      // console.log(query.selectAll('.hint'));
-      // console.log(query.selectAll('.hint').fields({properties:true}));
-    const inputV = e.detail.value?.trim() || '';
     // 展示提示
-    if (inputV.length > 0) {
-      const filterUsrIds = this.data.originalUsrIds.filter(ele => { return ele.startsWith(inputV); });
-      if (filterUsrIds.length > 0) this.setData({ filterUsrIds });
+    if (this.data.curUsrId.length > 0) {
+      const filterIds = this.data.originalUsrIds.filter(ele => { return ele.startsWith(this.data.curUsrId); });
+      this.setData({ filterUsrIds: filterIds });
     } else {
       this.setData({ filterUsrIds: this.data.originalUsrIds });
     }
+  },
+  onUsrIdFocus(e) {
+    // 从data中取当前输入的 userId  修复作用域问题
+    // const query = this.createSelectorQuery();
+    // console.log(query.selectAll('.hint'));
+    // console.log(query.selectAll('.hint').fields({properties:true}));
+
+    // 展示提示
+    this.setData({
+      isInputing: true
+    });
   },
   onUsrIdBlur(e) {
     this.setData({
@@ -88,6 +107,32 @@ Page({
     this.setData({
       curCode: inputV
     });
+  },
+  onSelectHint(e) {
+    // console.log('=== 点击事件调试 ===');
+    // 检查事件类型
+    // console.log('事件类型:', e.type); // 事件类型: tap
+    // 检查目标元素
+    // console.log('目标元素 id:', e.currentTarget.id); //目标元素 id: 
+    // console.log('目标元素 class:', e.currentTarget.className);  //目标元素 class: undefined
+    //console.log('目标元素 dataset:', e.currentTarget.dataset);  //目标元素 dataset: {value: "202200202104"}
+    // 检查 data-value 是否正确传递
+    // console.log('data-value 值:', e.currentTarget.dataset.value);//data-value 值: 202200202104
+    // 防止事件冒泡（如果需要）
+    // e.stopPropagation();
+    // 获取值并处理
+    const value = e.currentTarget.dataset.value;
+    if (value) {
+      console.log('成功获取到值:', value);
+      this.setData({
+        curUsrId: value,
+        isInputing: false
+      });
+      // 可选：触发输入框的 change 事件（如果需要）
+      // this.triggerInputChange(value);
+    } else {
+      console.warn('未获取到 data-value 值');
+    }
   },
   onSendSmsCode(e) {
     // 检查是否正在发送或倒计时中
@@ -188,7 +233,7 @@ Page({
       return;
     }
     if (!this.data.curCode) {
-      wx.showToast({ title: '请输入密码', icon: 'none' });
+      wx.showToast({ title: '请输入密码/验证码', icon: 'none' });
       return;
     }
     wx.showLoading({
@@ -201,15 +246,15 @@ Page({
 
     // 发送POST请求
     wx.request({
-      url: getApp().globalData.baseURL + loginUrl, // 接口地址
+      url: getApp().globalData.baseURL + "/auth/v1/login/sms", // 接口地址
       method: 'POST',
       header: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'token': app.globalData.auth.token
       },
-      timeout: 60000,
       data: {
         userId: this.data.curUsrId,
-        code: this.data.curCode,
+        smsCode: this.data.curCode,
         loginType: "SMS"
       },
       success: (res) => {
@@ -261,12 +306,19 @@ Page({
   },
 
   updateDataset(resData) {
-    const app = getApp();
-    app.globalData.setData({
-      cookies: this.data.cookies,
-      userInfo: resData.userInfo,
-      loginTimeStamp: Date.now(),
-      isLoggedIn: true,
-    });
-  }
+    console.log(Object.getOwnPropertyNames(resData));
+    app.globalData.userInfo.userId = resData.userId;
+    app.globalData.userInfo.realName = resData.realName;
+    app.globalData.userInfo.gender = resData.gender;
+    app.globalData.userInfo.department = resData.schoolName;
+  },
+  /**
+   * 页面相关事件处理函数--监听用户下拉动作
+   */
+  async onPullDownRefresh() {
+    // console.log("this："+this)
+    // console.log("globalThis："+globalThis)
+    
+    await performInitialCheck(globalThis.app);
+  },
 });

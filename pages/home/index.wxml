@@ -1,4 +1,17 @@
 <!--pages/home/index.wxml-->
-<text>pages/home/index.wxml</text>
+<!-- !-- 获取头像 --> 
+<!-- 选择头像 -->
 
-你好啊
+<!-- 获取头像 -->
+<button open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+选择头像
+</button>
+<!-- 获取昵称 -->
+<input type="nickname" bindblur="onNickNameInput" placeholder="请输入昵称" />
+
+
+
+<view>姓名：{{userId}}</view>
+<view>工号：{{realName}}</view>
+<view>部门：{{gender}}</view>
+<view>性别：{{department}}</view>
