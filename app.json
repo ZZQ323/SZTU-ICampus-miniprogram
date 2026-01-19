@@ -4,7 +4,12 @@
     "pages/login/index",
     "pages/announcement/index",
     "pages/calendar/index",
-    "pages/person/index"
+    "pages/person/index",
+    "pages/person/profile/index",
+    "pages/person/feedback/index",
+    "pages/person/releaseInfo/index",
+    "pages/person/helps/index",
+    "pages/person/aboutAuthor/index"
   ],
   "window": {
     "navigationBarBackgroundColor": "#023591",
@@ -45,6 +50,5 @@
       }
     ]
   },
-  "style": "v2",
   "sitemapLocation": "sitemap.json"
 }

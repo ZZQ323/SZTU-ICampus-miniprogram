@@ -1,2 +1,21 @@
 <!--pages/person/index.wxml-->
-<text>pages/person/index.wxml</text>
+
+<view bindtap="gotoProfile">
+    <view>
+        <t-avatar wx-if="{{userInfo.avatarUrl===null}}" class="avatar-example" shape="round" icon="user"  />
+        <image wx-else src="{{userInfo.avatarUrl}}" alt></image>
+    </view>
+    <view>
+        <view wx:if="{{userInfo.nickName}}">{{userInfo.nickName}}</view>
+        <button wx:else>登录/注册</button>
+    </view>
+</view>
+
+<t-cell-group theme="card">
+    <t-cell title="绑定教务" leftIcon="lock-on" hover arrow bindtap="toLogin" />
+    <t-cell title="意见与bug反馈" leftIcon="lock-on" hover arrow bindtap="toGiveFeedBack" />
+    <t-cell title="删除缓存" leftIcon="lock-on" hover arrow bindtap="clearCache" />
+    <t-cell title="版本更新信息" leftIcon="internet" hover arrow bindtap="toGetReleaseInfos" />
+    <t-cell title="使用帮助" leftIcon="lock-on" hover arrow bindtap="toGetHelp" />
+    <t-cell title="关于作者" leftIcon="lock-on" hover arrow bindtap="toGetAboutAuthors" />
+</t-cell-group>

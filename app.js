@@ -1,5 +1,12 @@
 // const { StreamManager } = require('./utils/stream.js')
 const { performInitialCheck } = require('./utils/auth');
+import api from 'api/api.js'
+import util from 'utils/util.js'
+let appId = wx.getAccountInfoSync().miniProgram.appId;
+// let showAd = util.showAd();
+// if (showAd===undefined || showAd === '') {
+//   showAd = 1;
+// }
 
 App({
   globalData: {
@@ -11,16 +18,6 @@ App({
       department: '',    // 院系
       nickname: '',      // 昵称，沿用微信昵称
       avatarUrl: '',     // 头像，沿用微信头像
-    },
-    // 登录状态管理
-    auth: {
-      token: '',
-      loginTimeStamp: null,
-      state: 'pending', // pending | checking | valid | invalid | expired
-      isChecking: false,
-      retryTimer: null,
-      maxRetryCount: 3,
-      currentRetryCount: 0,
     },
     baseURL: 'http://192.168.3.35:8080',
     settings: {

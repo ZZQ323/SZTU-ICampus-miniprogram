@@ -1,7 +1,7 @@
-<!--pages/home/index.wxml-->
+<!--pages/person/profile/index.wxml-->
+
 <!-- !-- 获取头像 -->
 <!-- 选择头像 -->
-
 <!-- 获取头像 -->
 <button open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
     选择头像
@@ -20,8 +20,3 @@
         </view>
     </view>
 </view>
-
-<view>姓名：{{userId}}</view>
-<view>工号：{{realName}}</view>
-<view>部门：{{gender}}</view>
-<view>性别：{{department}}</view>
