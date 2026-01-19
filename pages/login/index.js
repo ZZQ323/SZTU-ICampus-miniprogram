@@ -14,7 +14,8 @@ Page({
     // 防止sms连击
     countdown: 0,
     isSending: false,
-    isLogining: false
+    isLogining: false,
+    rememberAcc:false
   },
   onLoad(options) {
   },
@@ -269,15 +270,15 @@ Page({
             wx.switchTab({ url: '/pages/home/index' });
           }, 2000);
           // 持久化储存
-          if (rememberAcc) {
-            newArrays = wx.getStorageSync('usrIds');
-            newArrays.push(this.data.curUsrId);
-            newArrays = setFunction(newArrays);
-            wx.setStorageSync('usrIds', {
-              acceptedArrays: newArrays
-            });
-            console.log("已进行本地持久化储存");
-          }
+          // if (rememberAcc) {
+          //   newArrays = wx.getStorageSync('usrIds');
+          //   newArrays.push(this.data.curUsrId);
+          //   newArrays = setFunction(newArrays);
+          //   wx.setStorageSync('usrIds', {
+          //     acceptedArrays: newArrays
+          //   });
+          //   console.log("已进行本地持久化储存");
+          // }
           updateDataset(res.data);
         } else {
           wx.showToast({
@@ -302,7 +303,8 @@ Page({
 
   // === 记忆勾与持久化储存 ===
   onRememberChange(e) {
-    // todo 还没想好
+    console.log("rememberAcc becomes: "+e.detail.value);
+    this.setData({rememberAcc:e.detail.value});
   },
 
   updateDataset(resData) {

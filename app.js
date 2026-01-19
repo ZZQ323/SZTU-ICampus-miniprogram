@@ -22,7 +22,7 @@ App({
       maxRetryCount: 3,
       currentRetryCount: 0,
     },
-    baseURL: 'http://localhost:8080',
+    baseURL: 'http://192.168.3.35:8080',
     settings: {
       theme: 'light',
       notifyEnabled: true,
@@ -33,6 +33,9 @@ App({
       StatusBar: 0,
       CustomBar: 0
     },
+    apis: api,
+    utils: util,
+    appId: appId,
     streamManager: null
   },
 
@@ -51,7 +54,7 @@ App({
     const updateManager = wx.getUpdateManager();
     updateManager.onCheckForUpdate((res) => {
       if (!res.hasUpdate) return;
-      
+
       updateManager.onUpdateReady(() => {
         wx.showModal({
           title: '更新提示',
@@ -69,30 +72,30 @@ App({
     try {
       const windowInfo = wx.getWindowInfo();
       const deviceInfo = wx.getDeviceInfo();
-      
+
       this.globalData.systemInfo.StatusBar = windowInfo.statusBarHeight;
-      this.globalData.systemInfo.CustomBar = deviceInfo.platform === 'android' 
-        ? windowInfo.statusBarHeight + 50 
+      this.globalData.systemInfo.CustomBar = deviceInfo.platform === 'android'
+        ? windowInfo.statusBarHeight + 50
         : windowInfo.statusBarHeight + 45;
     } catch (error) {
       console.error('获取系统信息失败:', error);
     }
   },
-  
+
   async onShow() {
     console.log('App onShow');
-    
+
     // 如果token状态为有效，跳过验证
     // if (this.globalData.auth.state === 'valid') {
     //   console.log('已登录，跳过验证');
     //   return;
     // }
-    
+
     // 如果没有正在重试，检查登录状态
     // if (!this.globalData.auth.retryTimer) {
     //   console.log('检查登录状态...');
     //   const tokenValid = await this.validateToken();
-      
+
     //   if (!tokenValid) {
     //     await this.checkSessionAndNavigate();
     //   }

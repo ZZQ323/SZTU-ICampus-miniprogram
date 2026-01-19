@@ -8,15 +8,23 @@ Page({
   data: {
     avatarUrl: '',
     nickName: '',
-    userId:'',
-    realName:'',
-    gender:'',
-    department:'',
+    userId: '',
+    realName: '',
+    gender: '',
+    department: '',
   },
   /**
    * 生命周期函数--监听页面加载
    */
-  onLoad(options) {
+  onLoad() {
+    // 每次打开先读取本地存储
+    const userInfo = wx.getStorageSync('userInfo');
+    if (userInfo) {
+      this.setData({
+        avatar: userInfo.avatar,
+        nickname: userInfo.nickname
+      });
+    }
   },
   /**
    * 生命周期函数--监听页面初次渲染完成
@@ -29,8 +37,8 @@ Page({
    * 生命周期函数--监听页面显示
    */
   onShow() {
-    console.log("pages/home/index.js 生命周期函数--监听页面显示");
-    if(app.globalData.auth.token){
+    // console.log("pages/home/index.js 生命周期函数--监听页面显示");
+    if (app.globalData.auth.token) {
       wx.request({
         url: app.globalData.baseURL + '/acdmadminsys/v1/schedule',
         method: 'POST',
@@ -51,6 +59,39 @@ Page({
       department: app.globalData.userInfo.department,
     });
   },
+  onChooseAvatar(e) {
+    const tempUrl = e.detail.avatarUrl;
+    this.setData({ avatar: tempUrl });
+    
+    // 保存到本地
+    const userInfo = wx.getStorageSync('userInfo') || {};
+    userInfo.avatar = tempUrl;
+    wx.setStorageSync('userInfo', userInfo);
+    
+    // 注意：临时路径会失效，需要转换为 base64 或保存到本地文件
+    this.saveTempFile(tempUrl);
+  },
+  onNickNameInput(e) {
+    const nickname = e.detail.value;
+    this.setData({ nickname });
+    
+    const userInfo = wx.getStorageSync('userInfo') || {};
+    userInfo.nickname = nickname;
+    wx.setStorageSync('userInfo', userInfo);
+  },
+  
+  // 将临时文件转为永久存储
+  saveTempFile(tempPath) {
+    wx.getFileSystemManager().saveFile({
+      tempFilePath: tempPath,
+      success: (res) => {
+        const savedFilePath = res.savedFilePath;
+        const userInfo = wx.getStorageSync('userInfo') || {};
+        userInfo.avatar = savedFilePath; // 使用本地文件路径
+        wx.setStorageSync('userInfo', userInfo);
+      }
+    });
+  },
 
   /**
    * 生命周期函数--监听页面隐藏
@@ -65,22 +106,6 @@ Page({
   onUnload() {
     console.log("pages/home/index.js 生命周期函数--监听页面卸载");
   },
-
-  // 处理头像选择
-  onChooseAvatar(e) {
-    const { avatarUrl } = e.detail
-    this.setData({
-      avatarUrl: avatarUrl // 这里拿到的是用户选中的新头像临时路径
-    })
-    // TODO 最多上传头像URL，redis没有空间像MINIO那样储存东西
-    
-  },
-  // 处理昵称输入
-  onNickNameInput(e) {
-    this.setData({
-      nickName: e.detail.value
-    })
-  },
   /**
    * 页面相关事件处理函数--监听用户下拉动作
    */
@@ -90,9 +115,9 @@ Page({
    * 页面上拉触底事件的处理函数
    */
   onReachBottom() {
-
+    
   },
-  
+
   /**
    * 用户点击右上角分享
    */
