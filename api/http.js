@@ -2,8 +2,9 @@
  * 封装http 请求方法
  */
 import CONSTANT from '../utils/constant';
+import {isEmptyString} from "../utils/util";
 const apiUrl = CONSTANT.apiUrl;     //服务器api地址
-const ocrUrl = CONSTANT.ocrUrl;
+
 /**
  * 返回promise 对象包装的 wx.request
  * 
@@ -18,13 +19,17 @@ const ocrUrl = CONSTANT.ocrUrl;
  * @returns 
  */
 const http = (params) => {
+    if( isEmptyString( wx.getStorageSync('token') ) ){
+        errorToast(res.statusCode, "Token不存在！");
+        return null;
+    }
     return new Promise((resolve, reject) => {
         wx.request({
             url: apiUrl + params.url,
             data: params.data,
             header: params.header || {
                 'Content-Type': 'application/json',
-                'token': token
+                'token':wx.getStorageSync('token'),
             },
             method: params.method || 'POST',
             dataType: params.dataType,
@@ -45,7 +50,7 @@ const http = (params) => {
                 errorToast("请求失败!");
                 reject(e)
             }
-        })
+        });
     })
 }
 

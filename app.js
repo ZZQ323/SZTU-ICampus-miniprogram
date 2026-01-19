@@ -1,8 +1,6 @@
 // const { StreamManager } = require('./utils/stream.js')
-const { performInitialCheck } = require('./utils/auth');
-import api from 'api/api.js'
-import util from 'utils/util.js'
-let appId = wx.getAccountInfoSync().miniProgram.appId;
+import { authManager, AuthState, AuthStep } from './api/auth';
+// let appId = wx.getAccountInfoSync().miniProgram.appId;
 // let showAd = util.showAd();
 // if (showAd===undefined || showAd === '') {
 //   showAd = 1;
@@ -10,6 +8,8 @@ let appId = wx.getAccountInfoSync().miniProgram.appId;
 
 App({
   globalData: {
+    authState: AuthState.IDLE,
+    authDescription: '',
     cookies: null,
     userInfo: {
       userId: '',        // 内部用户ID
@@ -19,7 +19,6 @@ App({
       nickname: '',      // 昵称，沿用微信昵称
       avatarUrl: '',     // 头像，沿用微信头像
     },
-    baseURL: 'http://192.168.3.35:8080',
     settings: {
       theme: 'light',
       notifyEnabled: true,
@@ -30,9 +29,6 @@ App({
       StatusBar: 0,
       CustomBar: 0
     },
-    apis: api,
-    utils: util,
-    appId: appId,
     streamManager: null
   },
 
@@ -41,9 +37,38 @@ App({
     this.checkForUpdates();
     // 获取系统信息
     this.getSystemInfo();
-    // 执行初始登录检查
-    await performInitialCheck(this);
+    // 执行初始 token 检查
+    authManager.init();
+    // 监听状态变化（全局）
+    authManager.on('stateChange', ({ oldState, newState, description }) => {
+      console.log(`认证状态: ${description}`);
+      // 可以在这里更新全局状态
+      this.globalData.authState = newState;
+      this.globalData.authDescription = description;
+    });
+
+    // 监听达到最大重试次数
+    authManager.on('maxRetryReached', ({ step, retries }) => {
+      console.error('认证失败，达到最大重试次数');
+      wx.showModal({
+        title: '连接失败',
+        content: '无法连接到服务器，请检查网络后重试',
+        confirmText: '重试',
+        cancelText: '退出',
+        success: (res) => {
+          if (res.confirm) {
+            authManager.retry(step);
+          } else {
+            wx.exitMiniProgram();
+          }
+        }
+      });
+    });
+
+    // 开始初始检查
+    this.performInitialCheck();
   },
+
 
   // 检查小程序更新
   checkForUpdates() {
@@ -77,6 +102,19 @@ App({
     } catch (error) {
       console.error('获取系统信息失败:', error);
     }
+  },
+
+  async performInitialCheck() {
+    const result = await authManager.check(AuthStep.TOKEN);
+
+    if (result.success && authManager.isLoggedIn) {
+      // 已登录，跳转首页
+      wx.switchTab({ url: '/pages/home/index' });
+    } else if (result.success && !authManager.isLoggedIn) {
+      // Token 有效但未登录，跳转登录页
+      wx.navigateTo({ url: '/pages/login/index' });
+    }
+    // 失败的情况会自动重试
   },
 
   async onShow() {

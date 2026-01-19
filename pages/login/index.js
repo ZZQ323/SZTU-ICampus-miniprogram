@@ -1,6 +1,6 @@
 // login.js
 // import { loginUrl,smsUrl } from '../utils.js';
-const { performInitialCheck } = require('../../utils/auth');
+const { performInitialCheck } = require('../../api/auth');
 
 const app = getApp(); // 获取 App 实例
 Page({

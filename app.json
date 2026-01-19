@@ -9,7 +9,8 @@
     "pages/person/feedback/index",
     "pages/person/releaseInfo/index",
     "pages/person/helps/index",
-    "pages/person/aboutAuthor/index"
+    "pages/person/aboutAuthor/index",
+    "pages/loading/index"
   ],
   "window": {
     "navigationBarBackgroundColor": "#023591",

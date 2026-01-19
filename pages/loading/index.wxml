@@ -1,0 +1,11 @@
+<!--pages/loading/index.wxml-->
+<view class="loading-container">
+    <view class="status-text">{{statusText}}</view>
+    
+    <view wx:if="{{isRetrying}}" class="retry-info">
+        重试中: {{retryCount}} / {{maxRetries}}
+    </view>
+    <button wx:if="{{isRetrying}}" bindtap="onRetryTap">
+        手动重试
+    </button>
+</view>
