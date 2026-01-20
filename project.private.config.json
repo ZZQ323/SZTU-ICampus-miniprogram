@@ -25,11 +25,25 @@
     "miniprogram": {
       "list": [
         {
-          "name": "pages/loading/index",
-          "pathName": "pages/loading/index",
+          "name": "pages/person/login/index",
+          "pathName": "pages/person/login/index",
           "query": "",
           "scene": null,
           "launchMode": "default"
+        },
+        {
+          "name": "pages/person/index",
+          "pathName": "pages/person/index",
+          "query": "",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
+          "name": "pages/loading/index",
+          "pathName": "pages/loading/index",
+          "query": "",
+          "launchMode": "default",
+          "scene": null
         }
       ]
     }

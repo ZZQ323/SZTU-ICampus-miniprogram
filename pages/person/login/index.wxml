@@ -1,0 +1,22 @@
+<!--pages/person/login/index.wxml-->
+
+<view>
+
+    <t-tabs defaultValue="{{0}}" bind:change="onTabsChange" bind:click="onTabsClick" t-class="custom-tabs">
+        <t-tab-panel wx:for="{{loginTypes}}" label="{{item}}" value="{{index}}" wx:key="loginTypesChoosing" />
+    </t-tabs>
+    <view wx:if="{{chosenTab==0}}">
+        <t-input label="手机号" placeholder="输入手机号码" value="{{phoneNumber}}" type="number" tips="{{phoneError ? '手机号输入不正确' : ''}}" bindchange="onPhoneInput">
+        </t-input>
+        <t-input placeholder="输入验证码" label="验证码">
+            <view slot="suffix" style="display: flex; align-items: center">
+                <view class="suffix--line"></view>
+                <view class="verify" aria-role="button" wx:if="{{smsCountDown===0}}" bind:tap="getSms"> 发送验证码 </view>
+                <view class="verify" aria-role="button" wx:else>{{smsCountDown}}s后重新请求</view>
+            </view>
+        </t-input>
+    </view>
+    <view wx:if="{{chosenTab==1}}">
+
+    </view>
+</view>

@@ -48,18 +48,6 @@ Page({
       }
     });
   },
-  onChooseAvatar(e) {
-    const tempUrl = e.detail.avatarUrl;
-    this.setData({ avatar: tempUrl });
-
-    // 保存到本地
-    const userInfo = wx.getStorageSync('userInfo') || {};
-    userInfo.avatar = tempUrl;
-    wx.setStorageSync('userInfo', userInfo);
-
-    // 注意：临时路径会失效，需要转换为 base64 或保存到本地文件
-    this.saveTempFile(tempUrl);
-  },
   onNickNameInput(e) {
     const nickname = e.detail.value;
     this.setData({ nickname });

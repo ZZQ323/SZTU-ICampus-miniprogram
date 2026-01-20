@@ -30,7 +30,7 @@ App({
     streamManager: null
   },
 
-  async onLaunch() {
+  onLaunch() {
     // 检查小程序更新
     if (!wx.canIUse('getUpdateManager')) return;
     const updateManager = wx.getUpdateManager();
@@ -59,9 +59,10 @@ App({
     } catch (error) {
       console.error('获取系统信息失败:', error);
     }
+    
   },
 
-  async onShow() {
+  onShow() {
     console.log('App onShow');
   },
 

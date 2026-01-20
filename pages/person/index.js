@@ -1,20 +1,11 @@
 // pages/person/index.js
 Page({
   data: {
-    userInfo: {}
-  },
-  gotoProfile() {
-    wx.navigateTo({
-      url: 'pages/person/profile/index',
-    });
-  },
-  // 去登陆
-  toLogin() {
-    // 防止过深的递归栈
-    // wx.reLaunch({ url: '/pages/login/index' });
-  },
-  toGiveFeedBack() {
-    // wx.navigateTo({ url: "pages/person/feedback/index" });
+    // 用户数据
+    avatarUrl: '',
+    nickname: '',
+    userInfo: {},
+    isUserInfoEmpty: true
   },
   clearCache() {
     this.setData({ userInfo: {} })
@@ -25,20 +16,55 @@ Page({
       duration: 2000
     });
   },
-  toGetReleaseInfos() {
-    // wx.navigateTo({ url: "pages/person/releaseInfo/index" });
+  onLoad() {
+    const userInfo = wx.getStorageSync('userInfo') || {};
+    this.setData({
+      userInfo: userInfo,
+      isUserInfoEmpty: Object.keys(userInfo).length === 0
+    });
   },
-  toGetHelp() {
-    // wx.navigateTo({ url: "pages/person/helps/index" });
-  },
-  toGetAboutAuthors() {
-    // wx.navigateTo({ url: "pages/person/aboutAuthor/index" });
-  },
-  /** 生命周期函数--监听页面加载 */
-  onLoad(options) {
+  gotoLogin(e){
+    console.log('点击了用户信息区域', e);
+    // 添加点击反馈
+    wx.vibrateShort({ type: 'light' });
+    
+    // 如果用户信息为空，跳转到登录/绑定页面
+    if (this.data.isUserInfoEmpty) {
+      wx.reLaunch({
+        url: "/pages/person/login/index",
+        success: () => {
+          console.log('跳转到登录页面');
+        },
+        fail: (err) => {
+          console.error('跳转失败:', err);
+        }
+      });
+    } else {
+      // 如果已有用户信息，跳转到详情页或执行其他操作
+      // wx.navigateTo({
+      //   url: '/pages/userDetail/userDetail',
+      // });
+    }
 
+    
   },
+  // 选择头像
+  onChooseAvatar(e) {
+    console.log('选择头像:', e.detail.avatarUrl);
 
+    // 更新头像
+    this.setData({
+      avatarUrl: e.detail.avatarUrl,
+      showAvatarSkeleton: false // 确保骨架屏隐藏
+    });
+
+    // 这里可以上传头像到服务器
+    // this.uploadAvatar(e.detail.avatarUrl);
+  },
+  // 上传头像到服务器（示例）
+  saveAvatar(tempFilePath) {
+    
+  },
   /** 生命周期函数--监听页面初次渲染完成 */
   onReady() {
 

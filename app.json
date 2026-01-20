@@ -1,7 +1,8 @@
 {
   "pages": [
     "pages/home/index",
-    "pages/person/index"
+    "pages/person/index",
+    "pages/person/login/index"
   ],
   "window": {
     "navigationBarBackgroundColor": "#023591",
