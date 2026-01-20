@@ -1,5 +1,6 @@
 {
   "pages": [
+    "pages/loading/index",
     "pages/home/index",
     "pages/login/index",
     "pages/announcement/index",
@@ -9,8 +10,7 @@
     "pages/person/feedback/index",
     "pages/person/releaseInfo/index",
     "pages/person/helps/index",
-    "pages/person/aboutAuthor/index",
-    "pages/loading/index"
+    "pages/person/aboutAuthor/index"
   ],
   "window": {
     "navigationBarBackgroundColor": "#023591",

@@ -1,11 +1,45 @@
 <!--pages/loading/index.wxml-->
-<view class="loading-container">
-    <view class="status-text">{{statusText}}</view>
-    
-    <view wx:if="{{isRetrying}}" class="retry-info">
-        重试中: {{retryCount}} / {{maxRetries}}
+<view class="loading-page">
+    <!-- Logo / 标题区域 -->
+    <view class="logo-section header">
+        <view class="logo">SZTU</view>
+        <text class="title">欢迎使用深圳技术大学</text>
+        <text class="title-sub">校园小程序</text>
     </view>
-    <button wx:if="{{isRetrying}}" bindtap="onRetryTap">
-        手动重试
-    </button>
+    <!-- 步骤条 -->
+    <view class="steps-container">
+        <t-steps current="{{currentStep}}" current-status="{{currentStatus}}" layout="vertical" theme="dot">
+            <t-step-item title="验证凭证" content="检查本地登录凭证" />
+            <t-step-item title="检查会话" content="验证服务器连接" />
+            <t-step-item title="准备就绪" content="{{isLoggedIn ? '欢迎回来' : '即将跳转登录'}}" />
+        </t-steps>
+    </view>
+    <!-- 状态文本 -->
+    <view class="status-section">
+        <text class="status-text">{{statusText}}</text>
+        <!-- 重试信息 -->
+        <view wx:if="{{isRetrying}}" class="retry-info">
+            <text class="retry-text">第 {{retryCount}} 次重试，共 {{maxRetries}} 次</text>
+            <view class="retry-progress">
+                <view class="retry-progress-bar" style="width: {{(retryCount / maxRetries) * 100}}%" />
+            </view>
+        </view>
+    </view>
+    <!-- 底部操作区 -->
+    <view class="footer">
+        <!-- 重试按钮 - 仅在出错时显示 -->
+        <button wx:if="{{currentStatus === 'error'}}" class="retry-btn" bindtap="onRetryTap">
+            重新连接
+        </button>
+        <!-- 加载动画 - 正常流程时显示 -->
+        <view wx:elif="{{!isComplete}}" class="loading-dots">
+            <view class="dot dot1"></view>
+            <view class="dot dot2"></view>
+            <view class="dot dot3"></view>
+        </view>
+        <!-- 完成提示 -->
+        <view wx:else class="complete-hint">
+            <text>{{isLoggedIn ? '正在进入首页...' : '正在跳转登录...'}}</text>
+        </view>
+    </view>
 </view>

@@ -1,7 +1,7 @@
 // auth-manager.js
 // 重构的认证状态管理器 - 基于状态机模式
 import { http } from 'http.js';
-import baseURL from '../utils/constant';
+import {baseURL} from '../utils/constant';
 
 // =====================================================
 // API 配置
@@ -434,7 +434,6 @@ class AuthManager {
 
     async _refreshToken() {
         this._setState(AuthState.TOKEN_REFRESHING);
-
         return new Promise((resolve) => {
             wx.login({
                 success: (loginRes) => {
@@ -442,12 +441,14 @@ class AuthManager {
                         resolve({ success: false, reason: 'wx_login_failed' });
                         return;
                     }
-
+                    console.log("loginRes");
+                    console.log(this._baseURL + API_URLS.getToken);
+                    console.log(loginRes.code);
                     wx.request({
                         url: this._baseURL + API_URLS.getToken,
                         method: 'POST',
                         header: { 'Content-Type': 'application/json' },
-                        data: { code: loginRes.code },
+                        data: { wxCode: loginRes.code },
                         success: (response) => {
                             if (response.data?.data?.token) {
                                 const token = response.data.data.token;

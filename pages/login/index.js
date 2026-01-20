@@ -1,6 +1,7 @@
 // login.js
 // import { loginUrl,smsUrl } from '../utils.js';
-const { performInitialCheck } = require('../../api/auth');
+import { authManager, AuthState, AuthStep } from '../../api/auth';
+import {baseURL} from '../../utils/constant';
 
 const app = getApp(); // 获取 App 实例
 Page({
@@ -18,26 +19,27 @@ Page({
     rememberAcc:false
   },
   onLoad(options) {
+    
   },
   onShow: function () {
     // 页面显示
     console.log("login.js onLoading");
-    console.log("全局 token:" + app.globalData.auth.token);
+    console.log("全局 token:" + wx.getStorageSync('token'));
     this.slientIntialize();
     this.possibleAccountHint();
   },
   slientIntialize() {
     // 重新初始化 redis的cookie
     wx.request({
-      url: app.globalData.baseURL + '/auth/v1/cookie/refresh',
+      url: baseURL + '/auth/v1/cookie/refresh',
       method: 'POST',
       header: {
         'Content-Type': 'application/json',
-        'token': app.globalData.auth.token
+        'token': wx.getStorageSync('token')
       },
       success: (response) => {
         const result = response.data.data;
-        console.log("响应数据的所有键:", Object.keys(result));
+        // console.log("响应数据的所有键:", Object.keys(result));
         // ["cookies", "content", "loginTypes", "logined"]
         // console.log("result：" + result);
         // console.log("result.logined" + result['logined']);
@@ -59,11 +61,11 @@ Page({
   possibleAccountHint() {
     // 取得可能的 userIds
     wx.request({
-      url: app.globalData.baseURL + '/auth/v1/history',
+      url: baseURL + '/auth/v1/history',
       method: 'GET',
       header: {
         'Content-Type': 'application/json',
-        'token': app.globalData.auth.token
+        'token': wx.getStorageSync('token')
       },
       success: (response) => {
         let userIds = response.data.data;
@@ -148,11 +150,11 @@ Page({
     this.startCountdown(60);
     // 请求
     wx.request({
-      url: getApp().globalData.baseURL + "/auth/v1/request/sms", // 接口地址
+      url: baseURL + "/auth/v1/request/sms", // 接口地址
       method: 'POST',
       header: {
         'Content-Type': 'application/json',
-        'token': app.globalData.auth.token
+        'token': wx.getStorageSync('token')
       },
       data: {
         userId: this.data.curUsrId,
@@ -247,11 +249,11 @@ Page({
 
     // 发送POST请求
     wx.request({
-      url: getApp().globalData.baseURL + "/auth/v1/login/sms", // 接口地址
+      url: baseURL + "/auth/v1/login/sms", // 接口地址
       method: 'POST',
       header: {
         'Content-Type': 'application/json',
-        'token': app.globalData.auth.token
+        'token': wx.getStorageSync('token')
       },
       data: {
         userId: this.data.curUsrId,
@@ -306,13 +308,14 @@ Page({
     console.log("rememberAcc becomes: "+e.detail.value);
     this.setData({rememberAcc:e.detail.value});
   },
-
   updateDataset(resData) {
     console.log(Object.getOwnPropertyNames(resData));
-    app.globalData.userInfo.userId = resData.userId;
-    app.globalData.userInfo.realName = resData.realName;
-    app.globalData.userInfo.gender = resData.gender;
-    app.globalData.userInfo.department = resData.schoolName;
+    wx.setStorageSync("userInfo",{
+      userId:resData.userId,
+      realName:resData.realName,
+      gender:resData.gender,
+      department:resData.schoolName,
+    });
   },
   /**
    * 页面相关事件处理函数--监听用户下拉动作

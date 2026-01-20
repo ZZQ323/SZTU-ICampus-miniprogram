@@ -3,7 +3,7 @@
  */
 import CONSTANT from '../utils/constant';
 import {isEmptyString} from "../utils/util";
-const apiUrl = CONSTANT.apiUrl;     //服务器api地址
+const apiUrl = CONSTANT.baseURL;     //服务器api地址
 
 /**
  * 返回promise 对象包装的 wx.request

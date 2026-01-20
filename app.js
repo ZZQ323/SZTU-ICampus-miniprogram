@@ -46,7 +46,6 @@ App({
       this.globalData.authState = newState;
       this.globalData.authDescription = description;
     });
-
     // 监听达到最大重试次数
     authManager.on('maxRetryReached', ({ step, retries }) => {
       console.error('认证失败，达到最大重试次数');
@@ -64,7 +63,6 @@ App({
         }
       });
     });
-
     // 开始初始检查
     this.performInitialCheck();
   },
