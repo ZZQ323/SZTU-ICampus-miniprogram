@@ -1,8 +1,0 @@
-{
-  "navigationBarTitleText": "加载中，请大爷耐心等待一下~~",
-  "styleIsolation": "apply-shared",
-  "usingComponents": {
-    "t-steps": "tdesign-miniprogram/steps/steps",
-    "t-step-item": "tdesign-miniprogram/step-item/step-item"
-  }
-}

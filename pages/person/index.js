@@ -11,10 +11,10 @@ Page({
   // 去登陆
   toLogin() {
     // 防止过深的递归栈
-    wx.reLaunch({ url: '/pages/login/index' });
+    // wx.reLaunch({ url: '/pages/login/index' });
   },
   toGiveFeedBack() {
-    wx.navigateTo({ url: "pages/person/feedback/index" });
+    // wx.navigateTo({ url: "pages/person/feedback/index" });
   },
   clearCache() {
     this.setData({ userInfo: {} })
@@ -26,13 +26,13 @@ Page({
     });
   },
   toGetReleaseInfos() {
-    wx.navigateTo({ url: "pages/person/releaseInfo/index" });
+    // wx.navigateTo({ url: "pages/person/releaseInfo/index" });
   },
   toGetHelp() {
-    wx.navigateTo({ url: "pages/person/helps/index" });
+    // wx.navigateTo({ url: "pages/person/helps/index" });
   },
   toGetAboutAuthors() {
-    wx.navigateTo({ url: "pages/person/aboutAuthor/index" });
+    // wx.navigateTo({ url: "pages/person/aboutAuthor/index" });
   },
   /** 生命周期函数--监听页面加载 */
   onLoad(options) {
