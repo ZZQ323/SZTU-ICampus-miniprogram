@@ -31,19 +31,13 @@
     <!-- 按钮组 -->
     <view class="button-group">
       <!-- 重试按钮 -->
-      <button 
-        class="action-button primary-button {{isRetrying ? 'button-disabled' : ''}}" 
-        bindtap="onRetry"
-        disabled="{{isRetrying}}"
-      >
+      <button class="action-button primary-button {{isRetrying ? 'button-disabled' : ''}}" bindtap="onRetry"
+        disabled="{{isRetrying}}">
         {{isRetrying ? '重试中...' : '重试'}}
       </button>
 
       <!-- 返回按钮 -->
-      <button 
-        class="action-button secondary-button" 
-        bindtap="onGoBack"
-      >
+      <button class="action-button secondary-button" bindtap="onGoBack">
         返回
       </button>
     </view>
@@ -54,7 +48,7 @@
         <text class="detail-title">错误详情</text>
         <text class="detail-arrow {{showDetail ? 'arrow-up' : 'arrow-down'}}">▼</text>
       </view>
-      
+
       <view class="detail-content {{showDetail ? 'detail-show' : 'detail-hide'}}">
         <text class="detail-text">{{errorDetail}}</text>
         <view class="detail-actions">

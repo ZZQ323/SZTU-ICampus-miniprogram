@@ -1,19 +1,22 @@
 // pages/person/login/index.js
-import CONSTANTS from "../../../utils/constant";
-import http from "../../../api/http";
-import { SessionManager } from "../../../utils/sessionManager";
+import HttpClient from '../../utils/core/HttpClient';
 
 Page({
   /**
    * 页面的初始数据
    */
   data: {
-    loginTypes: ["短信验证登录", "账号密码"],
+    loginTypes: ["短信验证码登录"],
     chosenTab: 0,
     smsCountDown: 0,
-    cur: {
-      usrId: '',
-      smsCode: '',
+    input: {
+      usrId,
+      SMS: {
+        code: ''
+      },
+      PASSWORD: {
+        code: ''
+      }
     }
   },
   onTabsChange(event) {
@@ -28,96 +31,89 @@ Page({
     console.log(event.detail);
     this.setData({ chosenTab: event.detail.value });
   },
+  onInput(e){
+    const type = e.detail.dataset.type;
+    if( type.contains("SMS") ){
+      if(type.contains("code"))this.setData({'input.SMS.code':e.detail.value});
+      this.setData({'input.usrId':e.detail.value});
+    }else if( type.contains("PASSWORD") ){
+      if(type.contains("code"))this.setData({'input.PASSWORD.code':e.detail.value});
+      this.setData({'input.usrId':e.detail.value});
+    }
+  },
   async getSms(e) {
     let _data = this.data;
     if (_data.smsCountDown !== 0) return;
     this.setData({ smsCountDown: CONSTANTS.SMSDUR });
-    _data.timer = setInterval(() => {
-      if (_data.smsCountDown === 0) {
-        clearInterval(_data.timer);
-        return;
-      }
-      this.setData({
-        smsCountDown: _data.smsCountDown - 1
-      });
-    }, 1000);
-    // 确保 session 有效（会自动先确保 token）
-    await SessionManager.getInstance().ensureSession();
-    http({
-      api: "/auth/v1/request/sms",
-      data: {
-        userId: _data.cur.usrId
-      },
-      method: "POST"
-    }).then(res => {
+    HttpClient.getInstance().post(
+      '/auth/v1/request/sms',
+      { userId: _data.input.usrId }
+    ).then(res => {
       wx.showModal({ title: res.data.message, content: "验证码2分钟内有效，请及时登录！" });
+    });
+  },
+  async onLogin() {
+    try {
+      // 执行登录
+      const result = await this.doLogin();
+      if (result.success) {
+        // 通知SessionManager
+        SessionManager.getInstance().onLoginSuccess();
+        // 返回原页面
+        NavigationManager.getInstance().navigateBack(this._context);
+      }
+    } catch (error) {
+      SessionManager.getInstance().onLoginFailed(error);
+    }
+  },
+  async doLogin() {
+    // 实际的登录逻辑
+    return await HttpClient.getInstance().post('/auth/v1/login/sms', {
+      username: this.data.input.usrId,
+      password: this.data.input.SMS.code
     });
   },
   /**
    * 生命周期函数--监听页面加载
    */
-  async onLoad(options) {
-    // 确保 session 有效（会自动先确保 token）
-    await SessionManager.getInstance().ensureSession();
-    http({
-      api: "/auth/v1/cookie/refresh",
-      method: "GET"
-    }).then(res => {
-      console.log(Object.keys(res.data.data));
-      if (res.data.data.Logined) {
-        wx.showModal({ 
-          title: res.data.message, content: "登录仍有效！" 
-        });
-        wx.reLaunch({ url: 'pages/home/index', })
-      }
-    });
+  onLoad(options) {
+    this._context = NavigationContext.fromQuery(options);
+    const _res = HttpClient.getInstance().get('/auth/v1/history');
+    let loginTypes  = _res.data.loginTypes; // 数组
+    this.setData({loginTypes});
   },
   /**
    * 生命周期函数--监听页面初次渲染完成
    */
-  onReady() {
-
-  },
+  onReady() {},
 
   /**
    * 生命周期函数--监听页面显示
    */
-  onShow() {
-
-  },
+  onShow() {},
 
   /**
    * 生命周期函数--监听页面隐藏
    */
-  onHide() {
-
-  },
+  onHide() {},
 
   /**
    * 生命周期函数--监听页面卸载
    */
-  onUnload() {
-
-  },
+  onUnload() {},
 
   /**
    * 页面相关事件处理函数--监听用户下拉动作
    */
-  onPullDownRefresh() {
-
-  },
+  onPullDownRefresh() {},
 
   /**
    * 页面上拉触底事件的处理函数
    */
-  onReachBottom() {
-
-  },
+  onReachBottom() {},
 
   /**
    * 用户点击右上角分享
    */
-  onShareAppMessage() {
-
-  }
+  onShareAppMessage() {}
 })

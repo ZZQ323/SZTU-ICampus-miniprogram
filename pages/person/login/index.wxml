@@ -4,9 +4,9 @@
         <t-tab-panel wx:for="{{loginTypes}}" label="{{item}}" value="{{index}}" wx:key="loginTypesChoosing" />
     </t-tabs>
     <view wx:if="{{chosenTab==0}}">
-        <t-input label="手机号" placeholder="输入手机号码" value="{{phoneNumber}}" type="number" tips="{{phoneError ? '手机号输入不正确' : ''}}" bindchange="onPhoneInput">
+        <t-input label="请输入工号" placeholder="请工号" value="{{input.usrId}}" type="number" maxcharacter="{{20}}"   	bindinput="onInput" data-type="SMS">
         </t-input>
-        <t-input placeholder="输入验证码" label="验证码">
+        <t-input placeholder="请输入验证码" label="验证码" type="number" maxcharacter="{{8}}"  	bindinput="onInput" data-type="SMS-code">
             <view slot="suffix" style="display: flex; align-items: center">
                 <view class="suffix--line"></view>
                 <view class="verify" aria-role="button" wx:if="{{smsCountDown===0}}" bind:tap="getSms"> 发送验证码 </view>
@@ -15,6 +15,8 @@
         </t-input>
     </view>
     <view wx:if="{{chosenTab==1}}">
-
+        <t-input label="请输入工号" placeholder="请工号" value="{{input.usrId}}" type="number" maxcharacter="{{20}}"   	bindinput="onInput"  data-type="PASSWORD">
+        </t-input>
+        <t-input placeholder="请输入密码" label="请输入密码"  	bindinput="onInput" data-type="PASSWORD-code"></t-input>
     </view>
 </view>

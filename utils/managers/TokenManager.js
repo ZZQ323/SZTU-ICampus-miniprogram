@@ -12,7 +12,7 @@
  * - /wx-auth/v1/active (GET) - 验证token有效性
  */
 
-import StateManager, { CommonState } from '../core/StateManager';
+import  { StateManager,CommonState } from '../core/StateManager';
 import HttpClient from '../core/HttpClient';
 
 /**

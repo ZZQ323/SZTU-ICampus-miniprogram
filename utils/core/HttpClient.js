@@ -60,7 +60,7 @@ export class HttpRequestConfig {
     this.errorHandling = {
       autoNavigateToError: options.autoNavigateToError !== false, // 是否自动跳转error页面
       showToast: options.showToast !== false,                     // 是否显示toast
-      maxRetries: options.maxRetries || 0,                        // 最大重试次数
+      maxRetries: options.maxRetries || 3,                        // 最大重试次数
       retryDelay: options.retryDelay || 1000,                     // 重试延迟
       ...(options.errorHandling || {})
     };
@@ -127,14 +127,11 @@ export class HttpClient {
     if (!(config instanceof HttpRequestConfig)) {
       config = new HttpRequestConfig(config);
     }
-
     this._log('发起请求:', config.api);
-
     // 自动添加token
     if (config.tokenConfig.autoAddToken) {
       await this._addToken(config);
     }
-
     // 带重试的请求
     let lastError = null;
     const maxAttempts = config.errorHandling.maxRetries + 1;
@@ -143,17 +140,14 @@ export class HttpClient {
       try {
         this._log(`请求尝试 ${attempt}/${maxAttempts}:`, config.api);
         return await this._doRequest(config);
-
       } catch (error) {
         lastError = error;
         this._log(`请求失败 (${attempt}/${maxAttempts}):`, error.message);
-
         if (attempt < maxAttempts) {
           await this._delay(config.errorHandling.retryDelay * attempt);
         }
       }
     }
-
     // 所有重试都失败了，处理错误
     return this._handleError(lastError, config);
   }
