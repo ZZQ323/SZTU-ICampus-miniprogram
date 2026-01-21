@@ -1,7 +1,7 @@
 // pages/person/login/index.js
 import CONSTANTS from "../../../utils/constant";
 import http from "../../../api/http";
-import { TokenManager, TokenState } from "../../../utils/tokenManager.js";
+import { SessionManager } from "../../../utils/sessionManager";
 
 Page({
   /**
@@ -32,8 +32,6 @@ Page({
     let _data = this.data;
     if (_data.smsCountDown !== 0) return;
     this.setData({ smsCountDown: CONSTANTS.SMSDUR });
-
-    const token = await TokenManager.getInstance().ensureToken();
     _data.timer = setInterval(() => {
       if (_data.smsCountDown === 0) {
         clearInterval(_data.timer);
@@ -43,6 +41,8 @@ Page({
         smsCountDown: _data.smsCountDown - 1
       });
     }, 1000);
+    // 确保 session 有效（会自动先确保 token）
+    await SessionManager.getInstance().ensureSession();
     http({
       api: "/auth/v1/request/sms",
       data: {
@@ -56,25 +56,19 @@ Page({
   /**
    * 生命周期函数--监听页面加载
    */
-  onLoad(options) {
-    let tokenSM = TokenManager.getInstance();
-    // console.log(tokenSM)
-    const params = {
-      sm: token || 'no_token',  // 如果没有token，给一个默认值
-      state: state,
-      org: 'pages/person/login/index'
-    };
-    const url = `/pages/person/loading/index?sm=${encodeURIComponent(params.sm)}&state=${encodeURIComponent(params.state)}&org=${encodeURIComponent(params.org)}`;
-    console.log('导航URL:', url);
-    // wx.navigateTo({url:"pages/person/loading/index?sm="+tokenSM+"&state="+TokenState+"&org="+"pages/person/login/index"})
-    wx.navigateTo({
-      url: url,
-      success: (res) => {
-        console.log('导航成功:', res);
-      },
-      fail: (err) => {
-        console.error('导航失败:', err);
-        this.showError('页面跳转失败');
+  async onLoad(options) {
+    // 确保 session 有效（会自动先确保 token）
+    await SessionManager.getInstance().ensureSession();
+    http({
+      api: "/auth/v1/cookie/refresh",
+      method: "GET"
+    }).then(res => {
+      console.log(Object.keys(res.data.data));
+      if (res.data.data.Logined) {
+        wx.showModal({ 
+          title: res.data.message, content: "登录仍有效！" 
+        });
+        wx.reLaunch({ url: 'pages/home/index', })
       }
     });
   },

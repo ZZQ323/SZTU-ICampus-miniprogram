@@ -4,6 +4,8 @@
 import CONSTANT from '../utils/constant';
 import { isEmptyString } from "../utils/util";
 const apiUrl = CONSTANT.baseURL;     //服务器api地址
+import { TokenManager } from "../../../utils/tokenManager.js";
+
 
 /**
  * 返回promise 对象包装的 wx.request
@@ -18,23 +20,21 @@ const apiUrl = CONSTANT.baseURL;     //服务器api地址
  * @param {*} params = {url,data,header,method,dataType,responseType}
  * @returns 
  */
-const http = (params) => {
-    if (isEmptyString(wx.getStorageSync('token'))) {
-        errorToast(res.statusCode, "Token不存在！");
-        return null;
-    }
-    return new Promise((resolve, reject) => {
+const http = async (params) => {
+    // 确保有有效的 token
+    const token = await TokenManager.getInstance().ensureToken();
+    return new Promise(( resolve, reject) => {
         wx.request({
             url: apiUrl + params.api,
             data: params.data,
             header: params.header || {
                 'Content-Type': 'application/json',
-                'token': wx.getStorageSync('token'),
+                'token': token,
             },
             method: params.method || 'POST',
             dataType: params.dataType,
             responseType: params.responseType,
-            success: function (res) {
+            success: params.success || function (res) {
                 //接口访问正常返回数据
                 //1. 操作成功返回数据,原则上只针对服务器端返回成功的状态（如本例中为000000）
                 //2. 操作不成功返回数据，以toast方式弹出响应信息，如后端未格式化非操作成功异常信息，则可以统一定义异常提示
@@ -46,12 +46,27 @@ const http = (params) => {
                     errorToast(res.statusCode, "接口异常!");
                 }
             },
-            fail: function (e) {
+            fail: params.fail || function (e) {
                 errorToast("请求失败!");
                 reject(e)
             }
         });
     })
+}
+
+function errorToast(statusCode, message) {
+    wx.showToast({
+        statusCode: statusCode,
+        title: message,
+        icon: 'error',
+        duration: 2000,     // 提示的延迟时间，单位毫秒
+        mask: true          // 是否显示透明蒙层，防止触摸穿透
+    })
+}
+
+
+module.exports = {
+    http: http
 }
 
 // const uploadFile = (params) => {
@@ -99,18 +114,6 @@ const http = (params) => {
 //         })
 //     })
 // }
-
-function errorToast(statusCode, message) {
-    wx.showToast({
-        statusCode: statusCode,
-        title: message,
-        icon: 'error',
-        duration: 2000,     // 提示的延迟时间，单位毫秒
-        mask: true          // 是否显示透明蒙层，防止触摸穿透
-    })
-}
-
-
 // const uploadFileToOcr = (params) => {
 //     //返回promise 对象
 //     return new Promise((resolve, reject) => {
@@ -155,8 +158,3 @@ function errorToast(statusCode, message) {
 //         })
 //     })
 // }
-
-
-module.exports = {
-    http: http
-}

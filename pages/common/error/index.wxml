@@ -1,0 +1,73 @@
+<!--pages/common/error/index.wxml-->
+<view class="error-container">
+  <view class="error-content">
+    <!-- 错误图标 -->
+    <view class="error-icon-wrapper">
+      <view class="error-icon">❌</view>
+      <view class="error-icon-bg"></view>
+    </view>
+
+    <!-- 错误标题 -->
+    <view class="error-title">操作失败</view>
+
+    <!-- 错误信息 -->
+    <view class="error-message">{{errorMessage}}</view>
+
+    <!-- 重试状态 -->
+    <view wx:if="{{isRetrying}}" class="retry-status">
+      <view class="loading-dots">
+        <view class="dot"></view>
+        <view class="dot"></view>
+        <view class="dot"></view>
+      </view>
+      <text class="retry-text">{{retryStatusText}}</text>
+    </view>
+
+    <!-- 重试次数提示 -->
+    <view wx:if="{{retryCount > 0 && !isRetrying}}" class="retry-count-tip">
+      <text class="retry-count-text">已重试 {{retryCount}} 次</text>
+    </view>
+
+    <!-- 按钮组 -->
+    <view class="button-group">
+      <!-- 重试按钮 -->
+      <button 
+        class="action-button primary-button {{isRetrying ? 'button-disabled' : ''}}" 
+        bindtap="onRetry"
+        disabled="{{isRetrying}}"
+      >
+        {{isRetrying ? '重试中...' : '重试'}}
+      </button>
+
+      <!-- 返回按钮 -->
+      <button 
+        class="action-button secondary-button" 
+        bindtap="onGoBack"
+      >
+        返回
+      </button>
+    </view>
+
+    <!-- 错误详情（可展开） -->
+    <view class="error-detail-section" wx:if="{{errorDetail}}">
+      <view class="detail-header" bindtap="onToggleDetail">
+        <text class="detail-title">错误详情</text>
+        <text class="detail-arrow {{showDetail ? 'arrow-up' : 'arrow-down'}}">▼</text>
+      </view>
+      
+      <view class="detail-content {{showDetail ? 'detail-show' : 'detail-hide'}}">
+        <text class="detail-text">{{errorDetail}}</text>
+        <view class="detail-actions">
+          <button class="copy-button" size="mini" bindtap="onCopyError">
+            复制错误信息
+          </button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 帮助提示 -->
+    <view class="help-tip">
+      <text class="help-text">💡 如果问题持续存在，请检查网络连接</text>
+    </view>
+  </view>
+</view>

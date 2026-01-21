@@ -1,7 +1,5 @@
 <!--pages/person/login/index.wxml-->
-
 <view>
-
     <t-tabs defaultValue="{{0}}" bind:change="onTabsChange" bind:click="onTabsClick" t-class="custom-tabs">
         <t-tab-panel wx:for="{{loginTypes}}" label="{{item}}" value="{{index}}" wx:key="loginTypesChoosing" />
     </t-tabs>

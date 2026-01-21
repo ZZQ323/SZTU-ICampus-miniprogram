@@ -1,0 +1,64 @@
+<!--pages/common/loading/index.wxml-->
+<view class="loading-container">
+  <!-- 正常加载状态 -->
+  <view wx:if="{{!isError}}" class="loading-content">
+    <!-- 标题 -->
+    <view class="loading-title">
+      <text class="title-text">请稍后</text>
+      <text class="title-emoji">⏳</text>
+    </view>
+
+    <!-- 状态描述 -->
+    <view class="status-text">{{statusText}}</view>
+
+    <!-- 进度条 -->
+    <view class="progress-wrapper">
+      <view class="progress-bar">
+        <view class="progress-fill" style="width: {{progress}}%"></view>
+      </view>
+      <text class="progress-text">{{progress}}%</text>
+    </view>
+
+    <!-- 步骤列表 -->
+    <view class="steps-container" wx:if="{{steps.length > 0}}">
+      <view 
+        class="step-item {{index <= currentStep ? 'step-active' : ''}} {{index < currentStep ? 'step-completed' : ''}}"
+        wx:for="{{steps}}" 
+        wx:key="index"
+      >
+        <!-- 图标 -->
+        <view class="step-icon">
+          <view wx:if="{{index < currentStep}}" class="icon-completed">✓</view>
+          <view wx:elif="{{index === currentStep}}" class="icon-loading">
+            <view class="loading-spinner"></view>
+          </view>
+          <view wx:else class="icon-waiting">{{index + 1}}</view>
+        </view>
+
+        <!-- 步骤信息 -->
+        <view class="step-content">
+          <text class="step-title">{{item}}</text>
+          <text class="step-status">
+            {{index < currentStep ? '已完成' : index === currentStep ? '进行中...' : '等待中'}}
+          </text>
+        </view>
+
+        <!-- 连接线 -->
+        <view wx:if="{{index < steps.length - 1}}" class="step-line"></view>
+      </view>
+    </view>
+
+    <!-- 加载提示 -->
+    <view class="loading-tip">
+      <text class="tip-text">首次加载可能需要几秒钟</text>
+    </view>
+  </view>
+
+  <!-- 错误状态（不常用，通常会跳转到Error页面） -->
+  <view wx:else class="error-content">
+    <view class="error-icon">❌</view>
+    <view class="error-title">加载失败</view>
+    <view class="error-message">{{errorMessage}}</view>
+    <button class="retry-button" bindtap="onRetry">重试</button>
+  </view>
+</view>

@@ -1,16 +1,10 @@
-// const { StreamManager } = require('./utils/stream.js')
-// import streamManager from "";
-// let appId = wx.getAccountInfoSync().miniProgram.appId;
-// let showAd = util.showAd();
-// if (showAd===undefined || showAd === '') {
-//   showAd = 1;
-// }
+// App.js
+import HttpClient from './utils/core/HttpClient';
+import TokenManager from './utils/managers/TokenManager';
+import CONSTANT from "./utils/constant"
 
 App({
   globalData: {
-    authDescription: '',
-    cookies: null,
-    
     settings: {
       theme: 'light',
       notifyEnabled: true,
@@ -21,7 +15,6 @@ App({
       StatusBar: 0,
       CustomBar: 0
     },
-    
   },
 
   onLaunch() {
@@ -54,6 +47,16 @@ App({
       console.error('获取系统信息失败:', error);
     }
 
+    // 配置HTTP客户端
+    HttpClient.getInstance().config({
+      baseURL: CONSTANT.baseURL,
+      enableLogging: true
+    });
+
+    // 设置Token获取函数
+    HttpClient.getInstance().setTokenGetter(async () => {
+      return await TokenManager.getInstance().ensureToken();
+    });
   },
 
   onShow() {

@@ -3,7 +3,8 @@
     "pages/home/index",
     "pages/person/index",
     "pages/person/login/index",
-    "pages/person/loading/index"
+    "pages/common/loading/index",
+    "pages/common/error/index"
   ],
   "window": {
     "navigationBarBackgroundColor": "#023591",
