@@ -2,7 +2,7 @@
  * 封装http 请求方法
  */
 import CONSTANT from '../utils/constant';
-import {isEmptyString} from "../utils/util";
+import { isEmptyString } from "../utils/util";
 const apiUrl = CONSTANT.baseURL;     //服务器api地址
 
 /**
@@ -19,17 +19,17 @@ const apiUrl = CONSTANT.baseURL;     //服务器api地址
  * @returns 
  */
 const http = (params) => {
-    if( isEmptyString( wx.getStorageSync('token') ) ){
+    if (isEmptyString(wx.getStorageSync('token'))) {
         errorToast(res.statusCode, "Token不存在！");
         return null;
     }
     return new Promise((resolve, reject) => {
         wx.request({
-            url: apiUrl + params.url,
+            url: apiUrl + params.api,
             data: params.data,
             header: params.header || {
                 'Content-Type': 'application/json',
-                'token':wx.getStorageSync('token'),
+                'token': wx.getStorageSync('token'),
             },
             method: params.method || 'POST',
             dataType: params.dataType,
@@ -104,7 +104,9 @@ function errorToast(statusCode, message) {
     wx.showToast({
         statusCode: statusCode,
         title: message,
-        icon: 'none'
+        icon: 'error',
+        duration: 2000,     // 提示的延迟时间，单位毫秒
+        mask: true          // 是否显示透明蒙层，防止触摸穿透
     })
 }
 

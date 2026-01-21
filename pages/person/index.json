@@ -6,6 +6,6 @@
     "t-avatar": "tdesign-miniprogram/avatar/avatar",
     "t-avatar-group": "tdesign-miniprogram/avatar-group/avatar-group",
     "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
-     "t-button": "tdesign-miniprogram/button/button"
+    "t-button": "tdesign-miniprogram/button/button"
   }
 }

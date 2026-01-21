@@ -1,4 +1,5 @@
 // const { StreamManager } = require('./utils/stream.js')
+// import streamManager from "";
 // let appId = wx.getAccountInfoSync().miniProgram.appId;
 // let showAd = util.showAd();
 // if (showAd===undefined || showAd === '') {
@@ -9,14 +10,7 @@ App({
   globalData: {
     authDescription: '',
     cookies: null,
-    userInfo: {
-      userId: '',        // 内部用户ID
-      realName: '',
-      gender: '',
-      department: '',    // 院系
-      nickname: '',      // 昵称，沿用微信昵称
-      avatarUrl: '',     // 头像，沿用微信头像
-    },
+    
     settings: {
       theme: 'light',
       notifyEnabled: true,
@@ -27,7 +21,7 @@ App({
       StatusBar: 0,
       CustomBar: 0
     },
-    streamManager: null
+    
   },
 
   onLaunch() {
@@ -59,7 +53,7 @@ App({
     } catch (error) {
       console.error('获取系统信息失败:', error);
     }
-    
+
   },
 
   onShow() {

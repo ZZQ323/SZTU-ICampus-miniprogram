@@ -1,0 +1,17 @@
+<!--pages/person/loading/index.wxml-->
+<view class="container">
+    <view>请稍后，小程序正在加载~</view>
+    <t-progress theme="plump" percentage="{{}}" />
+    <wxs module="_">
+        module.exports.getText = function(value, curr) { 
+            if (value > curr) return '已完成步骤'; 
+            if (value == curr)return'当前步骤'; 
+            return '未完成步骤'; 
+        }
+    </wxs>
+    <view class="block">
+        <t-steps layout="vertical" current="{{curstep}}" bind:change="onFirstChange">
+            <t-step-item wx:for="{{_stateConstant}}" wx:key="loadingKeys" title="{{_.getText(curstep, index)}}" content="{{index}}" />
+        </t-steps>
+    </view>
+</view>

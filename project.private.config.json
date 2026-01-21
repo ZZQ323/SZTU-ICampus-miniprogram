@@ -25,11 +25,25 @@
     "miniprogram": {
       "list": [
         {
+          "name": "pages/person/loading/index",
+          "pathName": "pages/person/loading/index",
+          "query": "?step1=123&step2=321",
+          "scene": null,
+          "launchMode": "default"
+        },
+        {
+          "name": "pages/person/loading/index",
+          "pathName": "pages/person/loading/index",
+          "query": "",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
           "name": "pages/person/login/index",
           "pathName": "pages/person/login/index",
           "query": "",
-          "scene": null,
-          "launchMode": "default"
+          "launchMode": "default",
+          "scene": null
         },
         {
           "name": "pages/person/index",

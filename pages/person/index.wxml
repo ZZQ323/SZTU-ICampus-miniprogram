@@ -1,6 +1,5 @@
 <!--pages/person/index.wxml-->
 
-
 <!-- 页面结构 -->
 <view class="user-info" bindtap="gotoLogin">
     <!-- 头像区域 -->

@@ -1,4 +1,14 @@
 // pages/person/index.js
+
+// userInfo: {
+//   userId: '',        // 内部用户ID
+//     realName: '',
+//       gender: '',
+//         department: '',    // 院系
+//           nickname: '',      // 昵称，沿用微信昵称
+//             avatarUrl: '',     // 头像，沿用微信头像
+//     },
+
 Page({
   data: {
     // 用户数据
@@ -23,14 +33,14 @@ Page({
       isUserInfoEmpty: Object.keys(userInfo).length === 0
     });
   },
-  gotoLogin(e){
+  gotoLogin(e) {
     console.log('点击了用户信息区域', e);
     // 添加点击反馈
     wx.vibrateShort({ type: 'light' });
-    
+
     // 如果用户信息为空，跳转到登录/绑定页面
     if (this.data.isUserInfoEmpty) {
-      wx.reLaunch({
+      wx.navigateTo({
         url: "/pages/person/login/index",
         success: () => {
           console.log('跳转到登录页面');
@@ -46,7 +56,7 @@ Page({
       // });
     }
 
-    
+
   },
   // 选择头像
   onChooseAvatar(e) {
@@ -63,7 +73,7 @@ Page({
   },
   // 上传头像到服务器（示例）
   saveAvatar(tempFilePath) {
-    
+
   },
   /** 生命周期函数--监听页面初次渲染完成 */
   onReady() {
