@@ -1,7 +1,7 @@
 // pages/person/login/index.js
 import CONSTANTS from "../../../utils/constant";
 import http from "../../../api/http";
-import { TokenManager, TokenState } from "../../../utils/tokenManager";
+import { TokenManager, TokenState } from "../../../utils/tokenManager.js";
 
 Page({
   /**
@@ -28,10 +28,12 @@ Page({
     console.log(event.detail);
     this.setData({ chosenTab: event.detail.value });
   },
-  getSms(e) {
+  async getSms(e) {
     let _data = this.data;
     if (_data.smsCountDown !== 0) return;
     this.setData({ smsCountDown: CONSTANTS.SMSDUR });
+
+    const token = await TokenManager.getInstance().ensureToken();
     _data.timer = setInterval(() => {
       if (_data.smsCountDown === 0) {
         clearInterval(_data.timer);
@@ -76,7 +78,6 @@ Page({
       }
     });
   },
-
   /**
    * 生命周期函数--监听页面初次渲染完成
    */
