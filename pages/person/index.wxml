@@ -5,7 +5,7 @@
     <!-- 头像区域 -->
     <view class="avatar-section">
         <!-- 实际头像展示 -->
-        <image wx:if="{{avatarUrl}}" src="{{avatarUrl}}" class="avatar-image"></image>
+        <image wx:if="{{userInfo.avatarUrl!==''}}" src="{{userInfo.avatarUrl}}" class="avatar-image"></image>
         <image wx:else src="/assets/user.png" class="avatar-image"></image>
     </view>
     <!-- 昵称区域 -->
@@ -15,18 +15,18 @@
             请绑定以使用更多校园服务功能！
         </view>
         <view wx:else="">
-            <view>姓名：{{userId}}</view>
-            <view>工号：{{realName}}</view>
-            <view>部门：{{gender}}</view>
-            <view>性别：{{department}}</view>
+            <view>姓名：{{userInfo.userId}}</view>
+            <view>工号：{{userInfo.realName}}</view>
+            <view>部门：{{userInfo.schoolName}}</view>
+            <view>性别：{{userInfo.gender}}</view>
         </view>
     </view>
 </view>
 
 <t-cell-group theme="card">
     <t-cell title="绑定教务" image="/assets/image/icons/adduser.png" hover arrow bind:tap="gotoLogin" />
-    <t-cell title="解绑教务" image="/assets/image/icons/deleteuser.png" hover arrow bind-tap="" />
-    <t-cell title="删除缓存" image="/assets/image/icons/delete.png" hover arrow bind-tap="" />
+    <t-cell title="解绑教务" image="/assets/image/icons/deleteuser.png" hover arrow bind:tap="gotoLogOut" />
+    <t-cell title="删除缓存" image="/assets/image/icons/delete.png" hover arrow bind:tap="" />
     <t-cell title="意见与bug反馈" image="/assets/image/icons/info-circle.png" hover arrow url="" jump-type="navigateTo" />
     <t-cell title="版本更新信息" leftIcon="internet" hover arrow url="" jump-type="navigateTo" />
     <t-cell title="使用帮助" image="/assets/image/icons/question-circle.png" hover arrow url="" jump-type="navigateTo" />

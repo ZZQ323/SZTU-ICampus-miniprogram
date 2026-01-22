@@ -31,7 +31,7 @@ export class TokenManager extends StateManager {
   constructor() {
     super({
       name: 'TokenManager',
-      maxRetries: 3,
+      maxRetries: 0,
       retryDelay: 1000,
       cacheTime: 5 * 60 * 1000, // 5分钟缓存
       enableLogging: true
@@ -94,18 +94,16 @@ export class TokenManager extends StateManager {
             reject(new Error('微信登录失败：无code'));
             return;
           }
-
           try {
             // 第二步：用code换取token
             const response = await this._httpClient.request({
               api: '/wx-auth/v1/get-token',
               method: 'POST',
-              data: { code: loginRes.code },
+              data: { wxCode: loginRes.code },
               autoAddToken: false,  // 不需要token
               autoNavigateToError: false,  // 不自动跳转error页面
               showToast: false  // 不显示toast
             });
-
             if (response && response.data && response.data.token) {
               const token = response.data.token;
               this._token = token;
@@ -113,14 +111,12 @@ export class TokenManager extends StateManager {
               this._log('Token获取成功');
               resolve(token);
             } else {
-              reject(new Error('Token获取失败：响应数据格式错误'));
+              reject(new Error('Token获取失败，请退出登录界面再点击登录界面进行重试！'));
             }
-
           } catch (error) {
             reject(new Error(`Token获取失败：${error.message}`));
           }
         },
-
         fail: (error) => {
           reject(new Error(`微信登录失败：${error.errMsg || '未知错误'}`));
         }

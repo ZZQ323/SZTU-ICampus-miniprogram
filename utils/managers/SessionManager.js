@@ -132,10 +132,10 @@ export class SessionManager extends StateManager {
 
       // 解析响应
       const success = result?.success !== false;
-      const isLogined = result?.data?.Logined === true || 
-                       result?.data?.logined === true ||
-                       result?.Logined === true ||
-                       result?.logined === true;
+      const isLogined = result?.data?.Logined === true ||
+        result?.data?.logined === true ||
+        result?.Logined === true ||
+        result?.logined === true;
 
       this._log('Session刷新结果:', { success, isLogined });
 
@@ -145,7 +145,7 @@ export class SessionManager extends StateManager {
 
       this._isValid = true;
       this._isLogined = isLogined;
-      
+
       return { success: true, isLogined };
 
     } catch (error) {
@@ -219,7 +219,6 @@ export class SessionManager extends StateManager {
       this._log('已登录');
       return true;
     }
-
     // 未登录，跳转到登录页面
     this._log('未登录，跳转到登录页面');
     return this._navigateToLogin();
@@ -240,14 +239,15 @@ export class SessionManager extends StateManager {
       });
 
       const queryString = context.toQueryString();
-      
-      wx.navigateTo({
-        url: `/pages/person/login/index?${queryString}`,
-        fail: (err) => {
-          console.error('[SessionManager] 跳转登录页面失败:', err);
-          reject(new Error('跳转登录页面失败'));
-        }
-      });
+      setTimeout(() => {
+        wx.navigateTo({
+          url: `/pages/person/login/index?${queryString}`,
+          fail: (err) => {
+            console.error('[SessionManager] 跳转登录页面失败:', err);
+            reject(new Error('跳转登录页面失败'));
+          }
+        });
+      },600);
     });
   }
 

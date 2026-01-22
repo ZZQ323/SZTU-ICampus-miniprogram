@@ -1,5 +1,31 @@
 /* pages/person/login/index.wxss */
 
+.container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 5vw;
+    background-color: white;
+}
+
+
+
+.custom-tabs {
+    margin: 32rpx 0;
+}
+
+
+.tabs-viewdeck {
+    border-radius: 30rpx;
+    padding: 10rpx;
+    border: lightblue 10rpx solid;
+}
+
+.button {
+    margin: 5vh 10vw;
+}
+
 .suffix {
     display: flex;
     align-items: center;

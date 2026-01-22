@@ -99,7 +99,7 @@ export class NavigationManager {
     this._config = {
       loadingPageUrl: '/pages/common/loading/index',
       errorPageUrl: '/pages/common/error/index',
-      homePageUrl: '/pages/index/index',
+      homePageUrl: '/pages/home/index',
       enableLogging: true
     };
 
@@ -211,7 +211,7 @@ export class NavigationManager {
    * 从Loading/Error页面返回
    * 
    * 策略：
-   * 1. 如果fromPage是business，使用navigateBack(1)
+   * 1. 如果 fromPage 是business，使用navigateBack(1)
    * 2. 如果fromPage是loading（error页面的情况），使用navigateBack(1)，因为已经redirectTo了
    * 3. 如果navigateBack失败，使用reLaunch到returnUrl
    */

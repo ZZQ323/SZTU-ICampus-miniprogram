@@ -1,20 +1,18 @@
 // pages/person/index.js
 
-// userInfo: {
-//   userId: '',        // 内部用户ID
-//     realName: '',
-//       gender: '',
-//         department: '',    // 院系
-//           nickname: '',      // 昵称，沿用微信昵称
-//             avatarUrl: '',     // 头像，沿用微信头像
-//     },
+import SessionManager from "../../utils/managers/SessionManager";
+import HttpClient from '../../utils/core/HttpClient';
 
 Page({
   data: {
     // 用户数据
-    avatarUrl: '',
-    nickname: '',
-    userInfo: {},
+    userInfo: {
+      realName: '',
+      gender: '',
+      userId: '',
+      schoolName: '',
+      avatarURL: ''
+    },
     isUserInfoEmpty: true
   },
   clearCache() {
@@ -36,44 +34,90 @@ Page({
   gotoLogin(e) {
     console.log('点击了用户信息区域', e);
     // 添加点击反馈
-    wx.vibrateShort({ type: 'light' });
-
-    // 如果用户信息为空，跳转到登录/绑定页面
-    if (this.data.isUserInfoEmpty) {
-      wx.navigateTo({
-        url: "/pages/person/login/index",
-        success: () => {
-          console.log('跳转到登录页面');
-        },
-        fail: (err) => {
-          console.error('跳转失败:', err);
-        }
+    const sm = SessionManager.getInstance();
+    sm.ensureLogin().then((value) => {
+      if (value !== true) {
+        value.then(value => { console.log("准备跳转！") });
+        return;
+      }
+      wx.showLoading({ title: "正在验证用户状态！" });
+      HttpClient.getInstance().post('/auth/v1/cookie/refresh', {}, {
+        autoNavigateToError: false,
+        showToast: true
+      }).then(res => {
+        // console.log(data);
+        const _data = res.data;
+        wx.setStorageSync("userInfo", {
+          realName: _data.realName,
+          gender: _data.gender,
+          userId: _data.userId,
+          schoolName: _data.schoolName,
+          avatarURL: _data.avatarURL
+        });
+        this.setData({
+          'userInfo.realName': _data.realName,
+          'userInfo.gender': _data.gender,
+          'userInfo.userId': _data.userId,
+          'userInfo.schoolName': _data.schoolName,
+          'userInfo.avatarURL': _data.avatarURL,
+          isUserInfoEmpty: false
+        });
+        wx.hideLoading();
+        wx.showModal({
+          title: _data.realName + "您已成功登录！", content: "个人信息已加载完成", icon: "success"
+        });
       });
-    } else {
-      // 如果已有用户信息，跳转到详情页或执行其他操作
-      // wx.navigateTo({
-      //   url: '/pages/userDetail/userDetail',
-      // });
-    }
-
-
+    });
   },
-  // 选择头像
+  gotoLogOut(e) {
+    const userInfo = wx.getStorageSync('userInfo') || {};
+    if (userInfo.length == 0) return;
+    const copy = JSON.parse(JSON.stringify(userInfo));
+    wx.showLoading({ title: "正在登出！" });
+    HttpClient.getInstance().post('/auth/v1/logout', {}, {
+      autoNavigateToError: false,
+      showToast: true
+    })
+      .then(res => {
+        wx.removeStorageSync('userInfo');
+        // 清除SessionManager状态（重要！）
+        SessionManager.getInstance().clear();
+        this.setData({
+          'userInfo.realName': '',
+          'userInfo.gender': '',
+          'userInfo.userId': '',
+          'userInfo.schoolName': '',
+          'userInfo.avatarURL': '',
+          isUserInfoEmpty: true
+        });
+        wx.hideLoading();
+        wx.showModal({
+          title: copy.realName + "您已登出！", content: "如需使用个人功能请先登录！", icon: "success"
+        });
+      }).catch(err => {
+        console.error('登出失败:', error);
+        wx.hideLoading();
+
+        wx.showToast({
+          title: error.message || '登出失败',
+          icon: 'none',
+          duration: 2000
+        });
+      });
+  },
+  // 选择头像(不实现)
   onChooseAvatar(e) {
     console.log('选择头像:', e.detail.avatarUrl);
-
     // 更新头像
     this.setData({
       avatarUrl: e.detail.avatarUrl,
       showAvatarSkeleton: false // 确保骨架屏隐藏
     });
-
     // 这里可以上传头像到服务器
     // this.uploadAvatar(e.detail.avatarUrl);
   },
   // 上传头像到服务器（示例）
   saveAvatar(tempFilePath) {
-
   },
   /** 生命周期函数--监听页面初次渲染完成 */
   onReady() {

@@ -1,22 +1,36 @@
 <!--pages/person/login/index.wxml-->
-<view>
-    <t-tabs defaultValue="{{0}}" bind:change="onTabsChange" bind:click="onTabsClick" t-class="custom-tabs">
-        <t-tab-panel wx:for="{{loginTypes}}" label="{{item}}" value="{{index}}" wx:key="loginTypesChoosing" />
-    </t-tabs>
-    <view wx:if="{{chosenTab==0}}">
-        <t-input label="请输入工号" placeholder="请工号" value="{{input.usrId}}" type="number" maxcharacter="{{20}}"   	bindinput="onInput" data-type="SMS">
-        </t-input>
-        <t-input placeholder="请输入验证码" label="验证码" type="number" maxcharacter="{{8}}"  	bindinput="onInput" data-type="SMS-code">
-            <view slot="suffix" style="display: flex; align-items: center">
-                <view class="suffix--line"></view>
-                <view class="verify" aria-role="button" wx:if="{{smsCountDown===0}}" bind:tap="getSms"> 发送验证码 </view>
-                <view class="verify" aria-role="button" wx:else>{{smsCountDown}}s后重新请求</view>
+<view class="container">
+    <view class="tabs-viewdeck">
+        <t-tabs defaultValue="{{0}}"  bind:change="onTabsChange" bind:click="onTabsClick" t-class="custom-tabs"
+            style="width: 100%;" >
+            <t-tab-panel wx:for="{{loginTypes}}" label="{{item}}" value="{{index}}" wx:key="loginTypesChoosing" />
+        </t-tabs>
+        <view wx:if="{{chosenTab==0}}">
+            
+            <t-input label="请输入工号" placeholder="请输入工号" value="{{input.usrId}}" type="number" maxcharacter="{{20}}"
+                bind:change="onInput" data-type="SMS" style="border: 2rpx solid var(--td-component-border);border-radius: 12rpx;" > 
+            </t-input>
+            <t-input placeholder="请输入验证码" label="验证码" type="number" maxcharacter="{{8}}" bind:change="onInput"
+                data-type="SMS-code">
+                <view slot="suffix" style="display: flex; align-items: center">
+                    <view class="suffix--line"></view>
+                    <view class="verify" aria-role="button" wx:if="{{smsCountDown===0}}" bind:tap="getSms"> 发送验证码
+                    </view>
+                    <view class="verify" aria-role="button" wx:else>{{smsCountDown}}s后重新请求</view>
+                </view>
+            </t-input>
+            <view class="button" >
+                <t-button theme="primary" size="medium" variant="outline" block bind:tap="onLogin">登陆</t-button>
             </view>
-        </t-input>
-    </view>
-    <view wx:if="{{chosenTab==1}}">
-        <t-input label="请输入工号" placeholder="请工号" value="{{input.usrId}}" type="number" maxcharacter="{{20}}"   	bindinput="onInput"  data-type="PASSWORD">
-        </t-input>
-        <t-input placeholder="请输入密码" label="请输入密码"  	bindinput="onInput" data-type="PASSWORD-code"></t-input>
+        </view>
+        <view wx:if="{{chosenTab==1}}">
+            <t-input label="请输入工号" placeholder="请输入工号" value="{{input.usrId}}" type="number" maxcharacter="{{20}}"
+                bind:change="onInput" data-type="PASSWORD">
+            </t-input>
+            <t-input placeholder="请输入密码" label="请输入密码" bind:change="onInput" data-type="PASSWORD-code"></t-input>
+            <view class="button" >
+                <t-button theme="primary" size="medium" variant="outline" block bind:tap="onLogin">登陆</t-button>
+            </view>
+        </view>
     </view>
 </view>

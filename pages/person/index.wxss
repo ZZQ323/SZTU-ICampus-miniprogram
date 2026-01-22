@@ -37,6 +37,7 @@ page {
     flex-direction: column;
     align-items: center;
     position: relative;
+    /* border: 3rpx lightblue solid; */
 }
 
 /* 头像按钮 */
@@ -57,7 +58,7 @@ page {
     width: 160rpx;
     height: 160rpx;
     border-radius: 50%;
-    border: 2rpx solid #eee;
+    border: 3rpx solid lightblue;
 }
 
 /* 昵称区域 */
