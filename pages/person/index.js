@@ -1,5 +1,5 @@
 // pages/person/index.js
-
+import TokenManager from "../../utils/managers/TokenManager"
 import SessionManager from "../../utils/managers/SessionManager";
 import HttpClient from '../../utils/core/HttpClient';
 
@@ -15,15 +15,6 @@ Page({
     },
     isUserInfoEmpty: true
   },
-  clearCache() {
-    this.setData({ userInfo: {} })
-    wx.removeStorageSync("userInfo");
-    wx.showToast({
-      title: '清除成功',
-      icon: 'none',
-      duration: 2000
-    });
-  },
   onLoad() {
     const userInfo = wx.getStorageSync('userInfo') || {};
     this.setData({
@@ -35,39 +26,40 @@ Page({
     console.log('点击了用户信息区域', e);
     // 添加点击反馈
     const sm = SessionManager.getInstance();
-    sm.ensureLogin().then((value) => {
-      if (value !== true) {
-        value.then(value => { console.log("准备跳转！") });
-        return;
-      }
-      wx.showLoading({ title: "正在验证用户状态！" });
-      HttpClient.getInstance().post('/auth/v1/cookie/refresh', {}, {
-        autoNavigateToError: false,
-        showToast: true
-      }).then(res => {
-        // console.log(data);
-        const _data = res.data;
-        wx.setStorageSync("userInfo", {
-          realName: _data.realName,
-          gender: _data.gender,
-          userId: _data.userId,
-          schoolName: _data.schoolName,
-          avatarURL: _data.avatarURL
-        });
-        this.setData({
-          'userInfo.realName': _data.realName,
-          'userInfo.gender': _data.gender,
-          'userInfo.userId': _data.userId,
-          'userInfo.schoolName': _data.schoolName,
-          'userInfo.avatarURL': _data.avatarURL,
-          isUserInfoEmpty: false
-        });
-        wx.hideLoading();
-        wx.showModal({
-          title: _data.realName + "您已成功登录！", content: "个人信息已加载完成", icon: "success"
+    sm.ensureLogin()
+      .then((value) => {
+        wx.showLoading({ title: "正在验证用户状态！" });
+        if (value !== true) {
+          value.then(value => { console.log("准备跳转！") });
+          return;
+        }
+        HttpClient.getInstance().post('/auth/v1/cookie/refresh', {}, {
+          autoNavigateToError: false,
+          showToast: true
+        }).then(res => {
+          // console.log(data);
+          const _data = res.data;
+          wx.setStorageSync("userInfo", {
+            realName: _data.realName,
+            gender: _data.gender,
+            userId: _data.userId,
+            schoolName: _data.schoolName,
+            avatarURL: _data.avatarURL
+          });
+          this.setData({
+            'userInfo.realName': _data.realName,
+            'userInfo.gender': _data.gender,
+            'userInfo.userId': _data.userId,
+            'userInfo.schoolName': _data.schoolName,
+            'userInfo.avatarURL': _data.avatarURL,
+            isUserInfoEmpty: false
+          });
+          wx.hideLoading();
+          wx.showModal({
+            title: _data.realName + "您已成功登录！", content: "个人信息已加载完成", icon: "success"
+          });
         });
       });
-    });
   },
   gotoLogOut(e) {
     const userInfo = wx.getStorageSync('userInfo') || {};
@@ -119,11 +111,14 @@ Page({
   // 上传头像到服务器（示例）
   saveAvatar(tempFilePath) {
   },
+  onClearCache(e) {
+    SessionManager.getInstance().clear();
+    TokenManager.getInstance().clear();
+    wx.reLaunch({ url: "/pages/home/index" })
+  },
   /** 生命周期函数--监听页面初次渲染完成 */
   onReady() {
-
   },
-
   /** 生命周期函数--监听页面显示 */
   onShow() {
 
@@ -141,7 +136,7 @@ Page({
 
   /** 页面相关事件处理函数--监听用户下拉动作 */
   onPullDownRefresh() {
-
+    gotoLogin();
   },
 
   /** 页面上拉触底事件的处理函数 */

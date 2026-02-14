@@ -91,7 +91,7 @@ export class HttpClient {
   constructor() {
     this._config = {
       baseURL: '',
-      timeout: 30000,
+      timeout: 60000,
       enableLogging: true
     };
 

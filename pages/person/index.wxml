@@ -15,8 +15,8 @@
             请绑定以使用更多校园服务功能！
         </view>
         <view wx:else="">
-            <view>姓名：{{userInfo.userId}}</view>
-            <view>工号：{{userInfo.realName}}</view>
+            <view>姓名：{{userInfo.realName}}</view>
+            <view>工号：{{userInfo.userId}}</view>
             <view>部门：{{userInfo.schoolName}}</view>
             <view>性别：{{userInfo.gender}}</view>
         </view>
@@ -26,7 +26,7 @@
 <t-cell-group theme="card">
     <t-cell title="绑定教务" image="/assets/image/icons/adduser.png" hover arrow bind:tap="gotoLogin" />
     <t-cell title="解绑教务" image="/assets/image/icons/deleteuser.png" hover arrow bind:tap="gotoLogOut" />
-    <t-cell title="删除缓存" image="/assets/image/icons/delete.png" hover arrow bind:tap="" />
+    <t-cell title="删除缓存" image="/assets/image/icons/delete.png" hover arrow bind:tap="onClearCache" />
     <t-cell title="意见与bug反馈" image="/assets/image/icons/info-circle.png" hover arrow url="" jump-type="navigateTo" />
     <t-cell title="版本更新信息" leftIcon="internet" hover arrow url="" jump-type="navigateTo" />
     <t-cell title="使用帮助" image="/assets/image/icons/question-circle.png" hover arrow url="" jump-type="navigateTo" />

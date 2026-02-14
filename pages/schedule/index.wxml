@@ -1,0 +1,87 @@
+<!--pages/schedule/index.wxml-->
+<view class="schedule-container">
+    <!-- 周次选择器 -->
+    <view class="selector-container">
+        <!-- 周次选择器（t-picker） -->
+        <view class="week-selector1">
+            <view class="picker-btn" bindtap="openWeekPicker">
+                {{weeks[currentWeek]}}
+            </view>
+            <t-picker 
+                visible="{{false}}" 
+                value="{{[currentWeek]}}" 
+                usingCustomNavbar
+                bindchange="onWeekPickerChange"
+                bindpick="onColumnChange"
+                bindcancel="closeWeekPicker"
+                cancelBtn="取消" 
+                confirmBtn="确认"
+                >
+                <t-picker-item options="{{weeks}}">{{item}}</t-picker-item>
+            </t-picker>
+        </view>
+
+        <!-- 学期选择器（t-picker） -->
+        <view class="week-selector2">
+            <view class="picker-btn" bindtap="openSemesterPicker">
+                {{semesters[currentSemester] || '选择学期'}}学期
+            </view>
+            <t-picker visible="{{true}}" value="{{[currentSemester]}}"
+                bind:change="onSemesterPickerChange" bind:cancel="closeSemesterPicker" cancelBtn="取消" confirmBtn="确认" >
+                <t-picker-item options="{{semesters}}"></t-picker-item>
+            </t-picker>
+        </view>
+    </view>
+
+    <!-- 课表网格 -->
+    <scroll-view scroll-x scroll-y class="schedule-grid">
+        <!-- 表头：星期 -->
+        <view class="grid-header">
+            <view class="time-header">时间</view>
+            <view class="day-header" wx:for="{{weekDays}}" wx:key="*this">{{item}}</view>
+        </view>
+
+        <!-- 课表内容 -->
+        <view class="grid-body">
+            <view class="time-row" wx:for="{{timeSlots}}" wx:key="index" wx:for-index="rowIndex">
+                <!-- 时间列 -->
+                <view class="time-cell">
+                    <text class="time-label">{{item.label}}</text>
+                    <text class="time-range">{{item.time}}</text>
+                </view>
+
+                <!-- 课程单元格 -->
+                <view class="course-cell" wx:for="{{weekDays}}" wx:key="day" wx:for-index="colIndex" wx:for-item="day">
+                    <view class="course-item {{course.color}}" wx:for="{{getCourses(rowIndex, colIndex)}}"
+                        wx:key="courseId" wx:for-item="course" bindtap="onCourseClick" data-course="{{course}}">
+                        <text class="course-name">{{course.courseName}}</text>
+                        <text class="course-location" wx:if="{{course.location}}">📍{{course.location}}</text>
+                    </view>
+                </view>
+            </view>
+        </view>
+    </scroll-view>
+</view>
+
+<!-- 课程详情弹窗 -->
+<!-- <modal show="{{showDetail}}" bindclose="closeDetail">
+    <view class="detail-modal">
+        <view class="detail-title">{{selectedCourse.courseName}}</view>
+        <view class="detail-item">
+            <text class="label">时间：</text>
+            <text>{{selectedCourse.courseTime}}</text>
+        </view>
+        <view class="detail-item" wx:if="{{selectedCourse.courseWeeks}}">
+            <text class="label">周次：</text>
+            <text>{{selectedCourse.courseWeeks}}</text>
+        </view>
+        <view class="detail-item" wx:if="{{selectedCourse.location}}">
+            <text class="label">地点：</text>
+            <text>{{selectedCourse.location}}</text>
+        </view>
+        <view class="detail-item" wx:if="{{selectedCourse.teacher}}">
+            <text class="label">教师：</text>
+            <text>{{selectedCourse.teacher}}</text>
+        </view>
+    </view>
+</modal> -->

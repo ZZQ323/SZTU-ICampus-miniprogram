@@ -302,6 +302,7 @@ export class SessionManager extends StateManager {
     super.clear();
     this._isValid = false;
     this._isLogined = false;
+    wx.removeStorageSync("userInfo");
   }
 }
 
