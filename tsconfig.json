@@ -1,51 +1,49 @@
 {
   "compilerOptions": {
+    // ========== 基础配置 ==========
     "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "lib": ["esnext", "dom"],
     "jsx": "preserve",
-    "lib": [
-      "DOM",
-      "ESNext"
-    ],
-    "baseUrl": ".",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "paths": {
-      "@/*": [
-        "src/*"
-      ]
-    },
-    "resolveJsonModule": true,
-    "types": [
-      "@dcloudio/types",
-      "@uni-helper/uni-app-types",
-      "miniprogram-api-typings"
-    ],
-    "allowJs": true,
-    "strict": true,
-    "strictNullChecks": true,
-    "noUnusedLocals": false,
-    "sourceMap": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true
+    "forceConsistentCasingInImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+
+    // ========== 路径别名（让 @/ 指向 src/）==========
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+
+    // ========== TypeScript 严格程度 ==========
+    // "strict": true,             // 总开关，开了下面全部生效，先注释掉
+    // "noImplicitAny": true,      // 不允许隐式 any，开了之后你写 function(a) 会报错，要写 function(a: string)
+    // "strictNullChecks": true,   // null 检查，开了之后 string 类型不能赋值 null
+    // "strictFunctionTypes": true,// 函数参数类型严格检查
+    // "noUnusedLocals": true,     // 不允许有声明了但没用的变量（开发阶段烦人，建议关）
+    // "noUnusedParameters": true, // 不允许有声明了但没用的函数参数（同上）
+
+    // ↓↓↓ 这两个开着就行，提供基本的类型提示又不会太烦人 ↓↓↓
+    "strict": false,               // 关闭严格模式，入门阶段先这样
+    "noImplicitAny": false,         // 允许隐式 any，不强制你每个变量都写类型
+    "allowJs": true,                // 允许项目中混用 .js 文件（方便渐进迁移）
+
+    // ========== 类型声明 ==========
+    "types": ["@dcloudio/types"]
   },
-  "vueCompilerOptions": {
-    "plugins": [
-      "@uni-helper/uni-app-types/volar-plugin"
-    ]
-  },
+
+  // ========== 哪些文件参与 TS 编译 ==========
   "include": [
     "src/**/*.ts",
-    "src/**/*.d.ts",
-    "src/**/*.tsx",
     "src/**/*.vue",
-    "types/**/*.d.ts",
-    "types/**/*.ts",
+    "src/**/*.d.ts",
+    // TDesign 的全局类型声明，加了之后 VSCode 会提示 TDesign 组件的属性
     "node_modules/tdesign-uniapp/global.d.ts"
   ],
   "exclude": [
-    "dist",
     "node_modules",
-    "uni_modules"
+    "dist"
   ]
 }
