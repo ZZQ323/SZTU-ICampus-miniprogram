@@ -8,20 +8,21 @@
  * 都会先经过这里的 invoke 函数，在里面判断有没有 token
  */
 import { getToken } from './storage'
+import { get, post } from '@/utils/http'
+import type {UserInfo} from "@/api/types/auth"
+const LOGIN_PAGE = '/pages/common/login/index'
 
-const LOGIN_PAGE = '/pages/login/index'
-
-// 需要登录的页面列表（你可以在这里加）
+// TODO 需要登录的页面列表（你可以在这里加）
 const NEED_LOGIN: string[] = [
   '/pages/schedule/index',
   // '/pages/profile/index',
   // '/pages/subscription/index',
 ]
 
-// 不拦截的页面（白名单）
+// TODO 不拦截的页面（白名单）
 const WHITE_LIST: string[] = [
   '/pages/home/index',
-  '/pages/login/index',
+  '/pages/common/login/index',
 ]
 
 export function setupRouterGuard() {
@@ -38,6 +39,7 @@ export function setupRouterGuard() {
 
         // 需要登录的页面，检查 token
         if (NEED_LOGIN.includes(path) && !getToken()) {
+          // TODO 改成 error 页面显示
           uni.showToast({ title: '请先登录', icon: 'none' })
           setTimeout(() => {
             uni.navigateTo({
@@ -46,8 +48,12 @@ export function setupRouterGuard() {
           }, 300)
           return false  // 阻止原始跳转
         }
-
-        return true
+        // TODO: 然后检查登录状态！
+        get<UserInfo>('/user/info')
+          .then((value)=>{
+            value
+            return true;
+          });
       },
     })
   })

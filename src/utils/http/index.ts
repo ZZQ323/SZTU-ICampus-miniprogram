@@ -12,7 +12,7 @@
  */
 import axios from 'axios'
 import type { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
-import { uniAdapter } from '@uni-helper/axios-adapter'
+import { createUniAppAxiosAdapter } from '@uni-helper/axios-adapter'
 import { getToken, setToken, removeToken } from '../storage'
 
 // ====== 你的胶水层后端返回的统一格式 ======
@@ -24,11 +24,10 @@ export interface ApiResult<T = any> {
 }
 
 // ====== 创建 Axios 实例 ======
-const instance: AxiosInstance = axios.create({
-  // ⬇️ 改成你的胶水层后端地址
-  baseURL: 'https://your-backend.com/api',
+const instance = axios.create({
+  baseURL: 'http://192.168.3.35',
   timeout: 15000,
-  adapter: uniAdapter,  // 让 axios 在小程序中能用
+  adapter: createUniAppAxiosAdapter(),  // 改这里，要加括号调用
 })
 
 // ====== 请求拦截器：发请求之前执行 ======
@@ -98,20 +97,20 @@ function handleExpired() {
 //   const res = await get<UserInfo>('/user/info')
 //   console.log(res.data)  // 有类型提示！
 
-export function get<T = any>(url: string, params?: any) {
-  return instance.get<any, ApiResult<T>>(url, { params })
+export function get<T = any>(api: string, params?: any) {
+  return instance.get<any, ApiResult<T>>(api, { params })
 }
 
-export function post<T = any>(url: string, data?: any) {
-  return instance.post<any, ApiResult<T>>(url, data)
+export function post<T = any>(api: string, data?: any) {
+  return instance.post<any, ApiResult<T>>(api, data)
 }
 
-export function put<T = any>(url: string, data?: any) {
-  return instance.put<any, ApiResult<T>>(url, data)
+export function put<T = any>(api: string, data?: any) {
+  return instance.put<any, ApiResult<T>>(api, data)
 }
 
-export function del<T = any>(url: string, params?: any) {
-  return instance.delete<any, ApiResult<T>>(url, { params })
+export function del<T = any>(api: string, params?: any) {
+  return instance.delete<any, ApiResult<T>>(api, { params })
 }
 
 export default instance

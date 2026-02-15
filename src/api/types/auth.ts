@@ -6,6 +6,8 @@
 // 登录方式
 export type LoginMethod = 'password' | 'sms'
 
+
+
 // 登录检查结果（胶水层返回）
 export interface CheckResult {
   needLogin: boolean
@@ -21,8 +23,9 @@ export interface LoginResult {
 
 // 用户信息
 export interface UserInfo {
-  id: string
+  usrId: string
   name: string
-  studentId: string
-  avatar: string
+  avatarURL?: string
+  schoolName:string
+  loginStatus:boolean
 }

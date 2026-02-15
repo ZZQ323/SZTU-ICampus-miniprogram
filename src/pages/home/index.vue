@@ -14,11 +14,11 @@
     </view>
 
     <!-- TDesign 按钮测试 —— 如果这两个按钮能正常显示样式，说明 TDesign 配好了 -->
-    <view class="section">
+    <!-- <view class="section">
       <text class="section-title">TDesign 组件测试</text>
       <t-button theme="primary" size="large" block>主要按钮</t-button>
       <t-button theme="default" size="large" block style="margin-top: 20rpx">次要按钮</t-button>
-    </view>
+    </view> -->
 
     <!-- 功能入口 -->
     <view class="section">

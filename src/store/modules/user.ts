@@ -32,9 +32,7 @@ export const useUserStore = defineStore('user', () => {
    */
   async function checkLogin() {
     clearStorage()  // 你的需求：先清空缓存
-
     const res = await authApi.check()
-
     // 胶水层可能返回新 token（旧的快过期了，自动换）
     if (res.data.newToken) {
       token.value = res.data.newToken
