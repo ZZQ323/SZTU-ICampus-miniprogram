@@ -36,10 +36,10 @@ instance.interceptors.request.use(
     // 自动附加 Token
     const token = getToken()
     if (token && config.headers) {
-      config.headers['Authorization'] = `Bearer ${token}`
+      config.headers['Authorization'] = `Bearer ${token}`;
     }
     // 显示加载动画
-    uni.showLoading({ title: '加载中...', mask: true })
+    uni.showLoading({ title: '加载中...', mask: true });
     return config
   },
   (error) => {
