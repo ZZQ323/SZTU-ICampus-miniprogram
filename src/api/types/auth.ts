@@ -4,6 +4,7 @@
  */
 
 // 登录方式
+/** 登录方式枚举 */
 export type LoginMethod = 'password' | 'sms'
 
 
@@ -29,3 +30,24 @@ export interface UserInfo {
   schoolName:string
   loginStatus:boolean
 }
+
+/** 登录请求参数 */
+export interface LoginRequestCommand {
+  userId: string
+  password?: string
+  smsCode?: string
+}
+
+/** Token 返回 */
+export interface TokenAuthVo {
+  token: string
+  expiresIn: number
+}
+
+/** Session 状态 */
+export interface SessionStatus {
+  isLoggedIn: boolean
+  loginMethod?: 'sms' | 'password'
+  userId?: string
+}
+
