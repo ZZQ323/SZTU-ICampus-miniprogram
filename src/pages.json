@@ -12,7 +12,7 @@
       }
     },
     {
-      "path": "pages/login/index",
+      "path": "pages/common/login/index",
       "style": {
         "navigationBarTitleText": "登录"
       }
@@ -43,20 +43,20 @@
       {
         "pagePath": "pages/home/index",
         "text": "首页",
-        "iconPath": "static/tab/home.png",
-        "selectedIconPath": "static/tab/home-active.png"
+        "iconPath": "static/tab/normal/home.png",
+        "selectedIconPath": "static/tab/active/home.png"
       },
       {
         "pagePath": "pages/schedule/index",
         "text": "课表",
-        "iconPath": "static/tab/schedule.png",
-        "selectedIconPath": "static/tab/schedule-active.png"
+        "iconPath": "static/tab/normal/calendar.png",
+        "selectedIconPath": "static/tab/active/calendar.png"
       },
       {
         "pagePath": "pages/notice/index",
         "text": "公告",
-        "iconPath": "static/tab/notice.png",
-        "selectedIconPath": "static/tab/notice-active.png"
+        "iconPath": "static/tab/normal/notice.png",
+        "selectedIconPath": "static/tab/active/notice.png"
       }
     ]
   },
