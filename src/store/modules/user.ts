@@ -11,84 +11,127 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { getToken, setToken, removeToken, clearStorage } from '@/utils/storage'
-import { authApi } from '@/api/auth'
-import type { UserInfo, LoginMethod } from '@/api/types/auth'
+import { authApi, wxAuthApi } from '@/api/api'
+import type { UserInfo, LoginType, LoginResultsVo } from '@/api/types/auth'
 
 export const useUserStore = defineStore('user', () => {
   // ====== 状态 ======
   const token = ref(getToken())
   const userInfo = ref<UserInfo | null>(null)
-  const loginMethod = ref<LoginMethod>('password')
+  const loginTypes = ref<LoginType[]>([])
 
   // ====== 计算属性 ======
-  const isLoggedIn = computed(() => !!token.value)
-  const userName = computed(() => userInfo.value?.name || '未登录')
+  const hasToken = computed(() => !!token.value)
+  const isSchoolLoggedIn = computed(() => !!userInfo.value?.userId)
+  const userName = computed(() => userInfo.value?.realName || '未登录')
 
   // ====== 方法 ======
 
   /**
-   * 检查登录状态
-   * 你的流程：点头像 → 清缓存 → 请求胶水层检查 → 返回是否需要登录 + 登录方式
+   * 检查学校登录状态
+   * 流程：点头像 → 刷新cookie → 检查session → 返回是否已登录 + 可用登录方式
    */
-  async function checkLogin() {
-    clearStorage()  // 你的需求：先清空缓存
-    const res = await authApi.check()
-    // 胶水层可能返回新 token（旧的快过期了，自动换）
-    if (res.data.newToken) {
-      token.value = res.data.newToken
-      setToken(res.data.newToken)
+  async function checkSchoolSession(): Promise<{
+    isLogined: boolean
+    loginTypes: LoginType[]
+  }> {
+    // 先刷新 cookie
+    await authApi.refreshCookie()
+    // 检查 session 状态
+    const res = await authApi.getSessionStatus()
+    const data: LoginResultsVo = res.data
+
+    // 更新可用登录方式
+    loginTypes.value = data.loginTypes || []
+
+    // 如果已登录，更新用户信息
+    if (data.isLogined && data.userId) {
+      userInfo.value = {
+        userId: data.userId,
+        realName: data.realName || '',
+        gender: data.gender,
+        schoolName: data.schoolName,
+        avatarURL: data.avatarURL,
+      }
     }
 
-    loginMethod.value = res.data.loginMethod
-
     return {
-      needLogin: res.data.needLogin,
-      method: res.data.loginMethod,
+      isLogined: data.isLogined,
+      loginTypes: data.loginTypes || [],
     }
   }
 
   /** 发短信验证码 */
-  async function sendSms(phone: string) {
-    await authApi.sendSmsCode(phone)
+  async function sendSms(userId: string) {
+    await authApi.requestSms(userId)
     uni.showToast({ title: '验证码已发送', icon: 'success' })
   }
 
-  /** 登录（统一入口，根据 method 调不同接口） */
-  async function login(params: {
-    method: LoginMethod
-    username?: string
+  /** 登录学校系统 */
+  async function loginSchool(params: {
+    loginType: LoginType
+    userId: string
     password?: string
-    phone?: string
     smsCode?: string
   }) {
-    let res
-    if (params.method === 'password') {
-      res = await authApi.loginByPassword(params.username!, params.password!)
-    } else {
-      res = await authApi.loginBySms(params.phone!, params.smsCode!)
+    const res = await authApi.login({
+      userId: params.userId,
+      password: params.password,
+      smsCode: params.smsCode,
+      loginType: params.loginType,
+    })
+
+    const data: LoginResultsVo = res.data
+
+    // 更新用户信息
+    if (data.isLogined && data.userId) {
+      userInfo.value = {
+        userId: data.userId,
+        realName: data.realName || '',
+        gender: data.gender,
+        schoolName: data.schoolName,
+        avatarURL: data.avatarURL,
+      }
     }
 
-    // 存 token 和用户信息
-    token.value = res.data.token
-    userInfo.value = res.data.userInfo
-    setToken(res.data.token)
+    return data.isLogined
+  }
+
+  /** 初始化 token（App.vue onLaunch 调用） */
+  async function initToken() {
+    try {
+      const { code } = await uni.login()
+      const res = await wxAuthApi.getToken(code)
+      token.value = res.data.token
+      setToken(res.data.token)
+    } catch (e) {
+      console.error('initToken failed:', e)
+    }
   }
 
   /** 退出登录 */
-  function logout() {
-    token.value = ''
+  async function logout() {
+    if (userInfo.value?.userId) {
+      await authApi.logout(userInfo.value.userId)
+    }
     userInfo.value = null
+    loginTypes.value = []
+  }
+
+  /** 完全退出（清除 token） */
+  function logoutAll() {
+    logout()
+    token.value = ''
     removeToken()
     clearStorage()
   }
 
   return {
-    token, userInfo, loginMethod,
-    isLoggedIn, userName,
-    checkLogin, sendSms, login, logout,
+    token, userInfo, loginTypes,
+    hasToken, isSchoolLoggedIn, userName,
+    initToken, checkSchoolSession, sendSms, loginSchool, logout, logoutAll,
   }
 }, {
-  // 持久化配置：把 token 和 userInfo 存到小程序 Storage
   persist: {
     key: 'user-store',
     storage: {

@@ -1,3 +1,4 @@
+<!-- home.vue -->
 <template>
   <view class="home">
     <!-- 用户区域：点击头像触发登录检查 -->
@@ -48,14 +49,14 @@ const userStore = useUserStore()
 async function handleAvatarClick() {
   if (!userStore.isLoggedIn) {
     // 没登录，直接跳登录页
-    uni.navigateTo({ url: '/pages/login/index' })
+    uni.navigateTo({ url: '/pages/common/login/index' })
     return
   }
 
   try {
     const { needLogin, method } = await userStore.checkLogin()
     if (needLogin) {
-      uni.navigateTo({ url: `/pages/login/index?method=${method}` })
+      uni.navigateTo({ url: `/pages/common/login/index?method=${method}` })
     } else {
       uni.showToast({ title: '已登录', icon: 'success' })
     }

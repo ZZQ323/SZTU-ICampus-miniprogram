@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { checkTabAuth } from '@/utils/router'
 import type { NoticeItem, NoticeType } from '@/api/types/notice'
+
+onShow(() => checkTabAuth())
 
 const activeTab = ref<NoticeType>('announcement')
 const loading = ref(false)
 const list = ref<NoticeItem[]>([])
 
-// Mock 数据，实际应调用 API
 const mockData: NoticeItem[] = [
   { id: '1', title: '关于2024年寒假放假安排的通知', type: 'announcement', date: '2024-01-15' },
   { id: '2', title: '图书馆开放时间调整通知', type: 'announcement', date: '2024-01-14' },
@@ -29,7 +32,6 @@ const handleTabChange = (type: NoticeType) => {
 
 const handleItemClick = (item: NoticeItem) => {
   uni.showToast({ title: `查看: ${item.title}`, icon: 'none' })
-  // TODO: 跳转详情页
 }
 
 fetchList()

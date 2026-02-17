@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import piniaPersistedstate from 'pinia-plugin-persistedstate'
 import App from './App.vue'
 import { setupRouterGuard } from './utils/router'
+import 'tdesign-uniapp/common/style/theme/index.css';
 
 export function createApp() {
   const app = createSSRApp(App)

@@ -25,7 +25,7 @@ export interface ApiResult<T = any> {
 
 // ====== 创建 Axios 实例 ======
 const instance = axios.create({
-  baseURL: 'http://192.168.3.35',
+  baseURL: 'http://192.168.3.35:8080',
   timeout: 15000,
   adapter: createUniAppAxiosAdapter(),  // 改这里，要加括号调用
 })
