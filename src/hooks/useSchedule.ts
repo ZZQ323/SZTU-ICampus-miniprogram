@@ -1,158 +1,153 @@
 /**
- * 课表相关 Hook
+ * 课表数据处理 Hook
  * 
- * 文件：src/hooks/useSchedule.ts
- * 
- * 封装课表数据获取和周次切换逻辑
+ * 文件路径: src/hooks/useSchedule.ts
  */
 
-import { ref, computed } from 'vue'
-import { scheduleApi } from '@/api/schedule'
-import { getWeekStart, getWeekDays, formatDate } from '@/utils/date'
-import type { CourseInfo } from '@/api/types/schedule'
+import { ref, reactive, computed } from 'vue'
+import type { CourseInfo, TimeSlot, WeekDay, ColorConfig } from '@/types/schedule'
 
-/**
- * 课表 Hook
- * 
- * 使用示例：
- * ```ts
- * const { 
- *   courses, loading, currentWeek, weekDays,
- *   fetchCourses, changeWeek, getCourse 
- * } = useSchedule()
- * 
- * onMounted(() => fetchCourses())
- * ```
- */
+/** 默认时间段配置 */
+const DEFAULT_TIME_SLOTS: TimeSlot[] = [
+  { row: 0, label: '1-2', time: '08:30-10:05' },
+  { row: 1, label: '3-4', time: '10:25-12:00' },
+  { row: 2, label: '5-6', time: '14:00-15:35' },
+  { row: 3, label: '7-8', time: '15:55-17:30' },
+  { row: 4, label: '9-10', time: '19:00-20:35' }
+]
+
+/** 默认颜色配置 */
+const DEFAULT_COLORS: string[] = [
+  '#FFB6C1', '#87CEEB', '#98FB98', '#DDA0DD',
+  '#F0E68C', '#FFA07A', '#B0E0E6', '#FFDAB9'
+]
+
 export function useSchedule() {
+  // ==================== 状态 ====================
+  
+  const courses = ref<CourseInfo[]>([])
+  const currentWeek = ref(1)
+  const loading = ref(true)
+  
+  const colorConfig = reactive<ColorConfig>({
+    colors: [...DEFAULT_COLORS]
+  })
+  
+  // 课程颜色映射缓存
+  const courseColorMap = new Map<string, string>()
+  
+  // ==================== 计算属性 ====================
+  
+  /** 星期信息（带日期） */
+  const weekDays = computed<WeekDay[]>(() => {
+    const labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+    const today = new Date()
+    const dayOfWeek = today.getDay() || 7
+    
+    return labels.map((label, index) => {
+      const diff = index + 1 - dayOfWeek
+      const date = new Date(today)
+      date.setDate(today.getDate() + diff)
+      
+      return {
+        label,
+        value: index,
+        date: `${date.getMonth() + 1}/${date.getDate()}`
+      }
+    })
+  })
+  
+  /** 时间段配置 */
+  const timeSlots = DEFAULT_TIME_SLOTS
+  
+  // ==================== 方法 ====================
+  
+  /** 更新课表数据 */
+  function updateCourses(data: CourseInfo[] | { courses: CourseInfo[] }) {
+    if (Array.isArray(data)) {
+      courses.value = data
+    } else if (data?.courses) {
+      courses.value = data.courses
+    }
+    loading.value = false
+  }
+  
+  /** 获取指定位置的课程 */
+  function getCourse(row: number, col: number): CourseInfo | undefined {
+    return courses.value.find(c => c.row === row && c.col === col)
+  }
+  
+  /** 获取课程颜色 */
+  function getCourseColor(course: CourseInfo | undefined): string {
+    if (!course) return 'transparent'
+    
+    if (courseColorMap.has(course.courseId)) {
+      return courseColorMap.get(course.courseId)!
+    }
+    
+    // 根据课程ID hash 选择颜色
+    const hash = course.courseId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    const color = colorConfig.colors[hash % colorConfig.colors.length]
+    
+    courseColorMap.set(course.courseId, color)
+    return color
+  }
+  
+  /** 判断是否是今天 */
+  function isToday(dayIndex: number): boolean {
+    const today = new Date().getDay()
+    return dayIndex === (today === 0 ? 6 : today - 1)
+  }
+  
+  /** 显示课程详情 */
+  function showCourseDetail(row: number, col: number) {
+    const course = getCourse(row, col)
+    if (!course) return
+    
+    uni.showModal({
+      title: course.courseName,
+      content: [
+        `时间: ${course.courseTime}`,
+        `地点: ${course.location}`,
+        `教师: ${course.teacher}`,
+        `周次: ${course.courseWeeks}`
+      ].join('\n'),
+      showCancel: false
+    })
+  }
+  
+  /** 设置颜色配置 */
+  function setColors(colors: string[]) {
+    colorConfig.colors = colors
+    courseColorMap.clear() // 清除缓存以应用新颜色
+  }
+  
+  /** 清空课表 */
+  function clearCourses() {
+    courses.value = []
+    courseColorMap.clear()
+  }
+  
+  // ==================== 导出 ====================
+  
+  return {
     // 状态
-    const courses = ref<CourseInfo[]>([])
-    const loading = ref(false)
-    const error = ref('')
-    const currentWeek = ref(1)
-    const currentSemester = ref('')
-    const weekStart = ref(getWeekStart())
-
+    courses,
+    currentWeek,
+    loading,
+    colorConfig,
+    
     // 计算属性
-    const weekDays = computed(() => getWeekDays(weekStart.value))
-    const hasCourses = computed(() => courses.value.length > 0)
-
-    // 节次数组 (0-10，对应第1-11节)
-    const sections = Array.from({ length: 11 }, (_, i) => i)
-
-    /**
-     * 获取课表数据
-     */
-    async function fetchCourses(week?: number, semester?: string) {
-        loading.value = true
-        error.value = ''
-
-        try {
-            const res = await scheduleApi.getCourseTable({
-                week: week ?? currentWeek.value,
-                semester: semester ?? (currentSemester.value || undefined),
-            })
-            courses.value = res.data.courses || []
-        } catch (e: any) {
-            error.value = e?.message || '获取课表失败'
-            console.error('获取课表失败', e)
-        } finally {
-            loading.value = false
-        }
-    }
-
-    /**
-     * 切换周次
-     */
-    function changeWeek(delta: number) {
-        const newWeek = currentWeek.value + delta
-        if (newWeek < 1 || newWeek > 20) return
-
-        currentWeek.value = newWeek
-
-        // 更新周起始日期
-        const d = new Date(weekStart.value)
-        d.setDate(d.getDate() + delta * 7)
-        weekStart.value = d
-
-        // 重新获取课表
-        fetchCourses(newWeek)
-    }
-
-    /**
-     * 跳转到指定周
-     */
-    function goToWeek(week: number) {
-        if (week < 1 || week > 20) return
-
-        const delta = week - currentWeek.value
-        currentWeek.value = week
-
-        const d = new Date(getWeekStart())
-        d.setDate(d.getDate() + delta * 7)
-        weekStart.value = d
-
-        fetchCourses(week)
-    }
-
-    /**
-     * 获取指定位置的课程
-     */
-    function getCourse(col: number, row: number): CourseInfo | undefined {
-        return courses.value.find(c => c.col === col && c.row === row)
-    }
-
-    /**
-     * 获取指定位置是否有课
-     */
-    function hasCourse(col: number, row: number): boolean {
-        return !!getCourse(col, row)
-    }
-
-    /**
-     * 显示课程详情弹窗
-     */
-    function showCourseDetail(course: CourseInfo) {
-        uni.showModal({
-            title: course.courseName,
-            content: [
-                `教师: ${course.teacher || '未知'}`,
-                `地点: ${course.location}`,
-                `时间: ${course.courseTime}`,
-                `周次: ${course.courseWeeks}`,
-            ].join('\n'),
-            showCancel: false,
-        })
-    }
-
-    /**
-     * 刷新课表
-     */
-    function refresh() {
-        return fetchCourses()
-    }
-
-    return {
-        // 状态
-        courses,
-        loading,
-        error,
-        currentWeek,
-        currentSemester,
-        weekStart,
-
-        // 计算属性
-        weekDays,
-        hasCourses,
-        sections,
-
-        // 方法
-        fetchCourses,
-        changeWeek,
-        goToWeek,
-        getCourse,
-        hasCourse,
-        showCourseDetail,
-        refresh,
-    }
+    weekDays,
+    timeSlots,
+    
+    // 方法
+    updateCourses,
+    getCourse,
+    getCourseColor,
+    isToday,
+    showCourseDetail,
+    setColors,
+    clearCourses
+  }
 }

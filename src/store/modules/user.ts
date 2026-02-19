@@ -4,11 +4,11 @@
  * 文件：src/store/modules/user.ts
  */
 
-import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
-import { wxAuthApi, authApi } from '@/api/auth'
-import { getToken, setToken, removeToken, getUserInfo, setUserInfo, removeUserInfo } from '@/utils/storage'
-import type { LoginType, UserInfo, LoginStatusVo } from '@/api/types/auth'
+import { defineStore } from 'pinia';
+import { ref, computed, watch } from 'vue';
+import { wxAuthApi, authApi } from '@/api/auth';
+import { getToken, setToken, removeToken, getUserInfo, setUserInfo, removeUserInfo } from '@/utils/storage';
+import type { LoginType, UserInfo, LoginStatusVo,LoginRequestCommand } from '@/api/types/auth';
 
 export const useUserStore = defineStore('user', () => {
   // ==================== 状态 ====================
@@ -91,8 +91,7 @@ export const useUserStore = defineStore('user', () => {
     const result = res.data
 
     loginTypes.value = result.loginTypes || []
-
-    // 【修复】如果已登录，更新用户信息（会自动持久化）
+    // 如果已登录，更新用户信息（会自动持久化）
     if (result.logined && result.userId) {
       userInfo.value = {
         userId: result.userId,
@@ -102,7 +101,6 @@ export const useUserStore = defineStore('user', () => {
         avatarURL: result.avatarURL,
       }
     }
-
     return result
   }
 
@@ -143,12 +141,7 @@ export const useUserStore = defineStore('user', () => {
   /**
    * 登录学校系统
    */
-  async function loginSchool(params: {
-    loginType: LoginType
-    userId: string
-    password?: string
-    smsCode?: string
-  }) {
+  async function loginSchool(params: LoginRequestCommand) {
     const res = await authApi.login(params)
     const result = res.data
 

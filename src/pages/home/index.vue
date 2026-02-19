@@ -1,4 +1,4 @@
-<!-- home.vue（修复版） -->
+<!-- home.vue（修复版 - 点击头像时先检查状态同步用户信息） -->
 <template>
   <view class="home">
     <!-- 用户区域：点击头像触发登录检查 -->
@@ -11,9 +11,9 @@
           <text class="hint" v-if="userStore.userInfo.realName">{{ userStore.userInfo.realName }}</text>
           <text class="hint" v-if="userStore.userInfo.schoolName">{{ userStore.userInfo.schoolName }}</text>
         </template>
-        <!-- 未登录状态 -->
+        <!-- 未登录/检查中状态 -->
         <template v-else>
-          <text class="name">未登录</text>
+          <text class="name">{{ checking ? '检查中...' : '未登录' }}</text>
           <text class="hint">点击登录</text>
         </template>
       </view>
@@ -28,12 +28,6 @@
         <t-cell title="活动通知" arrow @click="goCalendar" />
       </t-cell-group>
     </view>
-
-    <!-- 调试信息（可删除） -->
-    <view class="debug-section" v-if="false">
-      <text>isSchoolLoggedIn: {{ userStore.isSchoolLoggedIn }}</text>
-      <text>userInfo: {{ JSON.stringify(userStore.userInfo) }}</text>
-    </view>
   </view>
 </template>
 
@@ -41,30 +35,56 @@
 /**
  * 首页（修复版）
  * 
- * 修复：
- * 1. :display 不是有效的 Vue 指令，改用 v-if
- * 2. 简化模板逻辑，使用 template + v-if/v-else
+ * 修复：点击头像时，先调用 checkSchoolSession 检查真实登录状态
+ * 如果已登录，会自动同步用户信息到本地
  */
+import { ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '@/store/modules/user'
 
 const userStore = useUserStore()
+const checking = ref(false)
 
-// 点击头像：检查登录 → 跳转
-async function handleAvatarClick() {
-  if ( !userStore.isSchoolLoggedIn ) {
-    uni.navigateTo({ url: '/pages/common/login/index' })
-    return
+// 页面显示时，如果本地无用户信息但有 token，尝试检查登录状态
+onShow(async () => {
+  if (userStore.hasToken && !userStore.userInfo) {
+    checking.value = true
+    try {
+      await userStore.checkSchoolSession()
+    } catch (e) {
+      console.warn('自动检查登录状态失败', e)
+    } finally {
+      checking.value = false
+    }
   }
+})
+
+// 点击头像：先检查登录状态，再决定跳转
+async function handleAvatarClick() {
+  checking.value = true
 
   try {
+    // 【修复】无论本地是否有 userInfo，都先检查后端状态
+    // checkSchoolSession 会自动同步用户信息到本地
     const status = await userStore.checkSchoolSession()
+
     if (!status.logined) {
+      // 后端确认未登录，跳转登录页
       uni.navigateTo({ url: '/pages/common/login/index' })
     } else {
+      // 已登录，此时 userInfo 应该已经同步了
       uni.showToast({ title: '已登录', icon: 'success' })
     }
   } catch (e) {
-    uni.showToast({ title: '检查失败', icon: 'none' })
+    console.error('检查登录状态失败', e)
+    // 出错时，如果本地有信息就当作已登录，否则跳转登录页
+    if (!userStore.isSchoolLoggedIn) {
+      uni.navigateTo({ url: '/pages/common/login/index' })
+    } else {
+      uni.showToast({ title: '检查失败', icon: 'none' })
+    }
+  } finally {
+    checking.value = false
   }
 }
 
@@ -135,17 +155,5 @@ function goCalendar() {
   font-weight: bold;
   margin-bottom: 20rpx;
   display: block;
-}
-
-.debug-section {
-  background: #fff3cd;
-  padding: 20rpx;
-  border-radius: 8rpx;
-  font-size: 24rpx;
-
-  text {
-    display: block;
-    margin-bottom: 8rpx;
-  }
 }
 </style>

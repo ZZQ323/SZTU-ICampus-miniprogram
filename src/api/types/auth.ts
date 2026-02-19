@@ -1,51 +1,56 @@
 /**
- * 前端类型定义（对应后端 VO）- 重构版
+ * 认证相关类型定义（修复版）
  * 
  * 文件：src/api/types/auth.ts
  */
 
-/** 登录方式枚举 */
+/** 登录方式 */
 export type LoginType = 'SMS' | 'PASSWORD'
 
-/** 登录请求参数 */
-export interface LoginRequestCommand {
+/** 用户信息 */
+export interface UserInfo {
   userId: string
-  password?: string
-  smsCode?: string
-  loginType: LoginType
-}
-
-/** Token 认证响应 */
-export interface TokenAuthVo {
-  token: string
-  expiresIn: number
+  realName: string
+  gender?: string
+  schoolName?: string
+  avatarURL?: string
 }
 
 /** 
- * 登录状态查询响应（轻量级，可缓存）
+ * 登录状态 VO（修复版 - 包含用户信息）
  * 
- * 对应后端 LoginStatusVo
- * 用于 GET /auth/v1/status 接口
+ * GET /auth/v1/status 返回
  */
 export interface LoginStatusVo {
-  /** 是否已登录学校后端 */
+  /** 是否已登录 */
   logined: boolean
-  /** 可用的登录方式（仅未登录时有意义） */
+  /** 可用登录方式 */
   loginTypes?: LoginType[]
-  /** 状态获取时间戳 */
+  /** 状态检查时间 */
   statusTime?: number
-  /** Cookie 是否即将过期（前端可据此提前刷新） */
+  /** Cookie 是否即将过期 */
   cookieExpiringSoon?: boolean
+
+  // ========== 用户信息（已登录时返回）==========
+
+  /** 学号 */
+  userId?: string
+  /** 真实姓名 */
+  realName?: string
+  /** 性别 */
+  gender?: string
+  /** 学校名称 */
+  schoolName?: string
+  /** 头像 URL */
+  avatarURL?: string
 }
 
 /** 
- * 登录结果/完整会话信息
+ * 登录结果 VO
  * 
- * 对应后端 LoginResultsVo
- * 用于 POST /auth/v1/session/init、/session/refresh、/login 等接口
+ * POST /auth/v1/login 返回
  */
 export interface LoginResultsVo {
-  /** 是否已登录（注意：后端字段名是 logined，不是 isLogined） */
   logined: boolean
   wxId?: string
   userId?: string
@@ -53,15 +58,17 @@ export interface LoginResultsVo {
   gender?: string
   schoolName?: string
   avatarURL?: string
-  coments?: string
   loginTypes?: LoginType[]
 }
 
-/** 用户信息（前端使用） */
-export interface UserInfo {
-  userId: string
-  realName: string
-  gender?: string
-  schoolName?: string
-  avatarURL?: string
+/** Token 响应 */
+export interface TokenVo {
+  token: string
+}
+
+export interface LoginRequestCommand{
+  userId:string
+  password:string
+  smsCode:string
+  loginType:LoginType
 }

@@ -14,7 +14,7 @@ import type {
   LoginStatusVo, 
   LoginResultsVo, 
   LoginRequestCommand, 
-  TokenAuthVo 
+  TokenVo 
 } from './types/auth'
 
 // ==================== Token 管理（/wx-auth） ====================
@@ -29,13 +29,13 @@ export const wxAuthApi = {
    * 用 wx.login 的 code 换取 JWT
    */
   getToken: (wxCode: string) => 
-    request.post<TokenAuthVo>('/wx-auth/v1/get-token', { wxCode }),
+    request.post<TokenVo>('/wx-auth/v1/get-token', { wxCode }),
 
   /**
    * 刷新过期 token
    */
   refreshToken: (wxCode: string) => 
-    request.post<TokenAuthVo>('/wx-auth/v1/refresh-token', { wxCode }),
+    request.post<TokenVo>('/wx-auth/v1/refresh-token', { wxCode }),
 }
 
 // ==================== 认证管理（/auth） ====================

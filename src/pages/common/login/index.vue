@@ -94,27 +94,27 @@ async function handleSendSms() {
 
 // 登录
 async function handleLogin() {
-  if (!canLogin.value) return
+  if (!canLogin.value) return;
 
-  loading.value = true
+  loading.value = true;
   try {
     const success = await userStore.loginSchool({
       loginType: activeTab.value,
       userId: userId.value,
       password: activeTab.value === 'PASSWORD' ? password.value : undefined,
       smsCode: activeTab.value === 'SMS' ? smsCode.value : undefined,
-    })
-
+    });
+    
     if (success) {
-      uni.showToast({ title: '登录成功', icon: 'success' })
-      setTimeout(() => navigateBack(), 500)
+      uni.showToast({ title: '登录成功', icon: 'success' });
+      setTimeout(() => navigateBack(), 500);
     } else {
-      uni.showToast({ title: '登录失败', icon: 'error' })
+      uni.showToast({ title: '登录失败', icon: 'error' });
     }
   } catch (e: any) {
-    uni.showToast({ title: e?.message || '登录失败', icon: 'error' })
+    uni.showToast({ title: e?.message || '登录失败', icon: 'error' });
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
