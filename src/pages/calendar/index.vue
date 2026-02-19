@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { formatDate } from '@/utils/date'
-import type { ActivityItem } from '@/api/types/calendar'
+import type { ActivityItem } from '@/types/calendar'
 
 const selectedDate = ref(formatDate(new Date()))
 

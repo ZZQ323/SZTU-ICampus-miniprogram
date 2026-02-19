@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { checkTabAuth } from '@/utils/router'
-import type { NoticeItem, NoticeType } from '@/api/types/notice'
+import type { NoticeItem, NoticeType } from '@/types/notice'
 
 onShow(() => checkTabAuth())
 

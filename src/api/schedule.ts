@@ -5,7 +5,7 @@
  */
 
 import request from '@/utils/http'
-import type { CourseTableVO } from './types/schedule'
+import type { CourseTableData } from '@/types/schedule'
 
 export interface CrouseTableQuery {
     week?: number
@@ -17,7 +17,7 @@ export const scheduleApi = {
      * 获取课表
      */
     getCourseTable: (query?: CrouseTableQuery) =>
-        request.get<CourseTableVO>('/academic/v1/schedule', { params: query }),
+        request.get<CourseTableData>('/academic/v1/schedule', { params: query }),
 
     /**
      * 初始化教务系统 Cookie（懒初始化）

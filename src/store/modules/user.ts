@@ -8,7 +8,7 @@ import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import { wxAuthApi, authApi } from '@/api/auth';
 import { getToken, setToken, removeToken, getUserInfo, setUserInfo, removeUserInfo } from '@/utils/storage';
-import type { LoginType, UserInfo, LoginStatusVo,LoginRequestCommand } from '@/api/types/auth';
+import type { LoginType, UserInfo, LoginStatusVo,LoginRequestCommand } from '@/types/auth';
 
 export const useUserStore = defineStore('user', () => {
   // ==================== 状态 ====================

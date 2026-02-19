@@ -9,7 +9,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useUserStore } from '@/store/modules/user'
 import { useCountdown } from '@/hooks/useCountdown'
 import { navigateBack } from '@/utils/router'
-import type { LoginType } from '@/api/types/auth'
+import type { LoginType } from '@/types/auth'
 
 const userStore = useUserStore()
 

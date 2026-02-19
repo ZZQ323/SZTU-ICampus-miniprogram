@@ -15,7 +15,7 @@ import type {
   LoginResultsVo, 
   LoginRequestCommand, 
   TokenVo 
-} from './types/auth'
+} from '../types/auth'
 
 // ==================== Token 管理（/wx-auth） ====================
 

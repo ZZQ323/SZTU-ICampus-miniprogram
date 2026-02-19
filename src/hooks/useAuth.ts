@@ -8,7 +8,7 @@
 
 import { ref, computed } from 'vue'
 import { useUserStore } from '@/store/modules/user'
-import type { LoginStatusVo, LoginType } from '@/api/types/auth'
+import type { LoginStatusVo, LoginType } from '@/types/auth'
 
 /** 认证状态枚举 */
 export type AuthState =

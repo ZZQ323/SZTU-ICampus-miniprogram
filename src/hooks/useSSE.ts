@@ -17,7 +17,8 @@ interface UseSSEOptions {
   onError?: ErrorHandler
 }
 
-export function useSSE(topic: string, options: UseSSEOptions = {}) {
+export function useSSE(topic: string, options: UseSSEOptions = {}) 
+{
   const { autoConnect = true, onMessage, onError } = options
   
   // ==================== 状态 ====================
@@ -30,7 +31,8 @@ export function useSSE(topic: string, options: UseSSEOptions = {}) {
   // ==================== 方法 ====================
   
   /** 连接 SSE */
-  function connect(messageHandler?: MessageHandler, errorHandler?: ErrorHandler) {
+  function connect(messageHandler?: MessageHandler, errorHandler?: ErrorHandler) 
+  {
     const msgHandler = messageHandler || onMessage || (() => {})
     const errHandler = errorHandler || onError || defaultErrorHandler
     
@@ -75,7 +77,7 @@ export function useSSE(topic: string, options: UseSSEOptions = {}) {
   /** 关闭认证弹窗并跳转登录 */
   function goToLogin() {
     showAuthDialog.value = false
-    uni.navigateTo({ url: '/pages/login/index' })
+    uni.navigateTo({ url: '/pages/common/login/index' })
   }
   
   /** 关闭认证弹窗 */
