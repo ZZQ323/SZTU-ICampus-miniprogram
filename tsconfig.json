@@ -12,7 +12,6 @@
     "skipLibCheck": true,
 
     // ========== 路径别名（让 @/ 指向 src/）==========
-    "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
     },
@@ -31,7 +30,10 @@
     "allowJs": true,                // 允许项目中混用 .js 文件（方便渐进迁移）
 
     // ========== 类型声明 ==========
-    "types": ["@dcloudio/types"]
+    "types": [
+      "@dcloudio/types",
+      "vite/client"
+    ]
   },
 
   // ========== 哪些文件参与 TS 编译 ==========

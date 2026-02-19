@@ -1,41 +1,71 @@
 /**
- * 本地缓存工具
- * 封装 uni.getStorageSync / uni.setStorageSync
- * 相当于后端的 RedisTemplate
+ * 本地存储工具函数
+ * 
+ * 文件：src/utils/storage.ts
  */
 
-const TOKEN_KEY = 'access_token'
+const TOKEN_KEY = 'icampus_token'
+const USER_INFO_KEY = 'icampus_user_info'
+const HISTORY_IDS_KEY = 'icampus_history_ids'
 
-// ===== Token 专用 =====
+// ==================== Token ====================
 
 export function getToken(): string {
   return uni.getStorageSync(TOKEN_KEY) || ''
 }
 
-export function setToken(token: string) {
+export function setToken(token: string): void {
   uni.setStorageSync(TOKEN_KEY, token)
 }
 
-export function removeToken() {
+export function removeToken(): void {
   uni.removeStorageSync(TOKEN_KEY)
 }
 
-// ===== 通用存取 =====
+export function hasToken(): boolean {
+  return !!getToken()
+}
 
-export function getStorage<T = any>(key: string): T | null {
-  try {
-    const val = uni.getStorageSync(key)
-    if (!val) return null
-    return typeof val === 'string' ? JSON.parse(val) : val
-  } catch {
-    return null
+// ==================== User Info ====================
+
+export function getUserInfo<T = any>(): T | null {
+  const data = uni.getStorageSync(USER_INFO_KEY)
+  return data ? JSON.parse(data) : null
+}
+
+export function setUserInfo(info: any): void {
+  uni.setStorageSync(USER_INFO_KEY, JSON.stringify(info))
+}
+
+export function removeUserInfo(): void {
+  uni.removeStorageSync(USER_INFO_KEY)
+}
+
+// ==================== History User IDs ====================
+
+export function getHistoryIds(): string[] {
+  const data = uni.getStorageSync(HISTORY_IDS_KEY)
+  return data ? JSON.parse(data) : []
+}
+
+export function setHistoryIds(ids: string[]): void {
+  uni.setStorageSync(HISTORY_IDS_KEY, JSON.stringify(ids))
+}
+
+export function addHistoryId(id: string): void {
+  const ids = getHistoryIds()
+  if (!ids.includes(id)) {
+    ids.unshift(id) // 新的放前面
+    // 最多保存 5 个
+    if (ids.length > 5) ids.pop()
+    setHistoryIds(ids)
   }
 }
 
-export function setStorage(key: string, value: any) {
-  uni.setStorageSync(key, typeof value === 'string' ? value : JSON.stringify(value))
-}
+// ==================== 清理 ====================
 
-export function clearStorage() {
-  uni.clearStorageSync()
+export function clearAll(): void {
+  removeToken()
+  removeUserInfo()
+  // 保留历史学号
 }

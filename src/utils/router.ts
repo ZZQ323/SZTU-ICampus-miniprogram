@@ -1,81 +1,179 @@
 /**
- * 路由守卫
- *
- * uniapp 没有 vue-router 的 beforeEach，但可以用 uni.addInterceptor 拦截跳转
- *
- * 工作原理：
- * 每次调用 uni.navigateTo / uni.redirectTo / uni.reLaunch 时，
- * 都会先经过这里的 invoke 函数，在里面判断有没有 token
+ * 路由守卫工具
+ * 
+ * 文件：src/utils/router.ts
  */
-import { getToken } from './storage'
-import { get, post } from '@/utils/http'
-import type {UserInfo} from "@/api/types/auth"
-const LOGIN_PAGE = '/pages/common/login/index'
 
-// TODO 需要登录的页面列表（你可以在这里加）
-const NEED_LOGIN: string[] = [
+import { useUserStore } from '@/store/modules/user'
+
+/** 需要登录学校的页面 */
+const AUTH_PAGES = [
   '/pages/schedule/index',
-  // '/pages/profile/index',
-  // '/pages/subscription/index',
+  '/pages/profile/index',
 ]
 
-// TODO 不拦截的页面（白名单）
-const WHITE_LIST: string[] = [
+/** 公开页面（无需任何认证） */
+const PUBLIC_PAGES = [
   '/pages/home/index',
+  '/pages/notice/index',
+  '/pages/calendar/index',
   '/pages/common/login/index',
+  '/pages/common/loading/index',
 ]
 
+/**
+ * 设置路由守卫
+ * 
+ * 在 main.ts 中调用，拦截页面跳转
+ * 
+ * 注意：uni-app 的路由拦截能力有限，主要靠页面内 onShow 检查
+ * 这里只做简单的拦截，复杂逻辑在页面内用 useAuth hook 处理
+ */
 export function setupRouterGuard() {
-  // 拦截三种跳转方式
-  const methods = ['navigateTo', 'redirectTo', 'reLaunch'] as const
+  // 拦截 uni.navigateTo
+  const originalNavigateTo = uni.navigateTo
+  uni.navigateTo = function (options: UniApp.NavigateToOptions) {
+    const url = options.url || ''
+    const path = url.split('?')[0]
+    
+    // 需要认证的页面，检查 token
+    if (AUTH_PAGES.some(p => path.startsWith(p))) {
+      const userStore = useUserStore()
+      if (!userStore.hasToken) {
+        // 无 token，跳转到 loading 页初始化
+        return originalNavigateTo({
+          url: encodeURIComponent("/pages/common/loading/index?redirect="+url+`&type=navigateTo`)
+        })
+      }
+    }
+    
+    return originalNavigateTo(options)
+  } as typeof uni.navigateTo
 
-  methods.forEach((method) => {
-    uni.addInterceptor(method, {
-      invoke(args: { url: string }) {
-        const path = args.url.split('?')[0]
+  // 拦截 uni.switchTab
+  const originalSwitchTab = uni.switchTab
+  uni.switchTab = function (options: UniApp.SwitchTabOptions) {
+    const url = options.url || ''
+    const path = url.split('?')[0]
+    
+    // 需要认证的 Tab 页面，检查 token
+    if (AUTH_PAGES.some(p => path.startsWith(p))) {
+      const userStore = useUserStore()
+      if (!userStore.hasToken) {
+        // 无 token，跳转到 loading 页初始化
+        return originalNavigateTo({
+          url: encodeURIComponent(`/pages/common/loading/index?redirect=`+url+`&type=switchTab`)
+        })
+      }
+    }
+    
+    return originalSwitchTab(options)
+  } as typeof uni.switchTab
 
-        // 白名单直接放行
-        if (WHITE_LIST.includes(path)) return true
+  // 拦截 uni.reLaunch
+  const originalReLaunch = uni.reLaunch
+  uni.reLaunch = function (options: UniApp.ReLaunchOptions) {
+    const url = options.url || ''
+    const path = url.split('?')[0]
+    
+    if (AUTH_PAGES.some(p => path.startsWith(p))) {
+      const userStore = useUserStore()
+      if (!userStore.hasToken) {
+        return originalNavigateTo({
+          url: encodeURIComponent(`/pages/common/loading/index?redirect=`+url+`&type=reLaunch`)
+        })
+      }
+    }
+    
+    return originalReLaunch(options)
+  } as typeof uni.reLaunch
 
-        // 需要登录的页面，检查 token
-        if (NEED_LOGIN.includes(path) && !getToken()) {
-          // TODO 改成 error 页面显示
-          uni.showToast({ title: '请先登录', icon: 'none' })
-          setTimeout(() => {
-            uni.navigateTo({
-              url: `${LOGIN_PAGE}?redirect=${encodeURIComponent(args.url)}`,
-            })
-          }, 300)
-          return false  // 阻止原始跳转
-        }
-        // TODO: 然后检查登录状态！
-        get<UserInfo>('/user/info')
-          .then((value)=>{
-            value
-            return true;
-          });
-      },
-    })
-  })
+  console.log('[Router] 路由守卫已初始化')
 }
 
 /**
- * TabBar 页面的权限检查
- *
- * ⚠️ 重要：switchTab 不能被 addInterceptor 拦截
- * 所以在需要登录的 TabBar 页面的 onShow 中调用这个函数
- *
- * 使用方式：
- *   import { checkTabAuth } from '@/utils/router'
- *   onShow(() => { checkTabAuth() })
+ * 检查 Tab 页面的认证
+ * 
+ * 在 onShow 中调用，用于 TabBar 页面
  */
-export function checkTabAuth(): boolean {
-  if (!getToken()) {
-    uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => {
-      uni.navigateTo({ url: LOGIN_PAGE })
-    }, 300)
-    return false
+export async function checkTabAuth() {
+  const pages = getCurrentPages()
+  const currentPage = pages[pages.length - 1]
+  const path = '/' + currentPage.route
+
+  // 公开页面直接放行
+  if (PUBLIC_PAGES.some(p => path.startsWith(p))) {
+    return true
   }
+
+  // 需要认证的页面
+  if (AUTH_PAGES.some(p => path.startsWith(p))) {
+    const userStore = useUserStore()
+    
+    // 检查 token
+    if (!userStore.hasToken) {
+      await initTokenOrRedirect()
+      return false
+    }
+
+    // 检查学校登录状态
+    try {
+      const status = await userStore.checkSchoolSession()
+      if (!status.logined) {
+        uni.navigateTo({ url: '/pages/common/login/index' })
+        return false
+      }
+    } catch (e) {
+      console.error('检查登录状态失败', e)
+      uni.navigateTo({ url: '/pages/common/login/index' })
+      return false
+    }
+  }
+
   return true
+}
+
+/**
+ * 初始化 token 或跳转
+ */
+async function initTokenOrRedirect() {
+  const userStore = useUserStore()
+  
+  try {
+    await userStore.initToken()
+    // token 获取成功，继续检查学校登录
+    const status = await userStore.checkSchoolSession()
+    if (!status.logined) {
+      uni.navigateTo({ url: '/pages/common/login/index' })
+    }
+  } catch (e) {
+    console.error('初始化 token 失败', e)
+    uni.showToast({ title: '初始化失败', icon: 'error' })
+  }
+}
+
+/**
+ * 跳转到登录页
+ */
+export function navigateToLogin() {
+  uni.navigateTo({ url: '/pages/common/login/index' })
+}
+
+/**
+ * 跳转到首页
+ */
+export function navigateToHome() {
+  uni.switchTab({ url: '/pages/home/index' })
+}
+
+/**
+ * 返回上一页，如果没有上一页则跳转首页
+ */
+export function navigateBack() {
+  const pages = getCurrentPages()
+  if (pages.length > 1) {
+    uni.navigateBack()
+  } else {
+    navigateToHome()
+  }
 }

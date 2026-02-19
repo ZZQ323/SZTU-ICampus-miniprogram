@@ -1,116 +1,137 @@
 /**
- * HTTP 请求封装
- *
- * 核心功能：
- * 1. 每个请求自动附加 Token（请求拦截器）
- * 2. 统一处理 401 过期（响应拦截器）
- * 3. 自动显示/隐藏加载动画
- *
- * 使用方式（在 api/ 文件夹中调用）：
- *   import { get, post } from '@/utils/http'
- *   const res = await get<UserInfo>('/user/info')
+ * Axios HTTP 封装（支持接口级超时）
+ * 
+ * 文件：src/utils/http/index.ts
  */
-import axios from 'axios'
-import type { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
+
+import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { createUniAppAxiosAdapter } from '@uni-helper/axios-adapter'
-import { getToken, setToken, removeToken } from '../storage'
+import { getToken, removeToken } from '@/utils/storage'
 
-// ====== 你的胶水层后端返回的统一格式 ======
-// 根据你实际的后端接口调整这个 interface
-export interface ApiResult<T = any> {
-  code: number       // 200 成功，401 token过期，其他是业务错误
-  message: string
-  data: T
-}
+// ==================== 超时配置 ====================
 
-// ====== 创建 Axios 实例 ======
-const instance = axios.create({
+/** 默认超时（毫秒）—— 普通接口 */
+const DEFAULT_TIMEOUT = 15 * 1000
+
+/** 慢接口超时（毫秒）—— 比后端 90s 多 10s 缓冲 */
+const SLOW_TIMEOUT = 100 * 1000
+
+/** 需要长超时的接口列表 */
+const SLOW_APIS = [
+  '/auth/v1/session/init',
+  '/auth/v1/cookie/refresh',  // 兼容旧接口
+]
+
+// ==================== 创建实例 ====================
+
+const instance: AxiosInstance = axios.create({
   baseURL: 'http://192.168.3.35:8080',
-  timeout: 15000,
-  adapter: createUniAppAxiosAdapter(),  // 改这里，要加括号调用
+  timeout: DEFAULT_TIMEOUT,
+  adapter: createUniAppAxiosAdapter(),
 })
 
-// ====== 请求拦截器：发请求之前执行 ======
+// ==================== 请求拦截器 ====================
+
 instance.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    // 自动附加 Token
+  (config) => {
+    // 1. 为慢接口设置长超时
+    const url = config.url || ''
+    if (SLOW_APIS.some(api => url.includes(api))) {
+      config.timeout = SLOW_TIMEOUT
+      console.log(`[HTTP] 慢接口，超时设置为 ${SLOW_TIMEOUT / 1000}s: ${url}`)
+    }
+
+    // 2. 添加 Token
     const token = getToken()
     if (token && config.headers) {
-      config.headers['Authorization'] = `Bearer ${token}`;
+      config.headers['Authorization'] = `Bearer ${token}`
     }
-    // 显示加载动画
-    uni.showLoading({ title: '加载中...', mask: true });
+
     return config
   },
   (error) => {
-    uni.hideLoading()
     return Promise.reject(error)
   }
 )
 
-// ====== 响应拦截器：收到响应后执行 ======
+// ==================== 响应拦截器 ====================
+
 instance.interceptors.response.use(
-  (response: AxiosResponse<ApiResult>) => {
-    uni.hideLoading()
-    const res = response.data
-
-    // 正常返回
-    if (res.code === 200) {
-      return res as any
+  (response: AxiosResponse) => {
+    const { data } = response
+    
+    // 业务状态码检查
+    if (data.code && data.code !== 200) {
+      // 504 网关超时，给出明确提示
+      if (data.code === 504) {
+        return Promise.reject({
+          code: 504,
+          message: data.message || '学校服务器响应超时，请稍后重试',
+          retryable: true,
+        })
+      }
+      
+      return Promise.reject({
+        code: data.code,
+        message: data.message || '请求失败',
+      })
     }
-
-    // Token 过期
-    if (res.code === 401) {
-      handleExpired()
-      return Promise.reject(new Error('登录已过期'))
-    }
-
-    // 其他业务错误，弹提示
-    uni.showToast({ title: res.message || '请求失败', icon: 'none' })
-    return Promise.reject(new Error(res.message))
+    
+    return data
   },
   (error) => {
-    uni.hideLoading()
-    // 网络层错误（断网、超时等）
-    const status = error?.response?.status
-    if (status === 401) {
-      handleExpired()
-    } else {
-      uni.showToast({ title: '网络异常，请稍后重试', icon: 'none' })
+    // 网络错误或超时
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      return Promise.reject({
+        code: 504,
+        message: '请求超时，请检查网络后重试',
+        retryable: true,
+      })
     }
-    return Promise.reject(error)
+
+    // HTTP 状态码错误
+    const status = error.response?.status
+    const data = error.response?.data
+
+    if (status === 401) {
+      // Token 过期，清除本地存储
+      removeToken()
+      return Promise.reject({
+        code: 401,
+        message: '登录已过期，请重新登录',
+      })
+    }
+
+    if (status === 504) {
+      return Promise.reject({
+        code: 504,
+        message: data?.message || '学校服务器响应超时，请稍后重试',
+        retryable: true,
+      })
+    }
+
+    return Promise.reject({
+      code: status || 500,
+      message: data?.message || error.message || '网络错误',
+    })
   }
 )
 
-// ====== Token 过期处理 ======
-function handleExpired() {
-  removeToken()
-  uni.showToast({ title: '登录已过期，请重新登录', icon: 'none' })
-  setTimeout(() => {
-    uni.reLaunch({ url: '/pages/login/index' })
-  }, 1500)
-}
-
-// ====== 对外暴露的快捷方法 ======
-// 在 api/ 中这样用：
-//   import { get, post } from '@/utils/http'
-//   const res = await get<UserInfo>('/user/info')
-//   console.log(res.data)  // 有类型提示！
-
-export function get<T = any>(api: string, params?: any) {
-  return instance.get<any, ApiResult<T>>(api, { params })
-}
-
-export function post<T = any>(api: string, data?: any) {
-  return instance.post<any, ApiResult<T>>(api, data)
-}
-
-export function put<T = any>(api: string, data?: any) {
-  return instance.put<any, ApiResult<T>>(api, data)
-}
-
-export function del<T = any>(api: string, params?: any) {
-  return instance.delete<any, ApiResult<T>>(api, { params })
-}
+// ==================== 导出 ====================
 
 export default instance
+
+/** 请求方法快捷方式 */
+export const request = {
+  get: <T = any>(url: string, config?: AxiosRequestConfig) => 
+    instance.get<any, T>(url, config),
+  
+  post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) => 
+    instance.post<any, T>(url, data, config),
+  
+  put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) => 
+    instance.put<any, T>(url, data, config),
+  
+  delete: <T = any>(url: string, config?: AxiosRequestConfig) => 
+    instance.delete<any, T>(url, config),
+}
