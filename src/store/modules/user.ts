@@ -74,7 +74,11 @@ export const useUserStore = defineStore('user', () => {
 
     loginTypes.value = status.loginTypes || []
     cookieExpiringSoon.value = status.cookieExpiringSoon || false
-
+    if(res.status==401){
+      if( await refreshTokenIfNeeded() === false){
+        await initSession();
+      }
+    }
     // 【修复】如果后端返回已登录但本地没有 userInfo，标记需要刷新
     // 这种情况说明用户信息丢失了，但实际上是登录状态
     if (status.logined && !userInfo.value) {

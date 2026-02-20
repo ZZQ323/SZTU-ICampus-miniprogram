@@ -6,6 +6,7 @@ onLaunch(async () => {
   console.log('App Launch')
   tokenCheck();
 })
+
 onShow(() => {
   console.log('App Show')
 })
@@ -15,15 +16,15 @@ function tokenCheck()
 {
   const userStore = useUserStore()
   
-  // 1. 检查本地是否已有 token
+  // 检查本地是否已有 token
   if (userStore.hasToken) {
     console.log('本地已有 token，跳过初始化')
     // 可选：异步验证 token 有效性（不阻塞启动）
-    // userStore.checkSchoolSession().catch(() => {})
+    userStore.checkSchoolSession().catch(() => {})
     return
   }
   
-  // 2. 没有 token，需要初始化
+  // 没有 token，需要初始化
   console.log('本地无 token，开始初始化')
   try {
     userStore.initToken();
