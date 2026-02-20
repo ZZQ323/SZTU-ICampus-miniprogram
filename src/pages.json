@@ -6,31 +6,31 @@
   },
   "pages": [
     {
-      "path": "pages/home/index",
+      "path": "pages/home/home",
       "style": {
         "navigationBarTitleText": "首页"
       }
     },
     {
-      "path": "pages/common/login/index",
+      "path": "pages/common/login/login",
       "style": {
         "navigationBarTitleText": "登录"
       }
     },
     {
-      "path": "pages/notice/index",
+      "path": "pages/notice/notice",
       "style": {
         "navigationBarTitleText": "公告通知"
       }
     },
     {
-      "path": "pages/schedule/index",
+      "path": "pages/schedule/schedule",
       "style": {
         "navigationBarTitleText": "课表查询"
       }
     },
     {
-      "path": "pages/calendar/index",
+      "path": "pages/calendar/calendar",
       "style": {
         "navigationBarTitleText": "活动日历"
       }
@@ -41,19 +41,19 @@
     "selectedColor": "#0052d9",
     "list": [
       {
-        "pagePath": "pages/home/index",
+        "pagePath": "pages/home/home",
         "text": "首页",
         "iconPath": "static/tab/normal/home.png",
         "selectedIconPath": "static/tab/active/home.png"
       },
       {
-        "pagePath": "pages/schedule/index",
+        "pagePath": "pages/schedule/schedule",
         "text": "课表",
         "iconPath": "static/tab/normal/calendar.png",
         "selectedIconPath": "static/tab/active/calendar.png"
       },
       {
-        "pagePath": "pages/notice/index",
+        "pagePath": "pages/notice/notice",
         "text": "公告",
         "iconPath": "static/tab/normal/notice.png",
         "selectedIconPath": "static/tab/active/notice.png"
