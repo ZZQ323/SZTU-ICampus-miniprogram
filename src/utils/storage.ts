@@ -29,12 +29,21 @@ export function hasToken(): boolean {
 // ==================== User Info ====================
 
 export function getUserInfo<T = any>(): T | null {
-  const data = uni.getStorageSync(USER_INFO_KEY)
-  return data ? JSON.parse(data) : null
+  try {
+    const data = uni.getStorageSync(USER_INFO_KEY)
+    return data ? JSON.parse(data) : null
+  } catch (e) {
+    console.warn('[Storage] 解析用户信息失败', e)
+    return null
+  }
 }
 
 export function setUserInfo(info: any): void {
-  uni.setStorageSync(USER_INFO_KEY, JSON.stringify(info))
+  try {
+    uni.setStorageSync(USER_INFO_KEY, JSON.stringify(info))
+  } catch (e) {
+    console.warn('[Storage] 保存用户信息失败', e)
+  }
 }
 
 export function removeUserInfo(): void {
@@ -44,12 +53,20 @@ export function removeUserInfo(): void {
 // ==================== History User IDs ====================
 
 export function getHistoryIds(): string[] {
-  const data = uni.getStorageSync(HISTORY_IDS_KEY)
-  return data ? JSON.parse(data) : []
+  try {
+    const data = uni.getStorageSync(HISTORY_IDS_KEY)
+    return data ? JSON.parse(data) : []
+  } catch (e) {
+    return []
+  }
 }
 
 export function setHistoryIds(ids: string[]): void {
-  uni.setStorageSync(HISTORY_IDS_KEY, JSON.stringify(ids))
+  try {
+    uni.setStorageSync(HISTORY_IDS_KEY, JSON.stringify(ids))
+  } catch (e) {
+    console.warn('[Storage] 保存历史学号失败', e)
+  }
 }
 
 export function addHistoryId(id: string): void {
@@ -68,4 +85,13 @@ export function clearAll(): void {
   removeToken()
   removeUserInfo()
   // 保留历史学号
+}
+
+/**
+ * 清理所有数据（包括历史学号）
+ */
+export function clearEverything(): void {
+  removeToken()
+  removeUserInfo()
+  uni.removeStorageSync(HISTORY_IDS_KEY)
 }

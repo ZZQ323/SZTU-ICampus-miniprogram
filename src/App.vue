@@ -1,68 +1,119 @@
+<!--
+  App.vue（重构版）
+  
+  全局挂载：
+  - AuthMask：认证检查遮罩
+  - ErrorOverlay：错误弹窗
+-->
+
+<template>
+  <!-- 全局认证遮罩 -->
+  <AuthMask />
+
+  <!-- 全局错误弹窗 -->
+  <ErrorOverlay />
+</template>
+
 <script setup lang="ts">
+/**
+ * 应用入口
+ */
 import { onLaunch, onShow, onHide } from '@dcloudio/uni-app'
-import { useUserStore } from '@/store/modules/user' 
+import AuthMask from '@/components/AuthMask.vue'
+import ErrorOverlay from '@/components/ErrorOverlay.vue'
+import { useUserStore } from '@/store/modules/user'
+import { useAuthStore } from '@/store/modules/auth'
+
+const userStore = useUserStore()
+const authStore = useAuthStore()
+
+// ==================== 生命周期 ====================
 
 onLaunch(async () => {
-  console.log('App Launch')
-  tokenCheck();
+  console.log('[App] 应用启动')
+
+  // 初始化 Token（如果本地没有）
+  if (!userStore.hasToken) {
+    try {
+      authStore.setPhase('checking-token', '正在初始化...')
+      await userStore.initToken()
+      authStore.setPhase('idle')
+      console.log('[App] Token 初始化成功')
+    } catch (e) {
+      console.error('[App] Token 初始化失败', e)
+      authStore.setPhase('idle')
+      // 不阻塞启动，后续页面会处理
+    }
+  }
 })
 
 onShow(() => {
-  console.log('App Show')
+  console.log('[App] 应用进入前台')
 })
-onHide(() => {console.log('App Hide')})
 
-function tokenCheck()
-{
-  const userStore = useUserStore()
-  
-  // 检查本地是否已有 token
-  if (userStore.hasToken) {
-    console.log('本地已有 token，跳过初始化')
-    // 可选：异步验证 token 有效性（不阻塞启动）
-    userStore.checkSchoolSession().catch(() => {})
-    return
-  }
-  
-  // 没有 token，需要初始化
-  console.log('本地无 token，开始初始化')
-  try {
-    userStore.initToken();
-  } catch (e) {
-    console.error('Token 初始化失败', e)
-  }
-}
-
-//  定期刷新会话（可选）
-// 每 30 分钟检查一次 Cookie 状态
-setInterval(async () => {
-  const userStore = useUserStore()
-  if (userStore.isSchoolLoggedIn) {
-    try {
-      const status = await userStore.checkSchoolSession()
-      if (status.cookieExpiringSoon) {
-        await userStore.refreshSession()
-        console.log('Cookie 已自动刷新')
-      }
-    } catch (e) {
-      console.error('自动刷新失败', e)
-      tokenCheck();
-    }
-  }
-}, 30 * 60 * 1000);
-
-
+onHide(() => {
+  console.log('[App] 应用进入后台')
+})
 </script>
 
-<style>
-/* 引入 TDesign 的主题样式 —— 这一行是 TDesign 生效的关键 */
-@import 'tdesign-uniapp/common/style/theme/index.css';
-
+<style lang="scss">
 /* 全局样式 */
+
+/* 重置样式 */
 page {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #f5f5f5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 28rpx;
   color: #333;
-  background-color: #f8f8f8;
+  line-height: 1.5;
+}
+
+/* 安全区域适配 */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 通用工具类 */
+.flex {
+  display: flex;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.flex-column {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 文本省略 */
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ellipsis-2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* 隐藏滚动条 */
+::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 </style>

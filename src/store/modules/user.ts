@@ -1,33 +1,63 @@
 /**
- * 用户状态管理（修复版 - 添加用户信息持久化）
+ * 用户状态管理（重构版）
  * 
  * 文件：src/store/modules/user.ts
+ * 
+ * 职责：
+ * - 管理 Token 和用户信息
+ * - 提供认证相关的 API 调用方法
+ * 
+ * 注意：认证流程状态（phase、error等）在 auth.ts 中管理
  */
 
-import { defineStore } from 'pinia';
-import { ref, computed, watch } from 'vue';
-import { wxAuthApi, authApi } from '@/api/auth-apis';
-import { getToken, setToken, removeToken, getUserInfo, setUserInfo, removeUserInfo } from '@/utils/storage';
-import type { LoginType, UserInfo, LoginStatusVo,LoginRequestCommand } from '@/types/auth';
+import { defineStore } from 'pinia'
+import { ref, computed, watch } from 'vue'
+import { wxAuthApi, authApi } from '@/api/auth-apis'
+import {
+  getToken,
+  setToken,
+  removeToken,
+  getUserInfo,
+  setUserInfo,
+  removeUserInfo
+} from '@/utils/storage'
+import type {
+  LoginType,
+  UserInfo,
+  LoginStatusVo,
+  LoginRequestCommand,
+  LoginResultsVo
+} from '@/types/auth'
 
 export const useUserStore = defineStore('user', () => {
   // ==================== 状态 ====================
 
+  /** JWT Token */
   const token = ref(getToken())
-  // 【修复】从 Storage 恢复用户信息
+
+  /** 用户信息 */
   const userInfo = ref<UserInfo | null>(getUserInfo())
+
+  /** 可用的登录方式 */
   const loginTypes = ref<LoginType[]>([])
+
+  /** 历史登录过的学号 */
   const historyUserIds = ref<string[]>([])
+
+  /** Cookie 是否即将过期 */
   const cookieExpiringSoon = ref(false)
 
   // ==================== 计算属性 ====================
 
+  /** 是否有 Token */
   const hasToken = computed(() => !!token.value)
+
+  /** 是否已登录学校 */
   const isSchoolLoggedIn = computed(() => !!userInfo.value?.userId)
 
   // ==================== 监听器：自动持久化 ====================
 
-  // 【修复】监听 userInfo 变化，自动同步到 Storage
+  // 监听 userInfo 变化，自动同步到 Storage
   watch(userInfo, (newVal) => {
     if (newVal) {
       setUserInfo(newVal)
@@ -39,25 +69,53 @@ export const useUserStore = defineStore('user', () => {
   // ==================== Token 管理 ====================
 
   /**
-   * 初始化 token（App.vue onLaunch 调用）
+   * 初始化 Token（首次获取）
+   * 
+   * 流程：wx.login() → 后端换取 JWT
    */
-  async function initToken() {
-    const { code } = await uni.login()
-    const res = await wxAuthApi.getToken(code)
+  async function initToken(): Promise<void> {
+    const loginResult = await uni.login()
+    if (!loginResult.code) {
+      throw new Error('获取微信 code 失败')
+    }
+
+    const res = await wxAuthApi.getToken(loginResult.code)
     token.value = res.data.token
     setToken(res.data.token)
   }
 
   /**
-   * 刷新 token（401 时调用）
+   * 刷新 Token
+   * 
+   * @returns 是否刷新成功
    */
   async function refreshTokenIfNeeded(): Promise<boolean> {
     try {
-      const { code } = await uni.login()
-      const res = await wxAuthApi.refreshToken(code)
+      const loginResult = await uni.login()
+      if (!loginResult.code) {
+        console.error('[UserStore] 获取 wx code 失败')
+        return false
+      }
+
+      const res = await wxAuthApi.refreshToken(loginResult.code)
       token.value = res.data.token
       setToken(res.data.token)
       return true
+    } catch (e) {
+      console.error('[UserStore] 刷新 Token 失败', e)
+      return false
+    }
+  }
+
+  /**
+   * 检查 Token 是否有效
+   * 
+   * @returns true 表示有效
+   */
+  async function checkTokenActive(): Promise<boolean> {
+    try {
+      const res = await wxAuthApi.active()
+      return res.data === true
     } catch (e) {
       return false
     }
@@ -66,36 +124,42 @@ export const useUserStore = defineStore('user', () => {
   // ==================== 会话管理 ====================
 
   /**
-   * 检查学校登录状态（轻量级，不清除 Cookie）
+   * 检查学校登录状态（轻量级）
+   * 
+   * 返回的状态会自动更新本地的 userInfo
    */
   async function checkSchoolSession(): Promise<LoginStatusVo> {
     const res = await authApi.getStatus()
     const status = res.data
 
+    // 更新本地状态
     loginTypes.value = status.loginTypes || []
     cookieExpiringSoon.value = status.cookieExpiringSoon || false
-    if(res.status==401){
-      if( await refreshTokenIfNeeded() === false){
-        await initSession();
+
+    // 如果已登录，同步用户信息
+    if (status.logined && status.userId) {
+      userInfo.value = {
+        userId: status.userId,
+        realName: status.realName || '',
+        gender: status.gender,
+        schoolName: status.schoolName,
+        avatarURL: status.avatarURL,
       }
     }
-    // 【修复】如果后端返回已登录但本地没有 userInfo，标记需要刷新
-    // 这种情况说明用户信息丢失了，但实际上是登录状态
-    if (status.logined && !userInfo.value) {
-      console.warn('检测到已登录但本地无用户信息，可能需要重新获取')
-    }
+
     return status
   }
 
   /**
    * 初始化会话（强制重建 Cookie）
    */
-  async function initSession() {
+  async function initSession(): Promise<LoginResultsVo> {
     const res = await authApi.initSession()
     const result = res.data
 
     loginTypes.value = result.loginTypes || []
-    // 如果已登录，更新用户信息（会自动持久化）
+
+    // 如果已登录，更新用户信息
     if (result.logined && result.userId) {
       userInfo.value = {
         userId: result.userId,
@@ -105,32 +169,31 @@ export const useUserStore = defineStore('user', () => {
         avatarURL: result.avatarURL,
       }
     }
+
     return result
   }
 
   /**
    * 刷新会话（仅刷新 SESSION_ID）
    */
-  async function refreshSession() {
-    try {
-      const res = await authApi.refreshSession()
-      cookieExpiringSoon.value = false
-      return res.data
-    } catch (e: any) {
-      if (e?.response?.status === 401) {
-        clearSchoolSession()
-      }
-      throw e
-    }
+  async function refreshSession(): Promise<LoginResultsVo> {
+    const res = await authApi.refreshSession()
+    cookieExpiringSoon.value = false
+    return res.data
   }
 
   /**
    * 获取历史登录学号
    */
-  async function fetchHistoryUserIds() {
-    const res = await authApi.getHistory()
-    historyUserIds.value = res.data || []
-    return historyUserIds.value
+  async function fetchHistoryUserIds(): Promise<string[]> {
+    try {
+      const res = await authApi.getHistory()
+      historyUserIds.value = res.data || []
+      return historyUserIds.value
+    } catch (e) {
+      console.warn('[UserStore] 获取历史学号失败', e)
+      return []
+    }
   }
 
   // ==================== 登录/登出 ====================
@@ -138,20 +201,21 @@ export const useUserStore = defineStore('user', () => {
   /**
    * 请求短信验证码
    */
-  async function requestSms(userId: string) {
+  async function requestSms(userId: string): Promise<void> {
     await authApi.requestSms(userId)
   }
 
   /**
    * 登录学校系统
+   * 
+   * @returns 是否登录成功
    */
-  async function loginSchool(params: LoginRequestCommand) {
+  async function loginSchool(params: LoginRequestCommand): Promise<boolean> {
     const res = await authApi.login(params)
     const result = res.data
 
     if (result.logined) {
-      console.log("result："+Object.getOwnPropertyNames(result));
-      // 【修复】更新用户信息（会自动持久化到 Storage）
+      // 更新用户信息
       userInfo.value = {
         userId: result.userId || params.userId,
         realName: result.realName || '',
@@ -162,7 +226,11 @@ export const useUserStore = defineStore('user', () => {
 
       // 更新历史学号
       if (!historyUserIds.value.includes(params.userId)) {
-        historyUserIds.value.push(params.userId)
+        historyUserIds.value.unshift(params.userId)
+        // 最多保留 5 个
+        if (historyUserIds.value.length > 5) {
+          historyUserIds.value = historyUserIds.value.slice(0, 5)
+        }
       }
     }
 
@@ -172,16 +240,19 @@ export const useUserStore = defineStore('user', () => {
   /**
    * 登出学校系统
    */
-  async function logoutSchool() {
-    await authApi.logout({})
+  async function logoutSchool(): Promise<void> {
+    try {
+      await authApi.logout({})
+    } catch (e) {
+      console.warn('[UserStore] 登出请求失败', e)
+    }
     clearSchoolSession()
   }
 
   /**
-   * 清除学校会话状态
+   * 清除学校会话状态（不清除 Token）
    */
-  function clearSchoolSession() {
-    // 【修复】清除内存中的用户信息（watch 会自动清除 Storage）
+  function clearSchoolSession(): void {
     userInfo.value = null
     loginTypes.value = []
     cookieExpiringSoon.value = false
@@ -190,11 +261,11 @@ export const useUserStore = defineStore('user', () => {
   /**
    * 完全清除所有状态
    */
-  function clearAll() {
+  function clearAll(): void {
     token.value = ''
     removeToken()
     clearSchoolSession()
-    historyUserIds.value = []
+    // 保留历史学号
   }
 
   // ==================== 导出 ====================
@@ -214,6 +285,7 @@ export const useUserStore = defineStore('user', () => {
     // Token 管理
     initToken,
     refreshTokenIfNeeded,
+    checkTokenActive,
 
     // 会话管理
     checkSchoolSession,
