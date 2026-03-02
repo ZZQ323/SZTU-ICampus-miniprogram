@@ -61,7 +61,7 @@
  */
 import { ref, computed } from 'vue'
 import { useAuthStore } from '@/store/modules/auth'
-import { useAuthGuard } from '@/hooks/useAuthGuard'
+import { useAuthGuard } from '@/composables/useAuthGuard'
 
 const authStore = useAuthStore()
 const { retry } = useAuthGuard()

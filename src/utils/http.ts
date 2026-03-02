@@ -1,5 +1,5 @@
 /**
- * HTTP 请求封装（增强版）
+ * HTTP 请求封装（增强版 - 修复类型问题）
  * 
  * 文件：src/utils/http/index.ts
  * 
@@ -8,15 +8,21 @@
  * 2. 刷新期间的请求队列管理
  * 3. 统一的错误格式化
  * 4. 超时和网络错误的友好处理
+ * 
+ * ⭐ 重要：响应拦截器直接返回 response.data.data（业务数据）
+ *    所以 API 调用时泛型直接写业务类型，如 request.get<UserInfo>()
  */
 
 import axios from 'axios'
-import type { AxiosInstance, AxiosRequestConfig, AxiosRequestHeaders, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
+import type { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { createUniAppAxiosAdapter } from '@uni-helper/axios-adapter'
 import { getToken, setToken } from '@/utils/storage'
 import type { HttpError } from '@/types/auth'
 
 // ==================== 配置常量 ====================
+
+/** API 基础地址 */
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://192.168.3.35:8080'
 
 /** 默认超时（毫秒）—— 普通接口 */
 const DEFAULT_TIMEOUT = 15 * 1000
@@ -38,6 +44,15 @@ const PUBLIC_APIS = [
   '/wx-auth/v1/get-token',
   '/wx-auth/v1/refresh-token',
 ]
+
+// ==================== 后端响应格式 ====================
+
+/** 后端统一响应格式 */
+interface BackendResponse<T = any> {
+  code: number
+  message: string
+  data: T
+}
 
 // ==================== 刷新 Token 队列管理 ====================
 
@@ -73,7 +88,7 @@ function processPendingRequests(error?: any) {
 // ==================== 创建 Axios 实例 ====================
 
 const instance: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://192.168.3.35:8080',
+  baseURL: BASE_URL,
   timeout: DEFAULT_TIMEOUT,
   adapter: createUniAppAxiosAdapter(),
 })
@@ -100,7 +115,7 @@ instance.interceptors.request.use(
     }
 
     // 3. 添加请求 ID（用于日志追踪）
-    config.headers = (config.headers ?? {}) as AxiosRequestHeaders;
+    config.headers = config.headers || {}
     config.headers['X-Request-ID'] = generateRequestId()
 
     return config
@@ -113,7 +128,7 @@ instance.interceptors.request.use(
 // ==================== 响应拦截器 ====================
 
 instance.interceptors.response.use(
-  (response: AxiosResponse) => {
+  (response: AxiosResponse<BackendResponse>) => {
     const { data, headers } = response
 
     // 检查是否有新 Token（后端可能在某些响应中返回）
@@ -133,7 +148,10 @@ instance.interceptors.response.use(
       ))
     }
 
-    return data
+    // ⭐⭐⭐ 关键修复：直接返回业务数据（data.data）
+    // 这样 API 调用时：const user = await request.get<UserInfo>('/user')
+    // user 的类型就是 UserInfo，而不是 { code, message, data: UserInfo }
+    return data.data as any
   },
   async (error) => {
     const { config, response } = error
@@ -285,9 +303,9 @@ async function refreshToken(): Promise<boolean> {
       return false
     }
 
-    // 调用刷新接口
-    const response = await axios.post(
-      `${instance.defaults.baseURL}/wx-auth/v1/refresh-token`,
+    // 调用刷新接口（直接用 axios，绕过拦截器）
+    const response = await axios.post<BackendResponse<{ token: string }>>(
+      `${BASE_URL}/wx-auth/v1/refresh-token`,
       { wxCode: loginResult.code },
       {
         headers: {
@@ -316,19 +334,30 @@ async function refreshToken(): Promise<boolean> {
 
 export default instance
 
-/** 请求方法快捷方式 */
+/** 
+ * 请求方法快捷方式
+ * 
+ * ⭐ 泛型 T 表示的是业务数据类型，不是完整响应体
+ * 
+ * 使用示例：
+ * ```ts
+ * // 返回 Promise<UserInfo>，不是 Promise<{ code, message, data: UserInfo }>
+ * const user = await request.get<UserInfo>('/user/info')
+ * console.log(user.name) // 直接访问
+ * ```
+ */
 export const request = {
-  get: <T = any>(url: string, config?: AxiosRequestConfig) =>
-    instance.get<any, T>(url, config),
+  get: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> =>
+    instance.get(url, config),
 
-  post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
-    instance.post<any, T>(url, data, config),
+  post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> =>
+    instance.post(url, data, config),
 
-  put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
-    instance.put<any, T>(url, data, config),
+  put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> =>
+    instance.put(url, data, config),
 
-  delete: <T = any>(url: string, config?: AxiosRequestConfig) =>
-    instance.delete<any, T>(url, config),
+  delete: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> =>
+    instance.delete(url, config),
 }
 
 /** 
@@ -345,3 +374,8 @@ export function isRetryable(error: any): boolean {
 export function isAuthError(error: any): boolean {
   return error?.code === 401
 }
+
+/**
+ * 导出基础 URL（供 SSE 等场景使用）
+ */
+export { BASE_URL }

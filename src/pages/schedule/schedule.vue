@@ -98,7 +98,7 @@
  */
 import { ref, computed, onMounted } from 'vue'
 import { onShow, onHide } from '@dcloudio/uni-app'
-import { useAuthGuard } from '@/hooks/useAuthGuard'
+import { useAuthGuard } from '@/composables/useAuthGuard'
 import { useSchedule } from '@/hooks/useSchedule'
 import { useSSE } from '@/hooks/useSSE'
 

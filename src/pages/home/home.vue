@@ -75,7 +75,7 @@
  */
 import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '@/store/modules/user'
-import { useAuthGuard } from '@/hooks/useAuthGuard'
+import { useAuthGuard } from '@/composables/useAuthGuard'
 
 const userStore = useUserStore()
 const { ensure, isSchoolLoggedIn } = useAuthGuard()

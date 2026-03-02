@@ -1,5 +1,5 @@
 /**
- * 用户状态管理（重构版）
+ * 用户状态管理（修复版 - 类型正确）
  * 
  * 文件：src/store/modules/user.ts
  * 
@@ -7,7 +7,9 @@
  * - 管理 Token 和用户信息
  * - 提供认证相关的 API 调用方法
  * 
- * 注意：认证流程状态（phase、error等）在 auth.ts 中管理
+ * ⭐ 注意：API 返回的直接是业务数据，不需要 .data 访问
+ *    例如：const res = await wxAuthApi.getToken(code)
+ *          res.token  // 直接访问，res 的类型就是 TokenVo
  */
 
 import { defineStore } from 'pinia'
@@ -79,9 +81,10 @@ export const useUserStore = defineStore('user', () => {
       throw new Error('获取微信 code 失败')
     }
 
-    const res = await wxAuthApi.getToken(loginResult.code)
-    token.value = res.data.token
-    setToken(res.data.token)
+    // ⭐ API 直接返回 TokenVo，不需要 .data
+    const result = await wxAuthApi.getToken(loginResult.code)
+    token.value = result.token
+    setToken(result.token)
   }
 
   /**
@@ -97,9 +100,10 @@ export const useUserStore = defineStore('user', () => {
         return false
       }
 
-      const res = await wxAuthApi.refreshToken(loginResult.code)
-      token.value = res.data.token
-      setToken(res.data.token)
+      // ⭐ API 直接返回 TokenVo
+      const result = await wxAuthApi.refreshToken(loginResult.code)
+      token.value = result.token
+      setToken(result.token)
       return true
     } catch (e) {
       console.error('[UserStore] 刷新 Token 失败', e)
@@ -114,8 +118,9 @@ export const useUserStore = defineStore('user', () => {
    */
   async function checkTokenActive(): Promise<boolean> {
     try {
-      const res = await wxAuthApi.active()
-      return res.data === true
+      // ⭐ API 直接返回 boolean
+      const isActive = await wxAuthApi.active()
+      return isActive === true
     } catch (e) {
       return false
     }
@@ -129,8 +134,8 @@ export const useUserStore = defineStore('user', () => {
    * 返回的状态会自动更新本地的 userInfo
    */
   async function checkSchoolSession(): Promise<LoginStatusVo> {
-    const res = await authApi.getStatus()
-    const status = res.data
+    // ⭐ API 直接返回 LoginStatusVo
+    const status = await authApi.getStatus()
 
     // 更新本地状态
     loginTypes.value = status.loginTypes || []
@@ -154,8 +159,8 @@ export const useUserStore = defineStore('user', () => {
    * 初始化会话（强制重建 Cookie）
    */
   async function initSession(): Promise<LoginResultsVo> {
-    const res = await authApi.initSession()
-    const result = res.data
+    // ⭐ API 直接返回 LoginResultsVo
+    const result = await authApi.initSession()
 
     loginTypes.value = result.loginTypes || []
 
@@ -177,9 +182,10 @@ export const useUserStore = defineStore('user', () => {
    * 刷新会话（仅刷新 SESSION_ID）
    */
   async function refreshSession(): Promise<LoginResultsVo> {
-    const res = await authApi.refreshSession()
+    // ⭐ API 直接返回 LoginResultsVo
+    const result = await authApi.refreshSession()
     cookieExpiringSoon.value = false
-    return res.data
+    return result
   }
 
   /**
@@ -187,8 +193,9 @@ export const useUserStore = defineStore('user', () => {
    */
   async function fetchHistoryUserIds(): Promise<string[]> {
     try {
-      const res = await authApi.getHistory()
-      historyUserIds.value = res.data || []
+      // ⭐ API 直接返回 string[]
+      const ids = await authApi.getHistory()
+      historyUserIds.value = ids || []
       return historyUserIds.value
     } catch (e) {
       console.warn('[UserStore] 获取历史学号失败', e)
@@ -211,8 +218,8 @@ export const useUserStore = defineStore('user', () => {
    * @returns 是否登录成功
    */
   async function loginSchool(params: LoginRequestCommand): Promise<boolean> {
-    const res = await authApi.login(params)
-    const result = res.data
+    // ⭐ API 直接返回 LoginResultsVo
+    const result = await authApi.login(params)
 
     if (result.logined) {
       // 更新用户信息
