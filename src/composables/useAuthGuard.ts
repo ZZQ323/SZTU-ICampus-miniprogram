@@ -6,16 +6,18 @@
  * 这是整个认证系统的核心入口，页面只需要调用 ensure() 方法
  * 即可完成所有认证检查逻辑。
  * 
+ * ⭐ 重要设计：
+ * - 任何显示用户信息的页面（包括首页）都需要调用 ensure()
+ * - ensure() 总是会检查学校状态来同步用户信息
+ * - requireSchoolLogin 只控制"未登录时是否跳转登录页"
+ * 
  * 使用示例：
  * ```ts
- * const { ensure, isReady, isChecking } = useAuthGuard()
+ * // 首页：检查身份但不强制登录（显示遮罩保护信息）
+ * await ensure({ requireSchoolLogin: false })
  * 
- * onShow(async () => {
- *   const result = await ensure()
- *   if (result.success) {
- *     // 加载业务数据
- *   }
- * })
+ * // 课表页：检查身份且强制登录
+ * await ensure({ requireSchoolLogin: true })
  * ```
  */
 
@@ -55,11 +57,12 @@ export function useAuthGuard() {
     /**
      * 确保认证就绪（核心方法）
      * 
-     * 完整流程：
+     * ⭐ 完整流程（无论 requireSchoolLogin 为何值）：
      * 1. 检查本地 Token → 无则获取新 Token
      * 2. 验证 Token 有效性 → 无效则尝试刷新
-     * 3. 如果需要学校登录，检查学校登录状态
-     * 4. 根据结果决定是否跳转登录页
+     * 3. 【总是】检查学校登录状态（同步 userInfo）
+     * 4. 如果 requireSchoolLogin=true 且未登录 → 跳转登录页
+     *    如果 requireSchoolLogin=false 且未登录 → 清空 userInfo，不跳转
      * 
      * @param options 配置选项
      * @returns 认证结果
@@ -86,6 +89,8 @@ export function useAuthGuard() {
                 try {
                     await userStore.initToken()
                 } catch (e: any) {
+                    // Token 获取失败，清空可能残留的用户信息
+                    userStore.clearSchoolSession()
                     return handleError('NO_TOKEN', '初始化失败，请重试', true, e)
                 }
             }
@@ -110,33 +115,43 @@ export function useAuthGuard() {
                     try {
                         await userStore.initToken()
                     } catch (e: any) {
+                        userStore.clearSchoolSession()
                         return handleError('REFRESH_FAILED', '身份验证失败，请重试', true, e)
                     }
                 }
             }
 
-            // ========== 第三步：检查学校登录状态（如果需要）==========
-            if (requireSchoolLogin) {
-                if (!silent) {
-                    authStore.setPhase('checking-school', '正在检查校园服务状态...')
+            // ========== 第三步：【总是】检查学校登录状态 ==========
+            // ⭐ 这是关键改动：无论 requireSchoolLogin 为何值，都要检查
+            // 这样才能正确同步 userInfo，保证显示正确的用户信息
+            if (!silent) {
+                authStore.setPhase('checking-school', '正在检查校园服务状态...')
+            }
+
+            let status: LoginStatusVo
+
+            try {
+                status = await userStore.checkSchoolSession()
+            } catch (e: any) {
+                // 检查状态失败，清空用户信息以防显示错误
+                userStore.clearSchoolSession()
+
+                if (isNetworkError(e)) {
+                    return handleError('NETWORK_ERROR', '网络连接失败，请检查网络', true, e)
                 }
-
-                let status: LoginStatusVo
-
-                try {
-                    status = await userStore.checkSchoolSession()
-                } catch (e: any) {
-                    // 检查状态失败，可能是网络问题
-                    if (isNetworkError(e)) {
-                        return handleError('NETWORK_ERROR', '网络连接失败，请检查网络', true, e)
-                    }
-                    if (isTimeoutError(e)) {
-                        return handleError('TIMEOUT', '请求超时，请稍后重试', true, e)
-                    }
-                    return handleError('SERVER_ERROR', '服务器错误，请稍后重试', true, e)
+                if (isTimeoutError(e)) {
+                    return handleError('TIMEOUT', '请求超时，请稍后重试', true, e)
                 }
+                return handleError('SERVER_ERROR', '服务器错误，请稍后重试', true, e)
+            }
 
-                if (!status.logined) {
+            // ========== 第四步：根据登录状态决定后续行为 ==========
+            if (!status.logined) {
+                // ⭐ 未登录时，清空本地可能残留的用户信息
+                userStore.clearSchoolSession()
+
+                if (requireSchoolLogin) {
+                    // 需要登录：设置状态并跳转
                     authStore.setPhase('need-login')
 
                     if (redirectOnFail) {
@@ -148,20 +163,29 @@ export function useAuthGuard() {
                         reason: 'NEED_LOGIN',
                         status
                     }
+                } else {
+                    // 不需要登录：设置为就绪状态，但返回未登录信息
+                    authStore.setPhase('ready')
+                    return {
+                        success: true,  // ⭐ 对于不要求登录的页面，未登录也算成功
+                        reason: 'NEED_LOGIN',
+                        status
+                    }
                 }
+            }
 
-                // Cookie 即将过期，静默刷新
-                if (status.cookieExpiringSoon) {
-                    silentRefreshSession()
-                }
+            // ========== 已登录：Cookie 即将过期时静默刷新 ==========
+            if (status.cookieExpiringSoon) {
+                silentRefreshSession()
             }
 
             // ========== 认证成功 ==========
             authStore.setPhase('ready')
 
-            return { success: true }
+            return { success: true, status }
 
         } catch (e: any) {
+            userStore.clearSchoolSession()
             return handleError('UNKNOWN', e.message || '发生未知错误', true, e)
         }
     }

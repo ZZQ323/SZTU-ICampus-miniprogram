@@ -1,7 +1,7 @@
 <!--
   登录页面（重构版）
   
-  文件：src/pages/common/login/index.vue
+  文件：src/pages/common/login/login.vue
   
   改进点：
   1. 使用 useAuthGuard 处理认证逻辑
@@ -32,8 +32,8 @@
 
       <!-- 学号输入 -->
       <view class="form-item">
-        <t-input v-model="userId" placeholder="请输入学号" clearable @focus="showHistory = historyIds.length > 0"
-          @blur="onInputBlur">
+        <t-input :value="userId" placeholder="请输入学号" clearable @change="onUserIdChange" @clear="onUserIdClear"
+          @focus="onUserIdFocus" @blur="onInputBlur">
           <template #prefix-icon>
             <t-icon name="user" />
           </template>
@@ -50,7 +50,8 @@
 
       <!-- 短信验证码输入 -->
       <view v-if="activeTab === 'SMS'" class="form-item sms-row">
-        <t-input v-model="smsCode" placeholder="请输入验证码" type="number" :maxlength="6" class="sms-input">
+        <t-input :value="smsCode" placeholder="请输入验证码" type="number" :maxlength="6" class="sms-input"
+          @change="onSmsCodeChange">
           <template #prefix-icon>
             <t-icon name="secured" />
           </template>
@@ -63,7 +64,8 @@
 
       <!-- 密码输入 -->
       <view v-if="activeTab === 'PASSWORD'" class="form-item">
-        <t-input v-model="password" placeholder="请输入密码" type="password" clearable>
+        <t-input :value="password" placeholder="请输入密码" type="password" clearable @change="onPasswordChange"
+          @clear="onPasswordClear">
           <template #prefix-icon>
             <t-icon name="lock-on" />
           </template>
@@ -87,11 +89,15 @@
 <script setup lang="ts">
 /**
  * 登录页面
+ * 
+ * ⭐ 注意：TDesign 小程序组件的 v-model 在某些环境下不工作
+ *    这里统一使用 :value + @change 的方式
  */
 import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '@/store/modules/user'
 import { useAuthStore } from '@/store/modules/auth'
 import { useCountdown } from '@/hooks/useCountdown'
+import { extractString } from '@/utils/tdesign'
 import type { LoginType } from '@/types/auth'
 
 const userStore = useUserStore()
@@ -131,6 +137,46 @@ const canLogin = computed(() => {
 
 // 是否显示密码登录 Tab
 const showPasswordTab = computed(() => loginTypes.value.includes('PASSWORD'))
+
+// ==================== 输入框事件处理 ====================
+
+/** 学号输入变化 */
+function onUserIdChange(e: any) {
+  userId.value = extractString(e)
+}
+
+/** 学号清空 */
+function onUserIdClear() {
+  userId.value = ''
+}
+
+/** 学号输入框聚焦 */
+function onUserIdFocus() {
+  showHistory.value = historyIds.value.length > 0
+}
+
+/** 验证码输入变化 */
+function onSmsCodeChange(e: any) {
+  smsCode.value = extractString(e)
+}
+
+/** 密码输入变化 */
+function onPasswordChange(e: any) {
+  password.value = extractString(e)
+}
+
+/** 密码清空 */
+function onPasswordClear() {
+  password.value = ''
+}
+
+/** 输入框失焦 */
+function onInputBlur() {
+  // 延迟关闭，确保点击事件能触发
+  setTimeout(() => {
+    showHistory.value = false
+  }, 200)
+}
 
 // ==================== 生命周期 ====================
 
@@ -258,16 +304,6 @@ async function handleLogin() {
 function selectHistoryId(id: string) {
   userId.value = id
   showHistory.value = false
-}
-
-/**
- * 输入框失焦
- */
-function onInputBlur() {
-  // 延迟关闭，确保点击事件能触发
-  setTimeout(() => {
-    showHistory.value = false
-  }, 200)
 }
 
 /**

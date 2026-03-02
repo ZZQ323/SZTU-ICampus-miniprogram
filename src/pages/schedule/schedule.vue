@@ -10,86 +10,90 @@
 -->
 
 <template>
-  <view class="schedule-page">
-    <!-- 连接状态栏 -->
-    <view class="status-bar" :class="connectionStatus">
-      <view class="status-dot" />
-      <text>{{ statusText }}</text>
-    </view>
+  <PageLayout>
 
-    <!-- 头部 -->
-    <view class="header">
-      <text class="title">我的课表</text>
-      <view class="week-selector" @click="showWeekPicker = true">
-        <text>第 {{ currentWeek }} 周</text>
-        <t-icon name="chevron-down" size="32rpx" />
+
+    <view class="schedule-page">
+      <!-- 连接状态栏 -->
+      <view class="status-bar" :class="connectionStatus">
+        <view class="status-dot" />
+        <text>{{ statusText }}</text>
       </view>
-    </view>
 
-    <!-- 课表网格 -->
-    <view class="schedule-grid">
-      <!-- 表头 -->
-      <view class="grid-header">
-        <view class="corner-cell" />
-        <view v-for="day in weekDays" :key="day.value" class="day-cell" :class="{ today: isToday(day.value) }">
-          <text class="day-name">{{ day.label }}</text>
-          <text class="day-date">{{ day.date }}</text>
+      <!-- 头部 -->
+      <view class="header">
+        <text class="title">我的课表</text>
+        <view class="week-selector" @click="showWeekPicker = true">
+          <text>第 {{ currentWeek }} 周</text>
+          <t-icon name="chevron-down" size="32rpx" />
         </view>
       </view>
 
-      <!-- 课表主体 -->
-      <view class="grid-body">
-        <view v-for="slot in timeSlots" :key="slot.row" class="time-row">
-          <!-- 时间列 -->
-          <view class="time-cell">
-            <text class="time-index">{{ slot.label }}</text>
-            <text class="time-range">{{ slot.time }}</text>
-          </view>
-
-          <!-- 课程单元格 -->
-          <view v-for="day in 7" :key="day" class="course-cell" @click="handleCourseClick(slot.row, day - 1)">
-            <template v-if="getCourse(slot.row, day - 1)">
-              <view class="course-card" :style="{ backgroundColor: getCourseColor(getCourse(slot.row, day - 1)) }">
-                <text class="course-name">{{ getCourse(slot.row, day - 1)?.courseName }}</text>
-                <text class="course-location">{{ getCourse(slot.row, day - 1)?.location }}</text>
-              </view>
-            </template>
+      <!-- 课表网格 -->
+      <view class="schedule-grid">
+        <!-- 表头 -->
+        <view class="grid-header">
+          <view class="corner-cell" />
+          <view v-for="day in weekDays" :key="day.value" class="day-cell" :class="{ today: isToday(day.value) }">
+            <text class="day-name">{{ day.label }}</text>
+            <text class="day-date">{{ day.date }}</text>
           </view>
         </view>
-      </view>
-    </view>
 
-    <!-- 空状态 -->
-    <view v-if="!loading && courses.length === 0" class="empty-state">
-      <t-icon name="calendar" size="120rpx" color="#ddd" />
-      <text class="empty-text">暂无课程数据</text>
-      <t-button theme="light" size="small" @click="handleRefresh">
-        刷新
-      </t-button>
-    </view>
+        <!-- 课表主体 -->
+        <view class="grid-body">
+          <view v-for="slot in timeSlots" :key="slot.row" class="time-row">
+            <!-- 时间列 -->
+            <view class="time-cell">
+              <text class="time-index">{{ slot.label }}</text>
+              <text class="time-range">{{ slot.time }}</text>
+            </view>
 
-    <!-- 课程详情弹窗 -->
-    <t-popup v-model="showCourseDetail" placement="bottom">
-      <view class="course-detail">
-        <view class="detail-header">
-          <text class="detail-title">{{ selectedCourse?.courseName }}</text>
-          <t-icon name="close" size="40rpx" @click="showCourseDetail = false" />
-        </view>
-        <view class="detail-item">
-          <t-icon name="location" size="36rpx" color="#999" />
-          <text>{{ selectedCourse?.location || '未知地点' }}</text>
-        </view>
-        <view class="detail-item">
-          <t-icon name="user" size="36rpx" color="#999" />
-          <text>{{ selectedCourse?.teacher || '未知教师' }}</text>
-        </view>
-        <view class="detail-item">
-          <t-icon name="time" size="36rpx" color="#999" />
-          <text>第 {{ selectedCourse?.startWeek }}-{{ selectedCourse?.endWeek }} 周</text>
+            <!-- 课程单元格 -->
+            <view v-for="day in 7" :key="day" class="course-cell" @click="handleCourseClick(slot.row, day - 1)">
+              <template v-if="getCourse(slot.row, day - 1)">
+                <view class="course-card" :style="{ backgroundColor: getCourseColor(getCourse(slot.row, day - 1)) }">
+                  <text class="course-name">{{ getCourse(slot.row, day - 1)?.courseName }}</text>
+                  <text class="course-location">{{ getCourse(slot.row, day - 1)?.location }}</text>
+                </view>
+              </template>
+            </view>
+          </view>
         </view>
       </view>
-    </t-popup>
-  </view>
+
+      <!-- 空状态 -->
+      <view v-if="!loading && courses.length === 0" class="empty-state">
+        <t-icon name="calendar" size="120rpx" color="#ddd" />
+        <text class="empty-text">暂无课程数据</text>
+        <t-button theme="light" size="small" @click="handleRefresh">
+          刷新
+        </t-button>
+      </view>
+
+      <!-- 课程详情弹窗 -->
+      <t-popup v-model="showCourseDetail" placement="bottom">
+        <view class="course-detail">
+          <view class="detail-header">
+            <text class="detail-title">{{ selectedCourse?.courseName }}</text>
+            <t-icon name="close" size="40rpx" @click="showCourseDetail = false" />
+          </view>
+          <view class="detail-item">
+            <t-icon name="location" size="36rpx" color="#999" />
+            <text>{{ selectedCourse?.location || '未知地点' }}</text>
+          </view>
+          <view class="detail-item">
+            <t-icon name="user" size="36rpx" color="#999" />
+            <text>{{ selectedCourse?.teacher || '未知教师' }}</text>
+          </view>
+          <view class="detail-item">
+            <t-icon name="time" size="36rpx" color="#999" />
+            <text>第 {{ selectedCourse?.startWeek }}-{{ selectedCourse?.endWeek }} 周</text>
+          </view>
+        </view>
+      </t-popup>
+    </view>
+  </PageLayout>
 </template>
 
 <script setup lang="ts">
@@ -98,6 +102,7 @@
  */
 import { ref, computed, onMounted } from 'vue'
 import { onShow, onHide } from '@dcloudio/uni-app'
+import PageLayout from '@/components/PageLayout.vue'
 import { useAuthGuard } from '@/composables/useAuthGuard'
 import { useSchedule } from '@/hooks/useSchedule'
 import { useSSE } from '@/hooks/useSSE'
