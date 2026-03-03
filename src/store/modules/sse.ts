@@ -1,17 +1,22 @@
 /**
- * 全局 SSE 状态管理
- * 
- * 文件：src/store/modules/sse.ts
- * 
+ * 全局 SSE 状态管理（带持久化）
  * 由于小程序每个页面是独立的 webview，所以使用 Pinia store 共享状态
+ * 文件：src/store/modules/sse.ts
  */
 
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { sseClient } from '@/utils/sse'
 import { useUserStore } from './user'
 
-/** SSE 消息类型 */
+// ==================== 存储 Key ====================
+
+const STORAGE_KEY_LAST_READ_ID = 'announcement_last_read_id'
+const STORAGE_KEY_READ_IDS = 'announcement_read_ids'
+const MAX_READ_IDS = 200
+
+// ==================== 类型定义 ====================
+
 interface SseMessageData {
     type: string
     data: any
@@ -30,17 +35,23 @@ export const useSseStore = defineStore('sse', () => {
     /** 重连次数 */
     const reconnectAttempts = ref(0)
 
-    /** 公告未读数 */
-    const announcementUnread = ref(0)
-
-    /** 最新公告 ID */
-    const latestAnnouncementId = ref('0')
-
-    /** 日历未读数 */
-    const calendarUnread = ref(0)
-
     /** 是否正在重连 */
     const isReconnecting = ref(false)
+
+    // ==================== 公告相关状态（持久化） ====================
+
+    /** 服务端最新公告 ID */
+    const serverLatestId = ref<string>('0')
+
+    /** 用户已读的最新 ID（持久化） */
+    const lastReadId = ref<string>(loadLastReadId())
+
+    /** 用户已读的 ID 集合（持久化，用于处理非连续 ID） */
+    const readIds = ref<Set<string>>(new Set(loadReadIds()))
+
+    // ==================== 日历相关状态 ====================
+
+    const calendarUnread = ref(0)
 
     // ==================== 内部变量 ====================
 
@@ -49,8 +60,35 @@ export const useSseStore = defineStore('sse', () => {
 
     // ==================== 计算属性 ====================
 
+    /** 公告未读数 */
+    const announcementUnread = computed(() => {
+        const latest = Number(serverLatestId.value) || 0
+        const lastRead = Number(lastReadId.value) || 0
+
+        if (latest <= lastRead) return 0
+
+        // 简单计算差值（实际中可能不连续，但足够用于显示）
+        const diff = latest - lastRead
+        return Math.min(diff, 99)
+    })
+
+    /** 是否有未读 */
     const hasUnread = computed(() => announcementUnread.value > 0 || calendarUnread.value > 0)
+
+    /** 总未读数 */
     const totalUnread = computed(() => announcementUnread.value + calendarUnread.value)
+
+    // ==================== 持久化监听 ====================
+
+    // 监听 lastReadId 变化，自动保存
+    watch(lastReadId, (newVal) => {
+        saveLastReadId(newVal)
+    })
+
+    // 监听 readIds 变化，自动保存
+    watch(readIds, (newVal) => {
+        saveReadIds(Array.from(newVal))
+    }, { deep: true })
 
     // ==================== 方法 ====================
 
@@ -72,7 +110,6 @@ export const useSseStore = defineStore('sse', () => {
 
         console.log('[SSE Store] 开始连接...')
 
-        // 订阅公告流
         sseClient.subscribe('announcement', (message: SseMessageData) => {
             handleMessage('announcement', message)
         })
@@ -81,7 +118,6 @@ export const useSseStore = defineStore('sse', () => {
         reconnectAttempts.value = 0
         lastHeartbeat.value = Date.now()
 
-        // 启动心跳检测
         startHeartbeatCheck()
     }
 
@@ -106,7 +142,7 @@ export const useSseStore = defineStore('sse', () => {
      * 处理 SSE 消息
      */
     function handleMessage(topic: string, message: SseMessageData) {
-        console.log('[SSE Store] 收到消息:', topic, message)
+        console.log('[SSE Store] 收到消息:', topic, message.type, message.data)
 
         switch (message.type) {
             case 'HEARTBEAT':
@@ -115,23 +151,20 @@ export const useSseStore = defineStore('sse', () => {
 
             case 'NEW_ANNOUNCEMENTS':
                 // 新公告通知
-                if (message.data?.count) {
-                    announcementUnread.value += message.data.count
-                }
                 if (message.data?.latestId) {
-                    latestAnnouncementId.value = message.data.latestId
+                    serverLatestId.value = message.data.latestId
                 }
+                // 注意：未读数由 computed 自动计算，无需手动增加
                 break
 
             case 'ANNOUNCEMENT_STATUS':
-                // 公告系统状态
+                // 公告系统状态（连接时推送）
                 if (message.data?.latestId) {
-                    latestAnnouncementId.value = message.data.latestId
+                    serverLatestId.value = message.data.latestId
                 }
                 break
 
             case 'AUTH_REQUIRED':
-                // 需要重新登录
                 disconnect()
                 break
         }
@@ -147,7 +180,6 @@ export const useSseStore = defineStore('sse', () => {
             const now = Date.now()
             const elapsed = now - lastHeartbeat.value
 
-            // 30 秒无心跳，触发重连
             if (elapsed > 30000 && isConnected.value) {
                 console.log('[SSE Store] 心跳超时，触发重连')
                 triggerReconnect()
@@ -174,7 +206,6 @@ export const useSseStore = defineStore('sse', () => {
         isReconnecting.value = true
         isConnected.value = false
 
-        // 指数退避：1s, 2s, 4s, 8s, 最大 30s
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.value), 30000)
         reconnectAttempts.value++
 
@@ -191,11 +222,50 @@ export const useSseStore = defineStore('sse', () => {
         }, delay)
     }
 
+    // ==================== 未读标记方法 ====================
+
     /**
-     * 标记公告已读
+     * 标记所有公告已读（进入公告列表页时调用）
      */
-    function markAnnouncementRead() {
-        announcementUnread.value = 0
+    function markAllAnnouncementRead() {
+        if (serverLatestId.value && serverLatestId.value !== '0') {
+            lastReadId.value = serverLatestId.value
+            console.log('[SSE Store] 标记全部已读:', lastReadId.value)
+        }
+    }
+
+    /**
+     * 标记单条公告已读（查看详情时调用）
+     */
+    function markAnnouncementItemRead(id: string) {
+        readIds.value.add(id)
+
+        // 如果这个 ID 比 lastReadId 大，更新 lastReadId
+        const idNum = Number(id) || 0
+        const lastReadNum = Number(lastReadId.value) || 0
+        if (idNum > lastReadNum) {
+            lastReadId.value = id
+        }
+
+        // 限制存储数量
+        if (readIds.value.size > MAX_READ_IDS) {
+            const arr = Array.from(readIds.value).sort((a, b) => Number(b) - Number(a))
+            readIds.value = new Set(arr.slice(0, MAX_READ_IDS))
+        }
+    }
+
+    /**
+     * 检查某条公告是否已读
+     */
+    function isAnnouncementRead(id: string): boolean {
+        const idNum = Number(id) || 0
+        const lastReadNum = Number(lastReadId.value) || 0
+
+        // ID 小于等于 lastReadId 的都算已读
+        if (idNum <= lastReadNum) return true
+
+        // 或者在 readIds 集合中
+        return readIds.value.has(id)
     }
 
     /**
@@ -206,7 +276,7 @@ export const useSseStore = defineStore('sse', () => {
     }
 
     /**
-     * 检查并恢复连接（页面 onShow 时调用）
+     * 检查并恢复连接
      */
     function checkAndReconnect() {
         const userStore = useUserStore()
@@ -222,20 +292,60 @@ export const useSseStore = defineStore('sse', () => {
         isConnected,
         lastHeartbeat,
         reconnectAttempts,
-        announcementUnread,
-        latestAnnouncementId,
-        calendarUnread,
         isReconnecting,
+        serverLatestId,
+        lastReadId,
+        calendarUnread,
 
         // 计算属性
+        announcementUnread,
         hasUnread,
         totalUnread,
 
         // 方法
         connect,
         disconnect,
-        markAnnouncementRead,
-        markCalendarRead,
         checkAndReconnect,
+
+        // 未读标记
+        markAllAnnouncementRead,
+        markAnnouncementItemRead,
+        isAnnouncementRead,
+        markCalendarRead,
     }
 })
+
+// ==================== 持久化辅助函数 ====================
+
+function loadLastReadId(): string {
+    try {
+        return uni.getStorageSync(STORAGE_KEY_LAST_READ_ID) || '0'
+    } catch {
+        return '0'
+    }
+}
+
+function saveLastReadId(id: string): void {
+    try {
+        uni.setStorageSync(STORAGE_KEY_LAST_READ_ID, id)
+    } catch (e) {
+        console.warn('[SSE Store] 保存 lastReadId 失败:', e)
+    }
+}
+
+function loadReadIds(): string[] {
+    try {
+        const data = uni.getStorageSync(STORAGE_KEY_READ_IDS)
+        return data ? JSON.parse(data) : []
+    } catch {
+        return []
+    }
+}
+
+function saveReadIds(ids: string[]): void {
+    try {
+        uni.setStorageSync(STORAGE_KEY_READ_IDS, JSON.stringify(ids))
+    } catch (e) {
+        console.warn('[SSE Store] 保存 readIds 失败:', e)
+    }
+}
