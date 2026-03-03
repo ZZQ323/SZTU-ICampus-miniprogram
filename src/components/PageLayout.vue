@@ -199,11 +199,11 @@ function handleCancel() {
 function handleConfirm() {
     const code = authStore.error?.code
 
-    // 认证相关错误，跳转登录页
+    //  FIXME token 过期跳转登录页面干什么？会话过期才需要登录啊？token 错误就提供一个原地刷新token的页面，刷到有为止！
     if (code === 'TOKEN_EXPIRED' || code === 'TOKEN_INVALID' || code === 'REFRESH_FAILED') {
         authStore.clearError()
         authStore.setPhase('idle')
-        uni.reLaunch({ url: '/pages/common/login/index' })
+        uni.reLaunch({ url: '/pages/common/login/login' })
         return
     }
 
