@@ -199,11 +199,20 @@ function handleCancel() {
 function handleConfirm() {
     const code = authStore.error?.code
 
-    //  FIXME token 过期跳转登录页面干什么？会话过期才需要登录啊？token 错误就提供一个原地刷新token的页面，刷到有为止！
-    if (code === 'TOKEN_EXPIRED' || code === 'TOKEN_INVALID' || code === 'REFRESH_FAILED') {
+    // ⭐ Token 相关错误：原地重试获取新 Token
+    if (code === 'TOKEN_EXPIRED' || code === 'TOKEN_INVALID' || code === 'REFRESH_FAILED' || code === 'NO_TOKEN') {
+        authStore.clearError()
+        // 原地重试，而不是跳转登录页
+        // Token 是通过 wx.login 获取的，与学校登录无关
+        retry()
+        return
+    }
+
+    // ⭐ 会话过期：需要重新登录学校账号
+    if (code === 'SCHOOL_SESSION_EXPIRED') {
         authStore.clearError()
         authStore.setPhase('idle')
-        uni.reLaunch({ url: '/pages/common/login/login' })
+        uni.navigateTo({ url: '/pages/common/login/index' })
         return
     }
 

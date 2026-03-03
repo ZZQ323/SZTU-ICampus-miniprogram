@@ -20,6 +20,7 @@
           <template v-if="userStore.isSchoolLoggedIn && userStore.userInfo">
             <text class="name">{{ userStore.userInfo.realName || userStore.userInfo.userId }}</text>
             <text class="hint">{{ userStore.userInfo.schoolName || '已登录' }}</text>
+            <t-button size="small" theme="light" @click="handleLogout">退出登录</t-button>
           </template>
           <!-- 未登录状态 -->
           <template v-else>
@@ -67,6 +68,15 @@
           <t-cell title="版本信息" note="v0.0.3" />
         </t-cell-group>
       </view>
+      <!-- 登出确认弹窗 -->
+      <t-dialog
+        v-model:visible="showLogoutConfirm"
+        title="退出登录"
+        content="确定要退出登录吗？"
+        confirm-btn="确定"
+        cancel-btn="取消"
+        @confirm="confirmLogout"
+      />
     </view>
   </PageLayout>
 </template>
@@ -75,6 +85,7 @@
 /**
  * 首页
  */
+import { computed,ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
 import { useUserStore } from '@/store/modules/user'
@@ -155,6 +166,30 @@ function goNotice() {
 function goCalendar() {
   uni.navigateTo({ url: '/pages/calendar/calendar' })
 }
+
+// 是否已登录
+const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
+const userInfo = computed(() => userStore.userInfo)
+
+// 显示登出确认
+const showLogoutConfirm = ref(false)
+
+onShow(async () => {
+  await ensure({ requireSchoolLogin: false })
+})
+
+// 处理登出
+function handleLogout() {
+  showLogoutConfirm.value = true
+}
+
+// 确认登出
+async function confirmLogout() {
+  showLogoutConfirm.value = false
+  await userStore.logoutSchool()
+  uni.showToast({ title: '已退出登录', icon: 'success' })
+}
+
 </script>
 
 <style lang="scss" scoped>
