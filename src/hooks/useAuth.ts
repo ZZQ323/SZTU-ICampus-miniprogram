@@ -110,7 +110,7 @@ export function useAuth() {
 
             if (result.state === 'need-login') {
                 // 有 token 但未登录学校，跳转登录页
-                uni.navigateTo({ url: '/pages/common/login/index' })
+                uni.navigateTo({ url: '/pages/common/login/login' })
                 return result
             }
         }
@@ -127,7 +127,7 @@ export function useAuth() {
             // token 获取成功后，再次检查学校登录状态
             const result = await checkAuth()
             if (result.state === 'need-login') {
-                uni.navigateTo({ url: '/pages/common/login/index' })
+                uni.navigateTo({ url: '/pages/common/login/login' })
             }
         } catch (e) {
             authState.value = 'error'
@@ -156,7 +156,7 @@ export function useAuth() {
         } catch (e) {
             // 刷新失败，跳转登录
             userStore.clearAll()
-            uni.reLaunch({ url: '/pages/common/login/index' })
+            uni.reLaunch({ url: '/pages/common/login/login' })
             return false
         }
     }

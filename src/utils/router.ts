@@ -17,7 +17,7 @@ const PUBLIC_PAGES = [
   '/pages/home/index',
   '/pages/notice/index',
   '/pages/calendar/index',
-  '/pages/common/login/index',
+  '/pages/common/login/login',
   '/pages/common/loading/index',
 ]
 
@@ -120,12 +120,12 @@ export async function checkTabAuth() {
     try {
       const status = await userStore.checkSchoolSession()
       if (!status.logined) {
-        uni.navigateTo({ url: '/pages/common/login/index' })
+        uni.navigateTo({ url: '/pages/common/login/login' })
         return false
       }
     } catch (e) {
       console.error('检查登录状态失败', e)
-      uni.navigateTo({ url: '/pages/common/login/index' })
+      uni.navigateTo({ url: '/pages/common/login/login' })
       return false
     }
   }
@@ -144,7 +144,7 @@ async function initTokenOrRedirect() {
     // token 获取成功，继续检查学校登录
     const status = await userStore.checkSchoolSession()
     if (!status.logined) {
-      uni.navigateTo({ url: '/pages/common/login/index' })
+      uni.navigateTo({ url: '/pages/common/login/login' })
     }
   } catch (e) {
     console.error('初始化 token 失败', e)
@@ -156,7 +156,7 @@ async function initTokenOrRedirect() {
  * 跳转到登录页
  */
 export function navigateToLogin() {
-  uni.navigateTo({ url: '/pages/common/login/index' })
+  uni.navigateTo({ url: '/pages/common/login/login' })
 }
 
 /**

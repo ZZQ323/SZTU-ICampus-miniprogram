@@ -314,7 +314,7 @@ function navigateBack() {
   if (pages.length > 1) {
     uni.navigateBack()
   } else {
-    uni.switchTab({ url: '/pages/home/index' })
+    uni.switchTab({ url: '/pages/home/home' })
   }
 }
 </script>

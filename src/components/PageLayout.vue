@@ -99,7 +99,7 @@
  */
 import { ref, computed } from 'vue'
 import { useAuthStore } from '@/store/modules/auth'
-import { useAuthGuard } from '@/composables/useAuthGuard'
+import { useAuthGuard } from '@/hooks/composables/useAuthGuard'
 
 const authStore = useAuthStore()
 const { retry } = useAuthGuard()
@@ -212,7 +212,7 @@ function handleConfirm() {
     if (code === 'SCHOOL_SESSION_EXPIRED') {
         authStore.clearError()
         authStore.setPhase('idle')
-        uni.navigateTo({ url: '/pages/common/login/index' })
+        uni.navigateTo({ url: '/pages/common/login/login' })
         return
     }
 

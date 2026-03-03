@@ -127,12 +127,14 @@ export interface HttpError {
  * ensure 方法的选项
  */
 export interface EnsureOptions {
-  /** 是否要求学校登录，默认 true */
+  /** 是否要求登录学校（默认 true） */
   requireSchoolLogin?: boolean
-  /** 失败时是否自动跳转登录页，默认 true */
+  /** 认证失败时是否跳转登录页（默认 true） */
   redirectOnFail?: boolean
-  /** 静默模式（不显示遮罩），默认 false */
+  /** 是否静默检查（不显示遮罩，默认 false） */
   silent?: boolean
+  /** ⭐ 新增：强制检查，忽略"短时间内跳过"逻辑（默认 false） */
+  forceCheck?: boolean
 }
 
 /**

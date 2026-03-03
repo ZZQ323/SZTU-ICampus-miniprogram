@@ -103,7 +103,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { onShow, onHide } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
-import { useAuthGuard } from '@/composables/useAuthGuard'
+import { useAuthGuard } from '@/hooks/composables/useAuthGuard'
 import { useSchedule } from '@/hooks/useSchedule'
 import { useSSE } from '@/hooks/useSSE'
 

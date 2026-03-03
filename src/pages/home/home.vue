@@ -20,7 +20,7 @@
           <template v-if="userStore.isSchoolLoggedIn && userStore.userInfo">
             <text class="name">{{ userStore.userInfo.realName || userStore.userInfo.userId }}</text>
             <text class="hint">{{ userStore.userInfo.schoolName || '已登录' }}</text>
-            <t-button size="small" theme="light" @click="handleLogout">退出登录</t-button>
+            
           </template>
           <!-- 未登录状态 -->
           <template v-else>
@@ -28,6 +28,9 @@
             <text class="hint">点击登录校园服务</text>
           </template>
         </view>
+        <template v-if="userStore.isSchoolLoggedIn && userStore.userInfo">
+          <t-button size="small" theme="light" @click="handleLogout">退出登录</t-button>
+        </template>
         <view class="arrow">
           <t-icon name="chevron-right" size="40rpx" color="#999" />
         </view>
@@ -89,7 +92,7 @@ import { computed,ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
 import { useUserStore } from '@/store/modules/user'
-import { useAuthGuard } from '@/composables/useAuthGuard'
+import { useAuthGuard } from '@/hooks/composables/useAuthGuard'
 
 const userStore = useUserStore()
 const { ensure } = useAuthGuard()
@@ -110,10 +113,14 @@ const { ensure } = useAuthGuard()
  * 3. 同步 userInfo（已登录则有值，未登录则为 null）
  * 4. 关闭遮罩，显示正确的用户信息
  */
+/**
+ * ⭐ 只保留一个 onShow
+ */
 onShow(async () => {
   await ensure({
-    requireSchoolLogin: false,  // 不强制登录（首页可公开访问）
-    silent: false               // ⭐ 显示遮罩，保护用户信息
+    requireSchoolLogin: false,  // 不强制登录
+    silent: false               // 显示遮罩
+    // forceCheck 默认 false，会自动跳过短时间内的重复检查
   })
 })
 

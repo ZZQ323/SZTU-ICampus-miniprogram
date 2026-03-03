@@ -32,7 +32,9 @@ const SLOW_TIMEOUT = 100 * 1000
 
 /** 需要长超时的接口列表 */
 const SLOW_APIS = [
+  
   '/auth/v1/session/init',
+  '/auth/v1/session/refresh',
   '/auth/v1/login',
   '/auth/v1/status',
   '/auth/v1/cookie/refresh',

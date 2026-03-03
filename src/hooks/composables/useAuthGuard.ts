@@ -17,6 +17,9 @@
  *   }
  * })
  * ```
+ * ⭐ 优化：添加"短时间内跳过检查"逻辑
+ * - 如果用户已登录且最近刚认证过（5秒内），跳过检查
+ * - 避免登录成功后返回首页又触发一次 API 请求
  */
 
 import { computed } from 'vue'
@@ -29,6 +32,9 @@ import type {
     LoginStatusVo
 } from '@/types/auth'
 
+/** 跳过检查的时间窗口（毫秒） */
+const SKIP_CHECK_WINDOW_MS = 5000  // 5秒内跳过重复检查
+
 /**
  * 认证守卫 Hook
  */
@@ -38,16 +44,9 @@ export function useAuthGuard() {
 
     // ==================== 计算属性 ====================
 
-    /** 是否认证就绪 */
     const isReady = computed(() => authStore.isReady)
-
-    /** 是否正在检查中 */
     const isChecking = computed(() => authStore.isChecking)
-
-    /** 当前错误 */
     const error = computed(() => authStore.error)
-
-    /** 是否已登录学校 */
     const isSchoolLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 
     // ==================== 核心方法 ====================
@@ -55,21 +54,38 @@ export function useAuthGuard() {
     /**
      * 确保认证就绪（核心方法）
      * 
-     * 完整流程：
-     * 1. 检查本地 Token → 无则获取新 Token
-     * 2. 验证 Token 有效性 → 无效则尝试刷新
-     * 3. 如果需要学校登录，检查学校登录状态
-     * 4. 根据结果决定是否跳转登录页
-     * 
-     * @param options 配置选项
-     * @returns 认证结果
+     * ⭐ 优化：如果已登录且最近刚认证过，跳过检查
      */
     async function ensure(options: EnsureOptions = {}): Promise<EnsureResult> {
         const {
             requireSchoolLogin = true,
             redirectOnFail = true,
-            silent = false
+            silent = false,
+            forceCheck = false  // ⭐ 新增：强制检查，忽略跳过逻辑
         } = options
+
+        // ⭐ 优化：短时间内跳过重复检查
+        if (!forceCheck && canSkipCheck()) {
+            console.log('[AuthGuard] 短时间内已认证，跳过检查')
+            
+            // 已登录，直接返回成功
+            if (userStore.isSchoolLoggedIn) {
+                authStore.setPhase('ready')
+                return { success: true }
+            }
+            
+            // 未登录但不要求登录，也返回成功
+            if (!requireSchoolLogin) {
+                authStore.setPhase('ready')
+                return { success: true, reason: 'NEED_LOGIN' }
+            }
+            
+            // 未登录且要求登录，跳转登录页
+            if (redirectOnFail) {
+                navigateToLogin()
+            }
+            return { success: false, reason: 'NEED_LOGIN' }
+        }
 
         // 如果已经在检查中，等待完成
         if (authStore.isChecking) {
@@ -86,6 +102,7 @@ export function useAuthGuard() {
                 try {
                     await userStore.initToken()
                 } catch (e: any) {
+                    userStore.clearSchoolSession()
                     return handleError('NO_TOKEN', '初始化失败，请重试', true, e)
                 }
             }
@@ -98,7 +115,6 @@ export function useAuthGuard() {
             const tokenValid = await validateToken()
 
             if (!tokenValid) {
-                // Token 无效，尝试刷新
                 if (!silent) {
                     authStore.setPhase('refreshing-token', '正在刷新登录状态...')
                 }
@@ -106,37 +122,41 @@ export function useAuthGuard() {
                 const refreshSuccess = await userStore.refreshTokenIfNeeded()
 
                 if (!refreshSuccess) {
-                    // 刷新失败，需要重新获取 Token
                     try {
                         await userStore.initToken()
                     } catch (e: any) {
+                        userStore.clearSchoolSession()
                         return handleError('REFRESH_FAILED', '身份验证失败，请重试', true, e)
                     }
                 }
             }
 
-            // ========== 第三步：检查学校登录状态（如果需要）==========
-            if (requireSchoolLogin) {
-                if (!silent) {
-                    authStore.setPhase('checking-school', '正在检查校园服务状态...')
+            // ========== 第三步：检查学校登录状态 ==========
+            if (!silent) {
+                authStore.setPhase('checking-school', '正在检查校园服务状态...')
+            }
+
+            let status: LoginStatusVo
+
+            try {
+                status = await userStore.checkSchoolSession()
+            } catch (e: any) {
+                userStore.clearSchoolSession()
+
+                if (isNetworkError(e)) {
+                    return handleError('NETWORK_ERROR', '网络连接失败，请检查网络', true, e)
                 }
-
-                let status: LoginStatusVo
-
-                try {
-                    status = await userStore.checkSchoolSession()
-                } catch (e: any) {
-                    // 检查状态失败，可能是网络问题
-                    if (isNetworkError(e)) {
-                        return handleError('NETWORK_ERROR', '网络连接失败，请检查网络', true, e)
-                    }
-                    if (isTimeoutError(e)) {
-                        return handleError('TIMEOUT', '请求超时，请稍后重试', true, e)
-                    }
-                    return handleError('SERVER_ERROR', '服务器错误，请稍后重试', true, e)
+                if (isTimeoutError(e)) {
+                    return handleError('TIMEOUT', '请求超时，请稍后重试', true, e)
                 }
+                return handleError('SERVER_ERROR', '服务器错误，请稍后重试', true, e)
+            }
 
-                if (!status.logined) {
+            // ========== 第四步：根据登录状态决定后续行为 ==========
+            if (!status.logined) {
+                userStore.clearSchoolSession()
+
+                if (requireSchoolLogin) {
                     authStore.setPhase('need-login')
 
                     if (redirectOnFail) {
@@ -148,22 +168,54 @@ export function useAuthGuard() {
                         reason: 'NEED_LOGIN',
                         status
                     }
+                } else {
+                    authStore.setPhase('ready')
+                    return {
+                        success: true,
+                        reason: 'NEED_LOGIN',
+                        status
+                    }
                 }
+            }
 
-                // Cookie 即将过期，静默刷新
-                if (status.cookieExpiringSoon) {
-                    silentRefreshSession()
-                }
+            // ========== 已登录：Cookie 即将过期时静默刷新 ==========
+            if (status.cookieExpiringSoon) {
+                silentRefreshSession()
             }
 
             // ========== 认证成功 ==========
             authStore.setPhase('ready')
 
-            return { success: true }
+            return { success: true, status }
 
         } catch (e: any) {
+            userStore.clearSchoolSession()
             return handleError('UNKNOWN', e.message || '发生未知错误', true, e)
         }
+    }
+
+    /**
+     * ⭐ 新增：判断是否可以跳过检查
+     * 
+     * 条件：
+     * 1. 最近 5 秒内已经完成过认证
+     * 2. 当前状态是 ready 或 idle
+     */
+    function canSkipCheck(): boolean {
+        const now = Date.now()
+        const lastAuth = authStore.lastAuthTime
+        
+        // 如果从未认证过，不能跳过
+        if (!lastAuth) return false
+        
+        // 如果当前有错误，不能跳过
+        if (authStore.hasError) return false
+        
+        // 如果超过时间窗口，不能跳过
+        if (now - lastAuth > SKIP_CHECK_WINDOW_MS) return false
+        
+        // 可以跳过
+        return true
     }
 
     /**
@@ -175,16 +227,15 @@ export function useAuthGuard() {
         }
 
         authStore.clearError()
-        return ensure()
+        return ensure({ forceCheck: true })  // ⭐ 重试时强制检查
     }
 
     /**
      * 强制刷新认证状态
-     * 用于用户手动触发刷新
      */
     async function refresh(): Promise<EnsureResult> {
         authStore.reset()
-        return ensure({ silent: false })
+        return ensure({ silent: false, forceCheck: true })  // ⭐ 强制检查
     }
 
     /**
@@ -198,35 +249,24 @@ export function useAuthGuard() {
 
     // ==================== 内部辅助方法 ====================
 
-    /**
-     * 验证 Token 有效性
-     */
     async function validateToken(): Promise<boolean> {
         try {
             const res = await userStore.checkTokenActive()
             return res === true
         } catch (e) {
-            // 401 表示 Token 无效
             if ((e as any)?.code === 401) {
                 return false
             }
-            // 其他错误暂时认为 Token 有效，让后续请求处理
             return true
         }
     }
 
-    /**
-     * 静默刷新会话
-     */
     function silentRefreshSession() {
         userStore.refreshSession()
             .then(() => console.log('[AuthGuard] 会话已静默刷新'))
             .catch(e => console.warn('[AuthGuard] 静默刷新失败', e))
     }
 
-    /**
-     * 处理错误
-     */
     function handleError(
         code: AuthErrorCode,
         message: string,
@@ -241,9 +281,6 @@ export function useAuthGuard() {
         }
     }
 
-    /**
-     * 等待认证完成
-     */
     function waitForAuthComplete(): Promise<EnsureResult> {
         return new Promise((resolve) => {
             const checkInterval = setInterval(() => {
@@ -266,7 +303,6 @@ export function useAuthGuard() {
                 }
             }, 100)
 
-            // 超时保护
             setTimeout(() => {
                 clearInterval(checkInterval)
                 resolve({ success: false, reason: 'ERROR' })
@@ -274,29 +310,19 @@ export function useAuthGuard() {
         })
     }
 
-    /**
-     * 跳转到登录页
-     */
     function navigateToLogin() {
         uni.navigateTo({
-            url: '/pages/common/login/index',
+            url: '/pages/common/login/login',
             fail: () => {
-                // 如果 navigateTo 失败（比如已经在登录页），使用 redirectTo
-                uni.redirectTo({ url: '/pages/common/login/index' })
+                uni.redirectTo({ url: '/pages/common/login/login' })
             }
         })
     }
 
-    /**
-     * 判断是否是网络错误
-     */
     function isNetworkError(e: any): boolean {
         return e?.code === 0 || e?.message?.includes('Network Error')
     }
 
-    /**
-     * 判断是否是超时错误
-     */
     function isTimeoutError(e: any): boolean {
         return e?.code === 504 || e?.code === 408 || e?.message?.includes('timeout')
     }
@@ -304,26 +330,21 @@ export function useAuthGuard() {
     // ==================== 导出 ====================
 
     return {
-        // 方法
         ensure,
         retry,
         refresh,
         logout,
 
-        // 计算属性
         isReady,
         isChecking,
         error,
         isSchoolLoggedIn,
 
-        // 直接暴露 store 的一些属性，方便使用
         phase: computed(() => authStore.phase),
         checkingMessage: computed(() => authStore.checkingMessage),
         showMask: computed(() => authStore.showMask),
         showErrorOverlay: computed(() => authStore.showErrorOverlay),
     }
 }
-
-// ==================== 导出类型 ====================
 
 export type { EnsureOptions, EnsureResult }
