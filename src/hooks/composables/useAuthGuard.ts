@@ -33,7 +33,7 @@ import type {
 } from '@/types/auth'
 
 /** 跳过检查的时间窗口（毫秒） */
-const SKIP_CHECK_WINDOW_MS = 5000  // 5秒内跳过重复检查
+const SKIP_CHECK_WINDOW_MS = 2*60*1000  // 2分钟内跳过重复检查
 
 /**
  * 认证守卫 Hook

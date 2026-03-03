@@ -81,6 +81,7 @@
         @confirm="confirmLogout"
       />
     </view>
+    <FloatingNotification/>
   </PageLayout>
 </template>
 
@@ -91,6 +92,7 @@
 import { computed,ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
+import FloatingNotification from "@/components/FloatingNotification.vue"
 import { useUserStore } from '@/store/modules/user'
 import { useAuthGuard } from '@/hooks/composables/useAuthGuard'
 

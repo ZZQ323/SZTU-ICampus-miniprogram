@@ -1,240 +1,159 @@
 /**
  * SSE 客户端
  * 
- * 文件路径: src/utils/sse.ts
+ * 文件：src/utils/sse.ts
  */
 
-import type { MessageHandler, ErrorHandler, ConnectionStatus } from '@/types/sse'
-import { getToken } from '@/utils/storage'  // 使用项目已有的 token 获取方法
+import { getToken } from './storage'
 
-// ==================== 内部类型 ====================
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 
-interface ChunkedRequestTask extends UniApp.RequestTask {
-  onChunkReceived: (callback: (res: { data: ArrayBuffer }) => void) => void
+type MessageHandler = (data: any) => void
+
+interface SseConnection {
+  task: UniApp.RequestTask | null
+  handler: MessageHandler
+  buffer: string
 }
 
-interface ConnectionInfo {
-  requestTask: ChunkedRequestTask
-  status: ConnectionStatus
-  reconnectAttempts: number
-}
+class SseClient {
+  private connections: Map<string, SseConnection> = new Map()
 
-interface SSEConfig {
-  baseUrl: string
-  maxReconnectAttempts: number
-  reconnectInterval: number
-  reconnectBackoffMultiplier: number
-}
+  /**
+   * 订阅 SSE 流
+   */
+  subscribe(topic: string, onMessage: MessageHandler): void {
+    // 如果已存在，先取消
+    if (this.connections.has(topic)) {
+      this.unsubscribe(topic)
+    }
 
-// ==================== 配置 ====================
-
-const config: SSEConfig = {
-  baseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
-  maxReconnectAttempts: 5,
-  reconnectInterval: 3000,
-  reconnectBackoffMultiplier: 1.5
-}
-
-// ==================== SSE Client Class ====================
-
-class SSEClient {
-  private connections = new Map<string, ConnectionInfo>()
-  private handlers = new Map<string, MessageHandler>()
-  private errorHandlers = new Map<string, ErrorHandler>()
-  private statusCallbacks = new Map<string, (status: ConnectionStatus) => void>()
-  
-  /** 设置 API 基础路径 */
-  setBaseUrl(url: string): void {
-    config.baseUrl = url
-  }
-  
-  /** 订阅指定 topic */
-  subscribe(
-    topic: string,
-    onMessage: MessageHandler,
-    onError?: ErrorHandler,
-    onStatusChange?: (status: ConnectionStatus) => void
-  ): void {
-    // 使用项目的 getToken 方法
     const token = getToken()
-    
-    console.log('[SSE] subscribe - token:', token ? `${token.substring(0, 20)}...` : '未获取')
-    
     if (!token) {
-      console.error('[SSE] Token 未获取到')
-      onError?.({ code: 'NO_TOKEN', message: '未登录' })
+      console.warn('[SSE] 无 Token，无法订阅')
       return
     }
-    
-    this.unsubscribe(topic)
-    
-    this.handlers.set(topic, onMessage)
-    if (onError) this.errorHandlers.set(topic, onError)
-    if (onStatusChange) this.statusCallbacks.set(topic, onStatusChange)
-    
-    this.connect(topic, token)
-  }
-  
-  /** 建立连接 */
-  private connect(topic: string, token: string, reconnectAttempt = 0): void {
-    this.updateStatus(topic, 'connecting')
-    
-    let buffer = ''
-    const url = `${config.baseUrl}/stream/${topic}`
-    
+
+    const url = `${BASE_URL}/stream/${topic}`
     console.log('[SSE] 正在连接:', url)
-    
-    const requestTask = uni.request({
+
+    const connection: SseConnection = {
+      task: null,
+      handler: onMessage,
+      buffer: ''
+    }
+
+    // 使用 uni.request 实现 SSE（小程序不支持 EventSource）
+    const task = uni.request({
       url,
       method: 'GET',
-      // @ts-ignore - enableChunked 是小程序支持的参数
-      enableChunked: true,
       header: {
         'Authorization': `Bearer ${token}`,
         'Accept': 'text/event-stream',
         'Cache-Control': 'no-cache'
       },
-      success: () => {},
-      fail: (err) => {
-        console.error(`[SSE] 连接失败 [${topic}]:`, err)
-        this.handleError(topic, { code: 'CONNECT_FAIL', message: err.errMsg || '连接失败' }, reconnectAttempt)
+      enableChunked: true, // 启用分块传输
+      success: () => {
+        console.log('[SSE] 连接关闭:', topic)
       },
-      complete: () => {
-        const connInfo = this.connections.get(topic)
-        if (connInfo && connInfo.status !== 'disconnected') {
-          this.updateStatus(topic, 'disconnected')
-          this.scheduleReconnect(topic, token, reconnectAttempt)
-        }
+      fail: (err) => {
+        console.error('[SSE] 连接失败:', topic, err)
       }
-    }) as unknown as ChunkedRequestTask
-    
-    if (typeof requestTask.onChunkReceived === 'function') {
-      requestTask.onChunkReceived((res) => {
-        const connInfo = this.connections.get(topic)
-        if (connInfo && connInfo.status === 'connecting') {
-          this.updateStatus(topic, 'connected')
-          connInfo.reconnectAttempts = 0
-          console.log('[SSE] 连接成功:', topic)
-        }
+    })
+
+    // 监听数据块
+    task.onChunkReceived?.((res) => {
+      try {
+        // 解码数据
+        const text = this.decodeChunk(res.data)
+        connection.buffer += text
         
-        buffer += this.arrayBufferToString(res.data)
-        
-        this.parseSSE(buffer).forEach(event => {
-          if (event.data) this.handleMessage(topic, event.data, event.event)
-        })
-        
-        const lastIdx = buffer.lastIndexOf('\n\n')
-        if (lastIdx !== -1) buffer = buffer.substring(lastIdx + 2)
-      })
-    } else {
-      console.warn('[SSE] 当前环境不支持 onChunkReceived')
-      this.handleError(topic, { code: 'NOT_SUPPORTED', message: '当前环境不支持流式传输' }, reconnectAttempt)
-      return
-    }
-    
-    this.connections.set(topic, { requestTask, status: 'connecting', reconnectAttempts: reconnectAttempt })
-  }
-  
-  /** 处理消息 */
-  private handleMessage(topic: string, data: string, eventType: string): void {
-    const handler = this.handlers.get(topic)
-    if (!handler) return
-    
-    try {
-      const parsed = JSON.parse(data)
-      
-      if (parsed.type === 'AUTH_REQUIRED') {
-        this.errorHandlers.get(topic)?.({ code: 'AUTH_REQUIRED', message: parsed.message || '请重新登录' })
-        return
+        // 解析 SSE 事件
+        this.parseEvents(connection)
+      } catch (e) {
+        console.error('[SSE] 解析数据失败:', e)
       }
-      
-      if (parsed.type === 'HEARTBEAT') return
-      
-      handler(parsed.data || parsed, eventType)
-    } catch {
-      handler(data, eventType)
-    }
+    })
+
+    connection.task = task
+    this.connections.set(topic, connection)
   }
-  
-  /** 处理错误 */
-  private handleError(topic: string, error: { code: string; message: string }, reconnectAttempt: number): void {
-    this.updateStatus(topic, 'error')
-    this.errorHandlers.get(topic)?.(error)
-    
-    if (error.code !== 'NOT_SUPPORTED') {
-      const token = getToken()
-      if (token) this.scheduleReconnect(topic, token, reconnectAttempt)
-    }
-  }
-  
-  /** 计划重连 */
-  private scheduleReconnect(topic: string, token: string, currentAttempt: number): void {
-    if (currentAttempt >= config.maxReconnectAttempts) {
-      this.errorHandlers.get(topic)?.({ code: 'MAX_RECONNECT', message: '连接失败，请检查网络后重试' })
-      return
-    }
-    
-    const delay = config.reconnectInterval * Math.pow(config.reconnectBackoffMultiplier, currentAttempt)
-    console.log(`[SSE] ${delay}ms 后重连 [${topic}], 第 ${currentAttempt + 1} 次`)
-    
-    setTimeout(() => {
-      const connInfo = this.connections.get(topic)
-      if (connInfo && connInfo.status !== 'disconnected') {
-        this.connect(topic, token, currentAttempt + 1)
-      }
-    }, delay)
-  }
-  
-  /** 取消订阅 */
+
+  /**
+   * 取消订阅
+   */
   unsubscribe(topic: string): void {
-    const connInfo = this.connections.get(topic)
-    if (connInfo) {
-      connInfo.status = 'disconnected'
-      try { connInfo.requestTask.abort() } catch {}
+    const connection = this.connections.get(topic)
+    if (connection) {
+      connection.task?.abort()
       this.connections.delete(topic)
+      console.log('[SSE] 已取消订阅:', topic)
     }
-    this.handlers.delete(topic)
-    this.errorHandlers.delete(topic)
-    this.statusCallbacks.delete(topic)
   }
-  
-  /** 取消所有订阅 */
+
+  /**
+   * 取消所有订阅
+   */
   unsubscribeAll(): void {
     for (const topic of this.connections.keys()) {
       this.unsubscribe(topic)
     }
   }
-  
-  /** 获取连接状态 */
-  getStatus(topic: string): ConnectionStatus {
-    return this.connections.get(topic)?.status || 'disconnected'
+
+  /**
+   * 解码数据块
+   */
+  private decodeChunk(data: ArrayBuffer): string {
+    // @ts-ignore
+    const decoder = new TextDecoder('utf-8')
+    return decoder.decode(data)
   }
-  
-  private updateStatus(topic: string, status: ConnectionStatus): void {
-    const connInfo = this.connections.get(topic)
-    if (connInfo) connInfo.status = status
-    this.statusCallbacks.get(topic)?.(status)
-  }
-  
-  private parseSSE(text: string): Array<{ event: string; data: string | null }> {
-    return text.split('\n\n').filter(b => b.trim()).map(block => {
-      const event = { event: 'message', data: null as string | null }
-      block.split('\n').forEach(line => {
-        if (line.startsWith('event:')) event.event = line.substring(6).trim()
-        else if (line.startsWith('data:')) event.data = line.substring(5).trim()
-      })
-      return event
-    }).filter(e => e.data !== null)
-  }
-  
-  private arrayBufferToString(buffer: ArrayBuffer): string {
-    return typeof TextDecoder !== 'undefined'
-      ? new TextDecoder('utf-8').decode(buffer)
-      : Array.from(new Uint8Array(buffer)).map(b => String.fromCharCode(b)).join('')
+
+  /**
+   * 解析 SSE 事件
+   */
+  private parseEvents(connection: SseConnection): void {
+    const lines = connection.buffer.split('\n')
+    
+    let eventType = ''
+    let eventData = ''
+    
+    const processedLines: string[] = []
+    
+    for (const line of lines) {
+      if (line.startsWith('event:')) {
+        eventType = line.slice(6).trim()
+      } else if (line.startsWith('data:')) {
+        eventData = line.slice(5).trim()
+      } else if (line === '') {
+        // 空行表示事件结束
+        if (eventData) {
+          try {
+            const data = JSON.parse(eventData)
+            connection.handler({
+              type: eventType || data.type,
+              data: data.data || data,
+              timestamp: data.timestamp
+            })
+          } catch (e) {
+            // 非 JSON 数据
+            connection.handler({
+              type: eventType,
+              data: eventData
+            })
+          }
+        }
+        eventType = ''
+        eventData = ''
+      } else {
+        // 未完成的行，保留到 buffer
+        processedLines.push(line)
+      }
+    }
+    
+    // 更新 buffer 为未处理完的内容
+    connection.buffer = processedLines.join('\n')
   }
 }
 
-// ==================== 导出单例 ====================
-
-export const sseClient = new SSEClient()
-export default sseClient
+export const sseClient = new SseClient()
