@@ -45,9 +45,9 @@ export function navigateToError(message: string, redirect?: string) {
 
 /** TabBar 页面列表 */
 export const TAB_BAR_PAGES = [
-    '/pages/home/index',
-    '/pages/schedule/index',
-    '/pages/notice/index',
+    '/pages/home/home',
+    '/pages/schedule/schedule',
+    '/pages/notice/notice',
 ]
 
 /**

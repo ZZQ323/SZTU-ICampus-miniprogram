@@ -33,7 +33,7 @@ import type {
 } from '@/types/auth'
 
 /** 跳过检查的时间窗口（毫秒） */
-const SKIP_CHECK_WINDOW_MS = 2*60*1000  // 2分钟内跳过重复检查
+const SKIP_CHECK_WINDOW_MS = 2 * 60 * 1000  // 2分钟内跳过重复检查
 
 /**
  * 认证守卫 Hook
@@ -65,21 +65,27 @@ export function useAuthGuard() {
         } = options
 
         // ⭐ 优化：短时间内跳过重复检查
-        if (!forceCheck && canSkipCheck()) {
+        if (!forceCheck && canSkipCheck(requireSchoolLogin)) {
             console.log('[AuthGuard] 短时间内已认证，跳过检查')
-            
+
             // 已登录，直接返回成功
             if (userStore.isSchoolLoggedIn) {
                 authStore.setPhase('ready')
                 return { success: true }
             }
-            
+
             // 未登录但不要求登录，也返回成功
             if (!requireSchoolLogin) {
                 authStore.setPhase('ready')
                 return { success: true, reason: 'NEED_LOGIN' }
             }
-            
+
+            // ⭐ 这里不应该到达，因为 canSkipCheck 会返回 false
+            // 但为了安全，还是处理一下
+            if (redirectOnFail) {
+                navigateToLogin()
+            }
+
             // 未登录且要求登录，跳转登录页
             if (redirectOnFail) {
                 navigateToLogin()
@@ -195,26 +201,42 @@ export function useAuthGuard() {
     }
 
     /**
-     * ⭐ 新增：判断是否可以跳过检查
+     * ⭐ 修复：判断是否可以跳过检查
      * 
-     * 条件：
-     * 1. 最近 5 秒内已经完成过认证
-     * 2. 当前状态是 ready 或 idle
+     * 条件必须同时满足：
+     * 1. 最近时间窗口内已完成认证
+     * 2. 当前没有错误
+     * 3. 如果要求登录，则必须已登录；如果不要求登录，则任何状态都可以
      */
-    function canSkipCheck(): boolean {
+    function canSkipCheck(requireSchoolLogin: boolean = true): boolean {
         const now = Date.now()
         const lastAuth = authStore.lastAuthTime
-        
-        // 如果从未认证过，不能跳过
-        if (!lastAuth) return false
-        
-        // 如果当前有错误，不能跳过
-        if (authStore.hasError) return false
-        
-        // 如果超过时间窗口，不能跳过
-        if (now - lastAuth > SKIP_CHECK_WINDOW_MS) return false
-        
-        // 可以跳过
+
+        // 从未认证过，不能跳过
+        if (!lastAuth) {
+            console.log('[AuthGuard] canSkipCheck: 从未认证过')
+            return false
+        }
+
+        // 当前有错误，不能跳过
+        if (authStore.hasError) {
+            console.log('[AuthGuard] canSkipCheck: 当前有错误')
+            return false
+        }
+
+        // 超过时间窗口，不能跳过
+        if (now - lastAuth > SKIP_CHECK_WINDOW_MS) {
+            console.log('[AuthGuard] canSkipCheck: 超过时间窗口')
+            return false
+        }
+
+        // ⭐ 关键修复：如果要求登录，必须确保已登录状态
+        if (requireSchoolLogin && !userStore.isSchoolLoggedIn) {
+            console.log('[AuthGuard] canSkipCheck: 要求登录但未登录，不能跳过')
+            return false
+        }
+
+        console.log('[AuthGuard] canSkipCheck: 可以跳过')
         return true
     }
 

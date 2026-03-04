@@ -1,7 +1,7 @@
 <!--
   课表页面（重构版）
   
-  文件：src/pages/schedule/index.vue
+  文件：src/pages/schedule/schedule.vue
   
   改进点：
   1. 使用 useAuthGuard 进行认证检查

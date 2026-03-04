@@ -8,17 +8,13 @@ import { useUserStore } from '@/store/modules/user'
 
 /** 需要登录学校的页面 */
 const AUTH_PAGES = [
-  '/pages/schedule/index',
-  '/pages/profile/index',
+  '/pages/schedule/schedule',
+  '/pages/notice/notice',
 ]
 
 /** 公开页面（无需任何认证） */
 const PUBLIC_PAGES = [
-  '/pages/home/index',
-  '/pages/notice/index',
-  '/pages/calendar/index',
   '/pages/common/login/login',
-  '/pages/common/loading/index',
 ]
 
 /**

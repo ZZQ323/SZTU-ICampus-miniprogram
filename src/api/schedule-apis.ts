@@ -17,7 +17,7 @@ export const scheduleApi = {
      * 获取课表
      */
     getCourseTable: (query?: CrouseTableQuery) =>
-        request.get<CourseTableData>('/acdm/v1/schedule', { params: query }),
+        request.post<CourseTableData>('/acdm/v1/schedule', { params: query }),
 
     /**
      * 初始化教务系统 Cookie（懒初始化）

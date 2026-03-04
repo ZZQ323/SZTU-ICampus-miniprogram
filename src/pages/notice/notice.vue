@@ -95,7 +95,8 @@ const mockData: AnnouncementMeta[] = [
 // ==================== 方法 ====================
 
 /** 获取公告列表 */
-async function fetchList(reset = false) {
+async function fetchList(reset = false) 
+{
   if (!isLoggedIn.value) {
     // 未登录，显示 mock 数据
     list.value = filterByCategory(mockData)

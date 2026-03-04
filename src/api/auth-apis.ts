@@ -114,5 +114,5 @@ export const academicApi = {
    * 获取课表
    */
   getSchedule: (params?: { week?: number; semester?: string }) =>
-    request.get<any>('/acdm/v1/schedule', { params }),
+    request.post<any>('/acdm/v1/schedule', { params }),
 }

@@ -183,10 +183,6 @@ const userInfo = computed(() => userStore.userInfo)
 // 显示登出确认
 const showLogoutConfirm = ref(false)
 
-onShow(async () => {
-  await ensure({ requireSchoolLogin: false })
-})
-
 // 处理登出
 function handleLogout() {
   showLogoutConfirm.value = true
