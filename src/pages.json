@@ -24,6 +24,13 @@
       }
     },
     {
+      "path": "pages/notice/detail",
+      "style": {
+        "navigationBarTitleText": "公告详情",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
       "path": "pages/schedule/schedule",
       "style": {
         "navigationBarTitleText": "课表查询"

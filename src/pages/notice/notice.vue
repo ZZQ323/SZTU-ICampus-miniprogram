@@ -1,8 +1,13 @@
 <script setup lang="ts">
 /**
- * 公告列表页
+ * 公告列表页（优化版）
  * 
  * 文件：src/pages/notice/notice.vue
+ * 
+ * 修改内容：
+ * 1. 搜索框始终可见，提升发现性
+ * 2. 分类标签移到搜索框下方
+ * 3. 优化搜索交互
  */
 import { ref, computed } from 'vue'
 import { onShow, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
@@ -12,7 +17,6 @@ import { useAnnouncement } from '@/hooks/useAnnouncement'
 import { announcementApi } from '@/api/announcement-apis'
 import type { AnnouncementMeta } from '@/types/announcement'
 import { CATEGORY_LIST } from '@/types/announcement'
-
 // ==================== Store ====================
 
 const userStore = useUserStore()
@@ -33,8 +37,8 @@ const activeCategory = ref('')
 /** 搜索关键词 */
 const searchKeyword = ref('')
 
-/** 是否显示搜索框 */
-const showSearch = ref(false)
+/** 是否处于搜索模式 */
+const isSearchMode = ref(false)
 
 // ==================== 计算属性 ====================
 
@@ -95,8 +99,7 @@ const mockData: AnnouncementMeta[] = [
 // ==================== 方法 ====================
 
 /** 获取公告列表 */
-async function fetchList(reset = false) 
-{
+async function fetchList(reset = false) {
   if (!isLoggedIn.value) {
     // 未登录，显示 mock 数据
     list.value = filterByCategory(mockData)
@@ -106,6 +109,7 @@ async function fetchList(reset = false)
   if (reset) {
     page.value = 1
     hasMore.value = true
+    isSearchMode.value = false
   }
 
   if (!hasMore.value && !reset) return
@@ -153,29 +157,45 @@ function filterByCategory(data: AnnouncementMeta[]): AnnouncementMeta[] {
 /** 切换分类 */
 function handleCategoryChange(category: string) {
   activeCategory.value = category
+  // 清空搜索关键词
+  searchKeyword.value = ''
+  isSearchMode.value = false
   fetchList(true)
 }
 
+function onSearchInputChanged(context){
+  searchKeyword.value = context.value;
+}
+
 /** 搜索 */
-async function handleSearch() {
-  if (!searchKeyword.value.trim()) {
+async function handleSearch(e) {
+  console.log("开始公文搜索：",e);
+  const keyword = searchKeyword.value.trim()
+
+  if (!keyword) {
+    // 空关键词，恢复正常列表
+    isSearchMode.value = false
     fetchList(true)
     return
   }
 
   if (!isLoggedIn.value) {
-    // 未登录，本地搜索 mock 数据
-    const keyword = searchKeyword.value.toLowerCase()
-    list.value = mockData.filter(item =>
-      item.title.toLowerCase().includes(keyword) ||
-      item.department.toLowerCase().includes(keyword)
-    )
-    return
+    // 未登录，不提供功能
+    // const lowerKeyword = keyword.toLowerCase()
+    // list.value = mockData.filter(item =>
+    //   item.title.toLowerCase().includes(lowerKeyword) ||
+    //   item.department.toLowerCase().includes(lowerKeyword)
+    // )
+    // isSearchMode.value = true
+    // hasMore.value = false
+    // return
   }
 
   loading.value = true
+  isSearchMode.value = true
+
   try {
-    const result = await announcementApi.search(searchKeyword.value, 50)
+    const result = await announcementApi.search(keyword, 50)
     list.value = result
     hasMore.value = false
   } catch (e) {
@@ -186,6 +206,13 @@ async function handleSearch() {
   }
 }
 
+/** 清空搜索 */
+function handleClearSearch() {
+  searchKeyword.value = ''
+  isSearchMode.value = false
+  fetchList(true)
+}
+
 /** 点击公告项 */
 function handleItemClick(item: AnnouncementMeta) {
   markItemAsRead(item.id)
@@ -194,26 +221,21 @@ function handleItemClick(item: AnnouncementMeta) {
   })
 }
 
-/** 切换搜索框显示 */
-function toggleSearch() {
-  showSearch.value = !showSearch.value
-  if (!showSearch.value) {
-    searchKeyword.value = ''
-    fetchList(true)
-  }
-}
-
 /** 刷新 */
 async function handleRefresh() {
   refreshing.value = true
+  searchKeyword.value = ''
+  isSearchMode.value = false
   await fetchList(true)
 }
 
 // ==================== 生命周期 ====================
 
 onShow(() => {
-  // 每次显示时刷新
-  fetchList(true)
+  // 每次显示时刷新（如果不在搜索模式）
+  if (!isSearchMode.value) {
+    fetchList(true)
+  }
 
   // 已登录则订阅 SSE
   if (isLoggedIn.value) {
@@ -222,7 +244,7 @@ onShow(() => {
 })
 
 onReachBottom(() => {
-  if (!loading.value && hasMore.value) {
+  if (!loading.value && hasMore.value && !isSearchMode.value) {
     page.value++
     fetchList()
   }
@@ -238,31 +260,38 @@ onPullDownRefresh(() => {
 <template>
   <PageLayout>
     <view class="notice-page">
-      <!-- 顶部操作栏 -->
-      <view class="header">
-        <!-- 分类标签 -->
-        <scroll-view v-if="!showSearch" scroll-x class="category-scroll">
-          <view class="category-list">
-            <view v-for="cat in CATEGORY_LIST" :key="cat.code"
-              :class="['category-item', { active: activeCategory === cat.code }]"
-              @click="handleCategoryChange(cat.code)">
-              {{ cat.name }}
-            </view>
-          </view>
-        </scroll-view>
-
-        <!-- 搜索框 -->
-        <view v-else class="search-box">
-          <t-input v-model="searchKeyword" placeholder="搜索公告标题" clearable @confirm="handleSearch">
-            <template #suffix-icon>
-              <t-icon name="search" @click="handleSearch" />
+      <!-- 顶部搜索框（始终可见） -->
+      <view class="search-header">
+        <view class="search-box">
+          <t-input :value="searchKeyword" placeholder="搜索公告标题..." clearable @change="onSearchInputChanged" @confirm="handleSearch"
+            @clear="handleClearSearch">
+            <template #prefix-icon>
+              <t-icon name="search" size="40rpx" />
             </template>
           </t-input>
         </view>
-
         <!-- 搜索按钮 -->
-        <view class="search-btn" @click="toggleSearch">
-          <t-icon :name="showSearch ? 'close' : 'search'" size="44rpx" />
+        <t-button class="search-btn" @click="handleSearch">
+          <text>搜索</text>
+        </t-button>
+      </view>
+
+      <!-- 分类标签 -->
+      <scroll-view scroll-x class="category-scroll" :show-scrollbar="false">
+        <view class="category-list">
+          <view v-for="cat in CATEGORY_LIST" :key="cat.code"
+            :class="['category-item', { active: activeCategory === cat.code }]" @click="handleCategoryChange(cat.code)">
+            {{ cat.name }}
+          </view>
+        </view>
+      </scroll-view>
+
+      <!-- 搜索模式提示 -->
+      <view v-if="isSearchMode" class="search-mode-tip">
+        <text>搜索结果：{{ list.length }} 条</text>
+        <view class="clear-search" @click="handleClearSearch">
+          <t-icon name="close" size="28rpx" />
+          <text>清除搜索</text>
         </view>
       </view>
 
@@ -302,12 +331,12 @@ onPullDownRefresh(() => {
         </view>
 
         <!-- 没有更多 -->
-        <view v-if="!hasMore && list.length > 0" class="no-more">
+        <view v-if="!hasMore && list.length > 0 && !isSearchMode" class="no-more">
           —— 没有更多了 ——
         </view>
 
         <!-- 空状态 -->
-        <t-empty v-if="!loading && list.length === 0" description="暂无公告" />
+        <t-empty v-if="!loading && list.length === 0" :description="isSearchMode ? '未找到相关公告' : '暂无公告'" />
       </view>
     </view>
   </PageLayout>
@@ -319,25 +348,37 @@ onPullDownRefresh(() => {
   background: #f5f5f5;
 }
 
-// 顶部操作栏
-.header {
+// 搜索头部
+.search-header {
   display: flex;
   align-items: center;
   padding: 20rpx 24rpx;
   background: #fff;
-  border-bottom: 1rpx solid #eee;
-  position: sticky;
-  top: 0;
-  z-index: 100;
+  gap: 16rpx;
 }
 
-.category-scroll {
+.search-box {
   flex: 1;
+}
+
+.search-btn {
+  padding: 16rpx 24rpx;
+  background: #0052d9;
+  color: #fff;
+  border-radius: 8rpx;
+  font-size: 26rpx;
+}
+
+// 分类滚动
+.category-scroll {
+  background: #fff;
+  border-bottom: 1rpx solid #eee;
   white-space: nowrap;
 }
 
 .category-list {
   display: inline-flex;
+  padding: 16rpx 24rpx;
   gap: 16rpx;
 }
 
@@ -356,13 +397,22 @@ onPullDownRefresh(() => {
   }
 }
 
-.search-box {
-  flex: 1;
+// 搜索模式提示
+.search-mode-tip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 24rpx;
+  background: #e6f4ff;
+  font-size: 24rpx;
+  color: #0052d9;
 }
 
-.search-btn {
-  padding: 12rpx;
-  margin-left: 16rpx;
+.clear-search {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  color: #666;
 }
 
 // 未登录提示
