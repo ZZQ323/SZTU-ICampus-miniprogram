@@ -1,25 +1,34 @@
+<!--
+  公告列表页（改进版 - 等待认证完成后才显示内容）
+  
+  文件：src/pages/notice/notice.vue
+  
+  改动点：
+  1. 使用 v-if="isReady" 控制内容显示
+  2. 认证检查完成前显示遮罩
+  3. 不强制登录，但需要等待认证状态确定
+-->
+
 <script setup lang="ts">
 /**
- * 公告列表页（优化版）
+ * 公告列表页（改进版）
  * 
- * 文件：src/pages/notice/notice.vue
- * 
- * 修改内容：
- * 1. 搜索框始终可见，提升发现性
- * 2. 分类标签移到搜索框下方
- * 3. 优化搜索交互
+ * 使用 isReady 控制内容显示
  */
 import { ref, computed } from 'vue'
 import { onShow, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
 import { useUserStore } from '@/store/modules/user'
+import { useAuthGuard } from '@/hooks/composables/useAuthGuard'
 import { useAnnouncement } from '@/hooks/useAnnouncement'
 import { announcementApi } from '@/api/announcement-apis'
 import type { AnnouncementMeta } from '@/types/announcement'
 import { CATEGORY_LIST } from '@/types/announcement'
-// ==================== Store ====================
+
+// ==================== Hooks ====================
 
 const userStore = useUserStore()
+const { ensure, isReady } = useAuthGuard()
 const { isRead, markAsRead, markItemAsRead, subscribeSSE } = useAnnouncement()
 
 // ==================== 状态 ====================
@@ -30,22 +39,15 @@ const list = ref<AnnouncementMeta[]>([])
 const page = ref(1)
 const hasMore = ref(true)
 const latestId = ref('0')
-
-/** 当前选中的分类 */
 const activeCategory = ref('')
-
-/** 搜索关键词 */
 const searchKeyword = ref('')
-
-/** 是否处于搜索模式 */
 const isSearchMode = ref(false)
 
 // ==================== 计算属性 ====================
 
-/** 是否已登录 */
 const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 
-// ==================== Mock 数据（未登录时显示） ====================
+// ==================== Mock 数据 ====================
 
 const mockData: AnnouncementMeta[] = [
   {
@@ -95,13 +97,10 @@ const mockData: AnnouncementMeta[] = [
   },
 ]
 
-
 // ==================== 方法 ====================
 
-/** 获取公告列表 */
 async function fetchList(reset = false) {
   if (!isLoggedIn.value) {
-    // 未登录，显示 mock 数据
     list.value = filterByCategory(mockData)
     return
   }
@@ -134,7 +133,6 @@ async function fetchList(reset = false) {
     latestId.value = result.latestId
     hasMore.value = result.hasMore
 
-    // 首次加载完成，标记为已读
     if (reset && result.list.length > 0) {
       markAsRead(result.latestId)
     }
@@ -148,47 +146,33 @@ async function fetchList(reset = false) {
   }
 }
 
-/** 按分类筛选（用于 mock 数据） */
 function filterByCategory(data: AnnouncementMeta[]): AnnouncementMeta[] {
   if (!activeCategory.value) return data
   return data.filter(item => item.category === activeCategory.value)
 }
 
-/** 切换分类 */
 function handleCategoryChange(category: string) {
   activeCategory.value = category
-  // 清空搜索关键词
   searchKeyword.value = ''
   isSearchMode.value = false
   fetchList(true)
 }
 
-function onSearchInputChanged(context){
-  searchKeyword.value = context.value;
+function onSearchInputChanged(context: { value: string }) {
+  searchKeyword.value = context.value
 }
 
-/** 搜索 */
-async function handleSearch(e) {
-  console.log("开始公文搜索：",e);
+async function handleSearch() {
   const keyword = searchKeyword.value.trim()
 
   if (!keyword) {
-    // 空关键词，恢复正常列表
     isSearchMode.value = false
     fetchList(true)
     return
   }
 
   if (!isLoggedIn.value) {
-    // 未登录，不提供功能
-    // const lowerKeyword = keyword.toLowerCase()
-    // list.value = mockData.filter(item =>
-    //   item.title.toLowerCase().includes(lowerKeyword) ||
-    //   item.department.toLowerCase().includes(lowerKeyword)
-    // )
-    // isSearchMode.value = true
-    // hasMore.value = false
-    // return
+    return
   }
 
   loading.value = true
@@ -206,14 +190,12 @@ async function handleSearch(e) {
   }
 }
 
-/** 清空搜索 */
 function handleClearSearch() {
   searchKeyword.value = ''
   isSearchMode.value = false
   fetchList(true)
 }
 
-/** 点击公告项 */
 function handleItemClick(item: AnnouncementMeta) {
   markItemAsRead(item.id)
   uni.navigateTo({
@@ -221,7 +203,6 @@ function handleItemClick(item: AnnouncementMeta) {
   })
 }
 
-/** 刷新 */
 async function handleRefresh() {
   refreshing.value = true
   searchKeyword.value = ''
@@ -231,8 +212,14 @@ async function handleRefresh() {
 
 // ==================== 生命周期 ====================
 
-onShow(() => {
-  // 每次显示时刷新（如果不在搜索模式）
+onShow(async () => {
+  // ⭐ 改进：等待认证检查完成
+  // 不强制登录，但需要等待状态确定
+  const result = await ensure({
+    requireSchoolLogin: false
+  })
+
+  // 认证检查完成后加载数据
   if (!isSearchMode.value) {
     fetchList(true)
   }
@@ -259,18 +246,18 @@ onPullDownRefresh(() => {
 
 <template>
   <PageLayout>
-    <view class="notice-page">
-      <!-- 顶部搜索框（始终可见） -->
+    <!-- ⭐ 关键：只有认证就绪后才显示页面内容 -->
+    <view v-if="isReady" class="notice-page">
+      <!-- 顶部搜索框 -->
       <view class="search-header">
         <view class="search-box">
-          <t-input :value="searchKeyword" placeholder="搜索公告标题..." clearable @change="onSearchInputChanged" @confirm="handleSearch"
-            @clear="handleClearSearch">
+          <t-input :value="searchKeyword" placeholder="搜索公告标题..." clearable @change="onSearchInputChanged"
+            @confirm="handleSearch" @clear="handleClearSearch">
             <template #prefix-icon>
               <t-icon name="search" size="40rpx" />
             </template>
           </t-input>
         </view>
-        <!-- 搜索按钮 -->
         <t-button class="search-btn" @click="handleSearch">
           <text>搜索</text>
         </t-button>
@@ -348,7 +335,6 @@ onPullDownRefresh(() => {
   background: #f5f5f5;
 }
 
-// 搜索头部
 .search-header {
   display: flex;
   align-items: center;
@@ -369,7 +355,6 @@ onPullDownRefresh(() => {
   font-size: 26rpx;
 }
 
-// 分类滚动
 .category-scroll {
   background: #fff;
   border-bottom: 1rpx solid #eee;
@@ -397,7 +382,6 @@ onPullDownRefresh(() => {
   }
 }
 
-// 搜索模式提示
 .search-mode-tip {
   display: flex;
   align-items: center;
@@ -415,7 +399,6 @@ onPullDownRefresh(() => {
   color: #666;
 }
 
-// 未登录提示
 .login-tip {
   display: flex;
   align-items: center;
@@ -427,7 +410,6 @@ onPullDownRefresh(() => {
   font-size: 24rpx;
 }
 
-// 加载状态
 .loading-wrap {
   display: flex;
   flex-direction: column;
@@ -442,7 +424,6 @@ onPullDownRefresh(() => {
   font-size: 26rpx;
 }
 
-// 公告列表
 .list {
   padding: 20rpx;
 }
@@ -476,27 +457,21 @@ onPullDownRefresh(() => {
     background: #0052d9;
   }
 
-  // 教务
   &.cat-1019 {
     background: #07c160;
   }
 
-  // 科研
   &.cat-1020 {
     background: #fa5151;
   }
 
-  // 行政
   &.cat-1021 {
     background: #ff976a;
   }
 
-  // 学工
   &.cat-1022 {
     background: #9c27b0;
   }
-
-  // 校园
 }
 
 .date {
@@ -509,7 +484,6 @@ onPullDownRefresh(() => {
   color: #333;
   line-height: 1.5;
   margin-bottom: 16rpx;
-  // 两行省略
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -531,7 +505,6 @@ onPullDownRefresh(() => {
   color: #ccc;
 }
 
-// 加载更多
 .load-more {
   display: flex;
   align-items: center;

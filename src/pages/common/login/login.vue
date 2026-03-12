@@ -1,320 +1,312 @@
 <!--
-  登录页面（重构版）
+  登录页面（改进版 - 等待认证信息到达后才显示）
   
   文件：src/pages/common/login/login.vue
   
-  改进点：
-  1. 使用 useAuthGuard 处理认证逻辑
-  2. 简化状态管理，减少页面内状态
-  3. 错误处理统一由全局组件处理
+  改动点：
+  1. 使用 isReady 控制内容显示
+  2. 从 URL 参数或 userStore 获取 loginTypes
+  3. 根据 loginTypes 显示对应的登录方式 Tab
+  4. 如果没有 loginTypes，先调用 initSession 获取
 -->
 
 <template>
-  <view class="login-page">
-    <!-- 登录表单 -->
-    <view class="login-container">
-      <!-- 头部 -->
-      <view class="header">
+  <PageLayout>
+    <!-- 只有认证信息就绪后才显示登录表单 -->
+    <view v-if="isReady" class="login-page">
+      <!-- 顶部 Logo -->
+      <view class="logo-section">
         <image class="logo" src="/static/logo.png" mode="aspectFit" />
-        <text class="title">校园服务登录</text>
-        <text class="subtitle">使用学校统一身份认证</text>
+        <text class="title">SZTU iCampus</text>
+        <text class="subtitle">深圳技术大学校园服务</text>
       </view>
 
-      <!-- Tab 切换（如果支持多种登录方式） -->
-      <view v-if="showPasswordTab" class="tabs">
-        <view class="tab" :class="{ active: activeTab === 'SMS' }" @click="switchTab('SMS')">
-          短信验证码
+      <!-- 登录方式 Tab（根据 loginTypes 动态显示） -->
+      <view class="login-tabs">
+        <view v-if="supportsSms" :class="['tab-item', { active: activeTab === 'sms' }]" @click="activeTab = 'sms'">
+          <t-icon name="chat" size="40rpx" />
+          <text>短信验证码</text>
         </view>
-        <view class="tab" :class="{ active: activeTab === 'PASSWORD' }" @click="switchTab('PASSWORD')">
-          密码登录
+        <view v-if="supportsPassword" :class="['tab-item', { active: activeTab === 'password' }]"
+          @click="activeTab = 'password'">
+          <t-icon name="lock-on" size="40rpx" />
+          <text>密码登录</text>
         </view>
       </view>
 
-      <!-- 学号输入 -->
-      <view class="form-item">
-        <t-input :value="userId" placeholder="请输入学号" clearable @change="onUserIdChange" @clear="onUserIdClear"
-          @focus="onUserIdFocus" @blur="onInputBlur">
-          <template #prefix-icon>
-            <t-icon name="user" />
-          </template>
-        </t-input>
+      <!-- 登录表单 -->
+      <view class="login-form">
+        <!-- 学号输入 -->
+        <view class="form-item">
+          <t-input :value="userId" placeholder="请输入学号/工号" clearable @change="onUserIdChange">
+            <template #prefix-icon>
+              <t-icon name="user" size="44rpx" />
+            </template>
+          </t-input>
+        </view>
 
-        <!-- 历史学号下拉 -->
-        <view v-if="showHistory" class="history-dropdown">
-          <view v-for="id in historyIds" :key="id" class="history-item" @click="selectHistoryId(id)">
-            <t-icon name="time" size="32rpx" color="#999" />
-            <text>{{ id }}</text>
+        <!-- 短信验证码模式 -->
+        <template v-if="activeTab === 'sms'">
+          <view class="form-item sms-row">
+            <t-input :value="smsCode" placeholder="请输入验证码" type="number" maxlength="6" @change="onSmsCodeChange">
+              <template #prefix-icon>
+                <t-icon name="secured" size="44rpx" />
+              </template>
+            </t-input>
+            <t-button class="sms-btn" :disabled="!canSendSms || smsCooldown > 0" :loading="sendingSms"
+              @click="handleSendSms">
+              {{ smsCooldown > 0 ? `${smsCooldown}s` : '获取验证码' }}
+            </t-button>
           </view>
-        </view>
-      </view>
+        </template>
 
-      <!-- 短信验证码输入 -->
-      <view v-if="activeTab === 'SMS'" class="form-item sms-row">
-        <t-input :value="smsCode" placeholder="请输入验证码" type="number" :maxlength="6" class="sms-input"
-          @change="onSmsCodeChange">
-          <template #prefix-icon>
-            <t-icon name="secured" />
-          </template>
-        </t-input>
-        <t-button theme="light" size="large" :disabled="counting || !userId" :loading="sendingSms"
-          @click="handleSendSms">
-          {{ buttonText }}
+        <!-- 密码模式 -->
+        <template v-if="activeTab === 'password'">
+          <view class="form-item">
+            <t-input :value="password" placeholder="请输入密码" :type="showPassword ? 'text' : 'password'" clearable
+              @change="onPasswordChange">
+              <template #prefix-icon>
+                <t-icon name="lock-on" size="44rpx" />
+              </template>
+              <template #suffix-icon>
+                <t-icon :name="showPassword ? 'browse' : 'browse-off'" size="44rpx"
+                  @click="showPassword = !showPassword" />
+              </template>
+            </t-input>
+          </view>
+        </template>
+
+        <!-- 登录按钮 -->
+        <t-button class="login-btn" theme="primary" size="large" block :disabled="!canLogin" :loading="logging"
+          @click="handleLogin">
+          登录
         </t-button>
-      </view>
 
-      <!-- 密码输入 -->
-      <view v-if="activeTab === 'PASSWORD'" class="form-item">
-        <t-input :value="password" placeholder="请输入密码" type="password" clearable @change="onPasswordChange"
-          @clear="onPasswordClear">
-          <template #prefix-icon>
-            <t-icon name="lock-on" />
-          </template>
-        </t-input>
-      </view>
-
-      <!-- 登录按钮 -->
-      <t-button theme="primary" size="large" block :loading="logging" :disabled="!canLogin" @click="handleLogin">
-        登录
-      </t-button>
-
-      <!-- 提示 -->
-      <view class="tips">
-        <t-icon name="info-circle" size="28rpx" color="#999" />
-        <text>使用学校统一身份认证系统登录</text>
+        <!-- 提示信息 -->
+        <view class="tips">
+          <text v-if="activeTab === 'sms'">验证码将发送到您绑定的手机号</text>
+          <text v-else>请使用统一身份认证密码登录</text>
+        </view>
       </view>
     </view>
-  </view>
+  </PageLayout>
 </template>
 
 <script setup lang="ts">
 /**
- * 登录页面
+ * 登录页面（改进版）
  * 
- * ⭐ 注意：TDesign 小程序组件的 v-model 在某些环境下不工作
- *    这里统一使用 :value + @change 的方式
+ * 等待 loginTypes 到达后才显示登录表单
  */
 import { ref, computed, onMounted } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import PageLayout from '@/components/PageLayout.vue'
 import { useUserStore } from '@/store/modules/user'
 import { useAuthStore } from '@/store/modules/auth'
-import { useCountdown } from '@/hooks/useCountdown'
-import { extractString } from '@/utils/tdesign'
-import type { LoginType } from '@/types/auth'
+import { authApi } from '@/api/auth-apis'
+
+// ==================== Store ====================
 
 const userStore = useUserStore()
 const authStore = useAuthStore()
 
 // ==================== 状态 ====================
 
-// 登录方式
-const loginTypes = ref<LoginType[]>(['SMS'])
-const activeTab = ref<LoginType>('SMS')
+/** 是否就绪（loginTypes 已获取） */
+const isReady = ref(false)
 
-// 表单数据
+/** 支持的登录方式 */
+const loginTypes = ref<string[]>([])
+
+/** 当前激活的 Tab */
+const activeTab = ref<'sms' | 'password'>('sms')
+
+/** 表单数据 */
 const userId = ref('')
-const password = ref('')
 const smsCode = ref('')
+const password = ref('')
+const showPassword = ref(false)
 
-// 历史学号
-const historyIds = ref<string[]>([])
-const showHistory = ref(false)
-
-// 加载状态
-const logging = ref(false)
+/** 状态标记 */
 const sendingSms = ref(false)
-
-// 倒计时
-const { counting, buttonText, start: startCountdown } = useCountdown(60)
+const smsCooldown = ref(0)
+const logging = ref(false)
 
 // ==================== 计算属性 ====================
 
-// 是否可以登录
-const canLogin = computed(() => {
-  if (!userId.value) return false
-  if (activeTab.value === 'SMS') return smsCode.value.length >= 4
-  if (activeTab.value === 'PASSWORD') return password.value.length >= 6
-  return false
+/** 是否支持短信登录 */
+const supportsSms = computed(() => {
+  return loginTypes.value.includes('SMS') || loginTypes.value.length === 0
 })
 
-// 是否显示密码登录 Tab
-const showPasswordTab = computed(() => loginTypes.value.includes('PASSWORD'))
+/** 是否支持密码登录 */
+const supportsPassword = computed(() => {
+  return loginTypes.value.includes('PASSWORD')
+})
 
-// ==================== 输入框事件处理 ====================
+/** 是否可以发送验证码 */
+const canSendSms = computed(() => {
+  return userId.value.trim().length > 0
+})
 
-/** 学号输入变化 */
-function onUserIdChange(e: any) {
-  userId.value = extractString(e)
-}
+/** 是否可以登录 */
+const canLogin = computed(() => {
+  if (!userId.value.trim()) return false
 
-/** 学号清空 */
-function onUserIdClear() {
-  userId.value = ''
-}
-
-/** 学号输入框聚焦 */
-function onUserIdFocus() {
-  showHistory.value = historyIds.value.length > 0
-}
-
-/** 验证码输入变化 */
-function onSmsCodeChange(e: any) {
-  smsCode.value = extractString(e)
-}
-
-/** 密码输入变化 */
-function onPasswordChange(e: any) {
-  password.value = extractString(e)
-}
-
-/** 密码清空 */
-function onPasswordClear() {
-  password.value = ''
-}
-
-/** 输入框失焦 */
-function onInputBlur() {
-  // 延迟关闭，确保点击事件能触发
-  setTimeout(() => {
-    showHistory.value = false
-  }, 200)
-}
+  if (activeTab.value === 'sms') {
+    return smsCode.value.trim().length >= 4
+  } else {
+    return password.value.length > 0
+  }
+})
 
 // ==================== 生命周期 ====================
 
-onMounted(async () => {
-  await initPage()
+onLoad(async (options) => {
+  // 显示遮罩
+  authStore.setShowMask(true)
+  authStore.setCheckingMessage('正在初始化...')
+
+  try {
+    // 1. 尝试从 URL 参数获取 loginTypes
+    if (options?.loginTypes) {
+      loginTypes.value = options.loginTypes.split(',')
+      console.log('[Login] 从 URL 获取 loginTypes:', loginTypes.value)
+    }
+
+    // 2. 如果 URL 没有，尝试从 userStore 获取
+    if (loginTypes.value.length === 0 && userStore.loginTypes?.length > 0) {
+      loginTypes.value = userStore.loginTypes
+      console.log('[Login] 从 userStore 获取 loginTypes:', loginTypes.value)
+    }
+
+    // 3. 如果还是没有，调用 initSession 获取
+    if (loginTypes.value.length === 0) {
+      console.log('[Login] 调用 initSession 获取 loginTypes...')
+      authStore.setCheckingMessage('正在获取登录信息...')
+
+      const result = await userStore.initSession()
+
+      if (result.loginTypes && result.loginTypes.length > 0) {
+        loginTypes.value = result.loginTypes
+        console.log('[Login] 从 initSession 获取 loginTypes:', loginTypes.value)
+      } else {
+        // 默认支持 SMS
+        loginTypes.value = ['SMS']
+      }
+    }
+
+    // 4. 设置默认 Tab
+    if (supportsPassword.value && !supportsSms.value) {
+      activeTab.value = 'password'
+    } else {
+      activeTab.value = 'sms'
+    }
+
+    // 5. 尝试获取上次使用的学号
+    const lastUserId = userStore.lastUsedUserId
+    if (lastUserId) {
+      userId.value = lastUserId
+    }
+
+    // 6. 就绪
+    isReady.value = true
+
+  } catch (e) {
+    console.error('[Login] 初始化失败', e)
+    // 默认显示 SMS 登录
+    loginTypes.value = ['SMS']
+    activeTab.value = 'sms'
+    isReady.value = true
+  } finally {
+    authStore.setShowMask(false)
+  }
 })
 
-// ==================== 方法 ====================
+// ==================== 事件处理 ====================
 
-/**
- * 初始化页面
- */
-async function initPage() {
-  try {
-    // 1. 检查当前状态
-    const status = await userStore.checkSchoolSession()
-
-    // 2. 如果已登录，直接返回
-    if (status.logined) {
-      uni.showToast({ title: '已登录', icon: 'success' })
-      setTimeout(() => navigateBack(), 500)
-      return
-    }
-
-    // 3. 更新登录方式
-    loginTypes.value = status.loginTypes || ['SMS']
-
-    // 4. 获取历史学号
-    historyIds.value = await userStore.fetchHistoryUserIds()
-
-    // 5. 默认填充第一个历史学号
-    if (historyIds.value.length > 0) {
-      userId.value = historyIds.value[0]
-    }
-
-  } catch (e: any) {
-    console.warn('[Login] 检查状态失败，尝试初始化', e)
-
-    // 检查失败，尝试初始化会话
-    try {
-      const result = await userStore.initSession()
-      loginTypes.value = result.loginTypes || ['SMS']
-    } catch (initError: any) {
-      // 初始化也失败，设置错误状态
-      authStore.setError(
-        'SERVER_ERROR',
-        initError?.message || '初始化失败，请稍后重试',
-        true,
-        initError
-      )
-    }
-  }
+function onUserIdChange(e: { value: string }) {
+  userId.value = e.value
 }
 
-/**
- * 切换登录方式
- */
-function switchTab(tab: LoginType) {
-  activeTab.value = tab
-  // 切换时清空对应的输入
-  if (tab === 'SMS') password.value = ''
-  if (tab === 'PASSWORD') smsCode.value = ''
+function onSmsCodeChange(e: { value: string }) {
+  smsCode.value = e.value
 }
 
-/**
- * 发送验证码
- */
+function onPasswordChange(e: { value: string }) {
+  password.value = e.value
+}
+
+/** 发送验证码 */
 async function handleSendSms() {
-  if (!userId.value) {
-    uni.showToast({ title: '请输入学号', icon: 'none' })
-    return
-  }
-  if (counting.value || sendingSms.value) return
+  if (!canSendSms.value || smsCooldown.value > 0) return
 
   sendingSms.value = true
+
   try {
-    await userStore.requestSms(userId.value)
-    startCountdown()
+    await authApi.requestSms(userId.value.trim())
+
     uni.showToast({ title: '验证码已发送', icon: 'success' })
+
+    // 开始倒计时
+    smsCooldown.value = 60
+    const timer = setInterval(() => {
+      smsCooldown.value--
+      if (smsCooldown.value <= 0) {
+        clearInterval(timer)
+      }
+    }, 1000)
+
   } catch (e: any) {
-    uni.showToast({ title: e?.message || '发送失败', icon: 'error' })
+    uni.showToast({
+      title: e?.message || '发送失败',
+      icon: 'error'
+    })
   } finally {
     sendingSms.value = false
   }
 }
 
-/**
- * 登录
- */
+/** 登录 */
 async function handleLogin() {
-  if (!canLogin.value || logging.value) return
+  if (!canLogin.value) return
 
   logging.value = true
-  try {
-    const success = await userStore.loginSchool({
-      loginType: activeTab.value,
-      userId: userId.value,
-      password: activeTab.value === 'PASSWORD' ? password.value : undefined,
-      smsCode: activeTab.value === 'SMS' ? smsCode.value : undefined,
-    })
+  authStore.setShowMask(true)
+  authStore.setCheckingMessage('正在登录...')
 
-    if (success) {
-      uni.showToast({ title: '登录成功', icon: 'success' })
-      // 设置认证状态为就绪
-      authStore.setPhase('ready')
-      setTimeout(() => navigateBack(), 500)
-    } else {
-      uni.showToast({ title: '登录失败', icon: 'error' })
+  try {
+    const loginData = {
+      userId: userId.value.trim(),
+      loginType: activeTab.value === 'sms' ? 'SMS' : 'PASSWORD',
+      smsCode: activeTab.value === 'sms' ? smsCode.value.trim() : undefined,
+      password: activeTab.value === 'password' ? password.value : undefined
     }
+
+    const success = await userStore.loginSchool(loginData)
+
+    if (success) { 
+      uni.showToast({ title: '登录成功', icon: 'success' })
+
+      // 保存学号供下次使用
+      userStore.setLastUsedUserId(userId.value.trim())
+
+      // 延迟返回
+      setTimeout(() => {
+        uni.navigateBack()
+      }, 500)
+    } else {
+      throw new Error('登录失败')
+    }
+
   } catch (e: any) {
-    // 错误信息直接显示，不通过全局弹窗
     uni.showToast({
       title: e?.message || '登录失败',
-      icon: 'error',
-      duration: 2000
+      icon: 'error'
     })
   } finally {
     logging.value = false
-  }
-}
-
-/**
- * 选择历史学号
- */
-function selectHistoryId(id: string) {
-  userId.value = id
-  showHistory.value = false
-}
-
-/**
- * 返回上一页
- */
-function navigateBack() {
-  const pages = getCurrentPages()
-  if (pages.length > 1) {
-    uni.navigateBack()
-  } else {
-    uni.switchTab({ url: '/pages/home/home' })
+    authStore.setShowMask(false)
   }
 }
 </script>
@@ -322,133 +314,99 @@ function navigateBack() {
 <style lang="scss" scoped>
 .login-page {
   min-height: 100vh;
-  background: linear-gradient(180deg, #f5f7fa 0%, #ffffff 100%);
+  background: linear-gradient(180deg, #e3f2fd 0%, #ffffff 100%);
+  padding: 60rpx 40rpx;
 }
 
-.login-container {
-  padding: 80rpx 48rpx;
-}
-
-.header {
+.logo-section {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: 80rpx;
+  margin-bottom: 60rpx;
 }
 
 .logo {
   width: 160rpx;
   height: 160rpx;
-  margin-bottom: 32rpx;
+  margin-bottom: 24rpx;
 }
 
 .title {
-  font-size: 48rpx;
-  font-weight: 600;
-  color: #333;
+  font-size: 44rpx;
+  font-weight: bold;
+  color: #1976d2;
+  margin-bottom: 8rpx;
 }
 
 .subtitle {
-  margin-top: 16rpx;
   font-size: 28rpx;
-  color: #999;
-}
-
-.tabs {
-  display: flex;
-  margin-bottom: 48rpx;
-  border-bottom: 2rpx solid #eee;
-}
-
-.tab {
-  flex: 1;
-  text-align: center;
-  padding: 24rpx 0;
-  font-size: 30rpx;
   color: #666;
-  position: relative;
-  transition: color 0.3s;
+}
+
+.login-tabs {
+  display: flex;
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 8rpx;
+  margin-bottom: 40rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
+}
+
+.tab-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding: 24rpx 0;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  color: #666;
+  transition: all 0.2s;
 
   &.active {
-    color: #1976d2;
-    font-weight: 500;
-
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: -2rpx;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 80rpx;
-      height: 4rpx;
-      background: #1976d2;
-      border-radius: 2rpx;
-    }
+    background: #1976d2;
+    color: #fff;
   }
+}
+
+.login-form {
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 40rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.08);
 }
 
 .form-item {
   margin-bottom: 32rpx;
-  position: relative;
-}
 
-.sms-row {
-  display: flex;
-  gap: 16rpx;
-}
+  &.sms-row {
+    display: flex;
+    gap: 20rpx;
 
-.sms-input {
-  flex: 1;
-}
-
-.history-dropdown {
-  position: absolute;
-  top: calc(100% + 8rpx);
-  left: 0;
-  right: 0;
-  background: #fff;
-  border: 2rpx solid #eee;
-  border-radius: 12rpx;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
-  z-index: 100;
-  max-height: 400rpx;
-  overflow-y: auto;
-}
-
-.history-item {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  padding: 28rpx 32rpx;
-  font-size: 28rpx;
-  color: #333;
-
-  &:not(:last-child) {
-    border-bottom: 2rpx solid #f5f5f5;
+    :deep(.t-input) {
+      flex: 1;
+    }
   }
+}
 
-  &:active {
-    background: #f5f5f5;
-  }
+.sms-btn {
+  flex-shrink: 0;
+  width: 200rpx;
+  font-size: 26rpx;
+}
+
+.login-btn {
+  margin-top: 48rpx;
+  height: 96rpx;
+  font-size: 32rpx;
+  border-radius: 48rpx;
 }
 
 .tips {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  margin-top: 48rpx;
+  margin-top: 32rpx;
+  text-align: center;
   font-size: 24rpx;
   color: #999;
-}
-
-:deep(.t-input) {
-  background: #f5f7fa;
-  border-radius: 12rpx;
-  padding: 24rpx 32rpx;
-}
-
-:deep(.t-button--primary) {
-  margin-top: 16rpx;
 }
 </style>

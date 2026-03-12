@@ -1,5 +1,5 @@
 /**
- * 认证流程状态管理
+ * 认证流程状态管理（修复版）
  * 
  * 文件：src/store/modules/auth.ts
  * 
@@ -8,7 +8,10 @@
  * - 管理错误状态和重试逻辑
  * - 提供全局的遮罩/弹窗显示状态
  * 
- * 注意：不负责实际的 token/userInfo 存储，那些在 user.ts 中
+ * 修复内容：
+ * - 添加 setShowMask 方法
+ * - 添加 setCheckingMessage 方法
+ * - 修复 setError 方法签名
  */
 
 import { defineStore } from 'pinia'
@@ -33,10 +36,14 @@ export const useAuthStore = defineStore('auth', () => {
     /** 上一次成功认证的时间戳 */
     const lastAuthTime = ref<number>(0)
 
+    /** 是否强制显示遮罩（手动控制） */
+    const _forceShowMask = ref(false)
+
     // ==================== 计算属性 ====================
 
-    /** 是否需要显示遮罩（检查中的状态） */
+    /** 是否需要显示遮罩（检查中的状态 或 手动强制显示） */
     const showMask = computed(() =>
+        _forceShowMask.value ||
         ['checking-token', 'refreshing-token', 'checking-school'].includes(phase.value)
     )
 
@@ -44,6 +51,7 @@ export const useAuthStore = defineStore('auth', () => {
     const showErrorOverlay = computed(() =>
         phase.value === 'error' && error.value !== null
     )
+
 
     /** 是否处于就绪状态 */
     const isReady = computed(() => phase.value === 'ready')
@@ -71,32 +79,69 @@ export const useAuthStore = defineStore('auth', () => {
             error.value = null
             retryContext.value = null
             lastAuthTime.value = Date.now()
+            _forceShowMask.value = false
         }
 
         // 进入空闲状态时，清除消息
         if (newPhase === 'idle') {
             checkingMessage.value = ''
+            _forceShowMask.value = false
         }
     }
 
     /**
-     * 设置错误状态
+     * ⭐ 手动设置遮罩显示状态
+     * 
+     * 用于登录页等需要手动控制遮罩的场景
+     */
+    function setShowMask(show: boolean) {
+        _forceShowMask.value = show
+        if (!show) {
+            // 隐藏遮罩时，如果不在检查阶段，重置状态
+            if (!['checking-token', 'refreshing-token', 'checking-school'].includes(phase.value)) {
+                phase.value = 'idle'
+            }
+        }
+    }
+
+    /**
+     * ⭐ 设置检查中的消息
+     */
+    function setCheckingMessage(message: string) {
+        checkingMessage.value = message
+    }
+
+    /**
+     * 设置错误状态（支持两种调用方式）
+     * 
+     * 方式1: setError('CODE', 'message', true)
+     * 方式2: setError({ code: 'CODE', message: 'message', retryable: true })
      */
     function setError(
-        code: AuthErrorCode,
-        message: string,
+        codeOrError: AuthErrorCode | AuthError,
+        message?: string,
         retryable: boolean = true,
         raw?: any
     ) {
-        error.value = {
-            code,
-            message,
-            retryable,
-            timestamp: Date.now(),
-            raw
+        if (typeof codeOrError === 'object') {
+            // 对象形式
+            error.value = {
+                ...codeOrError,
+                timestamp: codeOrError.timestamp || Date.now()
+            }
+        } else {
+            // 参数形式
+            error.value = {
+                code: codeOrError,
+                message: message || '发生错误',
+                retryable,
+                timestamp: Date.now(),
+                raw
+            }
         }
         phase.value = 'error'
         checkingMessage.value = ''
+        _forceShowMask.value = false
     }
 
     /**
@@ -124,6 +169,7 @@ export const useAuthStore = defineStore('auth', () => {
         checkingMessage.value = ''
         error.value = null
         retryContext.value = null
+        _forceShowMask.value = false
     }
 
     /**
@@ -179,9 +225,10 @@ export const useAuthStore = defineStore('auth', () => {
         isChecking,
         hasError,
         canRetry,
-
         // 方法
         setPhase,
+        setShowMask,         // 新增
+        setCheckingMessage,  // 新增
         setError,
         clearError,
         setRetryContext,

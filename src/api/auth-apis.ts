@@ -13,7 +13,7 @@ import { request } from '@/utils/http'
 import type {
   LoginStatusVo,
   LoginResultsVo,
-  LoginRequestCommand,
+  LoginRequestParams,
   TokenVo
 } from '@/types/auth'
 
@@ -90,14 +90,14 @@ export const authApi = {
    * 登录学校系统
    * @returns LoginResultsVo
    */
-  login: (params: LoginRequestCommand) =>
+  login: (params: LoginRequestParams) =>
     request.post<LoginResultsVo>('/auth/v1/login', params),
 
   /**
    * 登出学校系统
    * @returns LoginResultsVo
    */
-  logout: (params: Partial<LoginRequestCommand>) =>
+  logout: (params: Partial<LoginRequestParams>) =>
     request.post<LoginResultsVo>('/auth/v1/logout', params),
 }
 

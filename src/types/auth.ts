@@ -1,13 +1,96 @@
 /**
- * 认证相关类型定义（完整版）
+ * 认证相关类型定义
  * 
  * 文件：src/types/auth.ts
  */
 
-// ==================== 基础类型 ====================
+// ==================== 认证阶段 ====================
+
+/** 认证阶段 */
+export type AuthPhase =
+  | 'idle'            // 空闲状态
+  | 'checking-token'  // 检查 Token 中
+  | 'refreshing-token'// 刷新 Token 中
+  | 'checking-school' // 检查学校登录状态
+  | 'ready'           // 认证完成，就绪
+  | 'need-login'      // 需要登录
+  | 'error'           // 发生错误
+
+// ==================== 错误相关 ====================
+
+/** 认证错误码 */
+export type AuthErrorCode =
+  | 'NO_TOKEN'              // 无 Token
+  | 'TOKEN_EXPIRED'         // Token 过期
+  | 'TOKEN_INVALID'         // Token 无效
+  | 'REFRESH_FAILED'        // 刷新失败
+  | 'NETWORK_ERROR'         // 网络错误
+  | 'TIMEOUT'               // 超时
+  | 'SERVER_ERROR'          // 服务器错误
+  | 'SCHOOL_SESSION_EXPIRED'// 学校会话过期
+  | 'UNKNOWN'               // 未知错误
+  | 'TOKEN_INIT_FAILED'
+  | 'CHECK_FAILED'
+  | 'UNKNOWN_ERROR'
+
+/** 认证错误 */
+export interface AuthError {
+  code: AuthErrorCode
+  message: string
+  retryable: boolean
+  timestamp: number
+  raw?: any
+}
+
+// ==================== 重试上下文 ====================
+
+/** 重试上下文 */
+export interface RetryContext {
+  /** 重试的操作类型 */
+  action: 'check-token' | 'refresh-token' | 'check-school' | 'login'
+  /** 重试次数 */
+  retryCount: number
+  /** 最大重试次数 */
+  maxRetries: number
+  /** 原始参数 */
+  params?: any
+}
+
+// ==================== 登录相关 ====================
 
 /** 登录方式 */
 export type LoginType = 'SMS' | 'PASSWORD'
+
+/** 登录请求参数 （对应后端 LoginRequestCommand） */
+export interface LoginRequestParams {
+  userId: string
+  loginType: LoginType
+  smsCode?: string
+  password?: string
+}
+
+/** 登录状态 VO （对应后端 LoginStatusVo） */
+export interface LoginStatusVo {
+  logined: boolean           // 后端用 @JsonProperty("logined")
+  loginTypes?: LoginType[]
+  userId?: string
+  realName?: string
+  gender?: string
+  schoolName?: string
+  avatarURL?: string
+}
+
+/** 登录结果 VO  （对应后端 LoginResultsVo） */
+export interface LoginResultsVo {
+  logined: boolean           // 后端用 @JsonProperty("logined")
+  wxId?: string
+  loginTypes?: LoginType[]
+  userId?: string
+  realName?: string
+  gender?: string
+  schoolName?: string
+  avatarURL?: string
+}
 
 /** 用户信息 */
 export interface UserInfo {
@@ -24,143 +107,43 @@ export interface TokenVo {
   expiresIn?: number
 }
 
-/** 登录请求参数 */
-export interface LoginRequestCommand {
-  userId: string
-  password?: string
-  smsCode?: string
-  loginType: LoginType
+// ==================== 会话相关 ====================
+
+/** Token 响应 */
+export interface TokenVo {
+  token: string
+  expiresIn?: number
 }
 
-// ==================== 后端响应 VO ====================
-
-/** 
- * 登录状态 VO
- * GET /auth/v1/status 返回
- */
-export interface LoginStatusVo {
+/** 初始化会话结果 */
+export interface InitSessionResult {
   logined: boolean
-  loginTypes?: LoginType[]
-  statusTime?: number
-  cookieExpiringSoon?: boolean
-  // 用户信息（已登录时返回）
+  loginTypes?: string[]
+}
+
+/** 检查会话结果 */
+export interface CheckSessionResult {
+  logined: boolean
+  loginTypes?: string[]
   userId?: string
   realName?: string
-  gender?: string
-  schoolName?: string
-  avatarURL?: string
 }
 
-/** 
- * 登录结果 VO
- * POST /auth/v1/login 返回
- */
-export interface LoginResultsVo {
-  logined: boolean
-  wxId?: string
-  userId?: string
-  realName?: string
-  gender?: string
-  schoolName?: string
-  avatarURL?: string
-  loginTypes?: LoginType[]
-}
+// ==================== auth store 需要的类型 ====================
 
-// ==================== 认证流程状态 ====================
-
-/**
- * 认证阶段枚举
- * 
- * 状态转换图：
- * idle → checking-token → [refreshing-token] → checking-school → ready
- *                ↓                  ↓                   ↓
- *              error              error              need-login
- */
-export type AuthPhase =
-  | 'idle'              // 空闲状态
-  | 'checking-token'    // 正在检查 Token
-  | 'refreshing-token'  // 正在刷新 Token
-  | 'checking-school'   // 正在检查学校登录状态
-  | 'ready'             // 认证就绪
-  | 'need-login'        // 需要登录学校
-  | 'error'             // 发生错误
-
-/**
- * 认证错误码
- */
-export type AuthErrorCode =
-  | 'NO_TOKEN'          // 没有 Token
-  | 'TOKEN_EXPIRED'     // Token 已过期
-  | 'TOKEN_INVALID'     // Token 无效
-  | 'REFRESH_FAILED'    // Token 刷新失败
-  | 'NETWORK_ERROR'     // 网络错误
-  | 'TIMEOUT'           // 请求超时
-  | 'SERVER_ERROR'      // 服务器错误
-  | 'SCHOOL_SESSION_EXPIRED' // 学校 Session 过期
-  | 'UNKNOWN'           // 未知错误
-
-/**
- * 认证错误对象
- */
+/** 认证错误 */
 export interface AuthError {
   code: AuthErrorCode
   message: string
   retryable: boolean
   timestamp: number
-  /** 原始错误（用于调试） */
   raw?: any
 }
 
-/**
- * HTTP 错误对象
- */
-export interface HttpError {
-  code: number
-  message: string
-  retryable: boolean
-  timestamp: number
-}
-
-// ==================== useAuthGuard 相关 ====================
-
-/**
- * ensure 方法的选项
- */
-export interface EnsureOptions {
-  /** 是否要求登录学校（默认 true） */
-  requireSchoolLogin?: boolean
-  /** 认证失败时是否跳转登录页（默认 true） */
-  redirectOnFail?: boolean
-  /** 是否静默检查（不显示遮罩，默认 false） */
-  silent?: boolean
-  /** ⭐ 新增：强制检查，忽略"短时间内跳过"逻辑（默认 false） */
-  forceCheck?: boolean
-}
-
-/**
- * ensure 方法的返回结果
- */
-export interface EnsureResult {
-  /** 是否成功 */
-  success: boolean
-  /** 失败原因 */
-  reason?: 'NO_TOKEN' | 'TOKEN_INVALID' | 'NEED_LOGIN' | 'ERROR'
-  /** 登录状态（如果检查了的话） */
-  status?: LoginStatusVo
-  /** 错误信息（如果有的话） */
-  error?: AuthError
-}
-
-/**
- * 重试上下文
- */
+/** 重试上下文 */
 export interface RetryContext {
-  /** 重试的操作类型 */
-  operation: 'ensure' | 'request'
-  /** 重试次数 */
+  action: 'check-token' | 'refresh-token' | 'check-school' | 'login'
   retryCount: number
-  /** 最大重试次数 */
   maxRetries: number
-  /** 原始参数 */
   params?: any
 }

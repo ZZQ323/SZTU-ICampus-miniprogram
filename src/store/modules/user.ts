@@ -27,7 +27,7 @@ import type {
   LoginType,
   UserInfo,
   LoginStatusVo,
-  LoginRequestCommand,
+  LoginRequestParams,
   LoginResultsVo
 } from '@/types/auth'
 
@@ -41,13 +41,11 @@ export const useUserStore = defineStore('user', () => {
   const userInfo = ref<UserInfo | null>(getUserInfo())
 
   /** 可用的登录方式 */
-  const loginTypes = ref<LoginType[]>([])
+  const loginTypes = ref<string[]>([])
 
   /** 历史登录过的学号 */
+  const lastUsedUserId = ref<string>('')
   const historyUserIds = ref<string[]>([])
-
-  /** Cookie 是否即将过期 */
-  const cookieExpiringSoon = ref(false)
 
   // ==================== 计算属性 ====================
 
@@ -111,6 +109,7 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+
   /**
    * 检查 Token 是否有效
    * 
@@ -139,7 +138,6 @@ export const useUserStore = defineStore('user', () => {
 
     // 更新本地状态
     loginTypes.value = status.loginTypes || []
-    cookieExpiringSoon.value = status.cookieExpiringSoon || false
 
     // 如果已登录，同步用户信息
     if (status.logined && status.userId) {
@@ -184,7 +182,6 @@ export const useUserStore = defineStore('user', () => {
   async function refreshSession(): Promise<LoginResultsVo> {
     // ⭐ API 直接返回 LoginResultsVo
     const result = await authApi.refreshSession()
-    cookieExpiringSoon.value = false
     return result
   }
 
@@ -217,7 +214,7 @@ export const useUserStore = defineStore('user', () => {
    * 
    * @returns 是否登录成功
    */
-  async function loginSchool(params: LoginRequestCommand): Promise<boolean> {
+  async function loginSchool(params: LoginRequestParams): Promise<boolean> {
     // ⭐ API 直接返回 LoginResultsVo
     const result = await authApi.login(params)
 
@@ -262,7 +259,6 @@ export const useUserStore = defineStore('user', () => {
   function clearSchoolSession(): void {
     userInfo.value = null
     loginTypes.value = []
-    cookieExpiringSoon.value = false
   }
 
   /**
@@ -275,6 +271,38 @@ export const useUserStore = defineStore('user', () => {
     // 保留历史学号
   }
 
+  /**
+ * 设置上次使用的学号
+ */
+  function setLastUsedUserId(userId: string) {
+    lastUsedUserId.value = userId
+    // 添加到历史
+    if (!historyUserIds.value.includes(userId)) {
+      historyUserIds.value.unshift(userId)
+      if (historyUserIds.value.length > 5) {
+        historyUserIds.value.pop()
+      }
+    }
+    uni.setStorageSync('lastUsedUserId', userId)
+    uni.setStorageSync('historyUserIds', historyUserIds.value)
+  }
+
+  // 初始化时恢复
+  function initUserIdHistory() {
+    lastUsedUserId.value = uni.getStorageSync('lastUsedUserId') || ''
+    historyUserIds.value = uni.getStorageSync('historyUserIds') || []
+  }
+
+  /**
+   * 初始化时从本地存储恢复
+   */
+  function initLastUsedUserId() {
+    const stored = uni.getStorageSync('lastUsedUserId')
+    if (stored) {
+      lastUsedUserId.value = stored
+    }
+  }
+
   // ==================== 导出 ====================
 
   return {
@@ -282,8 +310,10 @@ export const useUserStore = defineStore('user', () => {
     token,
     userInfo,
     loginTypes,
+    
     historyUserIds,
-    cookieExpiringSoon,
+    lastUsedUserId,
+    setLastUsedUserId,
 
     // 计算属性
     hasToken,

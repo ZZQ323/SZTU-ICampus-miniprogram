@@ -1,19 +1,18 @@
 <!--
-  课表页面（重构版）
+  课表页面（改进版 - 等待认证完成后才显示内容）
   
   文件：src/pages/schedule/schedule.vue
   
-  改进点：
-  1. 使用 useAuthGuard 进行认证检查
-  2. 认证遮罩由全局组件处理
-  3. 简化 SSE 连接逻辑
+  改动点：
+  1. 使用 v-if="isReady" 控制内容显示
+  2. 强制登录，认证失败跳转登录页
+  3. 登录页会携带 loginTypes 参数
 -->
 
 <template>
   <PageLayout>
-
-
-    <view class="schedule-page">
+    <!-- ⭐ 关键：只有认证就绪后才显示页面内容 -->
+    <view v-if="isReady" class="schedule-page">
       <!-- 连接状态栏 -->
       <view class="status-bar" :class="connectionStatus">
         <view class="status-dot" />
@@ -72,7 +71,7 @@
       </view>
 
       <!-- 课程详情弹窗 -->
-      <t-popup v-model="showCourseDetail" placement="bottom">
+      <t-popup :visible="showCourseDetail" placement="bottom" @visible-change="showCourseDetail = $event">
         <view class="course-detail">
           <view class="detail-header">
             <text class="detail-title">{{ selectedCourse?.courseName }}</text>
@@ -98,9 +97,11 @@
 
 <script setup lang="ts">
 /**
- * 课表页面
+ * 课表页面（改进版）
+ * 
+ * 使用 isReady 控制内容显示，强制登录
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { onShow, onHide } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
 import { useAuthGuard } from '@/hooks/composables/useAuthGuard'
@@ -162,30 +163,27 @@ const statusText = computed(() => {
 // ==================== 生命周期 ====================
 
 onShow(async () => {
-  // 使用 useAuthGuard 进行认证检查
+  // ⭐ 改进：使用 ensure 进行认证检查
+  // requireSchoolLogin: true 表示必须登录
+  // redirectOnFail: true 表示登录失败时跳转登录页
   const result = await ensure({
     requireSchoolLogin: true,
     redirectOnFail: true
   })
 
+  // 只有认证成功才加载数据
   if (result.success) {
-    // 认证成功，加载数据
     await loadData()
-    // 连接 SSE
     connectSSE()
   }
 })
 
 onHide(() => {
-  // 页面隐藏时断开 SSE
   disconnectSSE()
 })
 
 // ==================== 方法 ====================
 
-/**
- * 加载课表数据
- */
 async function loadData() {
   try {
     await fetchSchedule()
@@ -194,13 +192,9 @@ async function loadData() {
   }
 }
 
-/**
- * 处理 SSE 消息
- */
 function handleSSEMessage(data: any) {
   console.log('[Schedule] 收到 SSE 消息', data)
 
-  // 处理刷新提示
   if (data?.action === 'REFRESH_HINT') {
     uni.showToast({
       title: data.message || '课表有更新',
@@ -209,22 +203,15 @@ function handleSSEMessage(data: any) {
     return
   }
 
-  // 更新课表数据
   if (data?.courses) {
     updateCourses(data)
   }
 }
 
-/**
- * 处理 SSE 错误
- */
 function handleSSEError(error: any) {
   console.warn('[Schedule] SSE 错误', error)
 }
 
-/**
- * 点击课程
- */
 function handleCourseClick(row: number, day: number) {
   const course = getCourse(row, day)
   if (course) {
@@ -233,9 +220,6 @@ function handleCourseClick(row: number, day: number) {
   }
 }
 
-/**
- * 刷新数据
- */
 async function handleRefresh() {
   await loadData()
 }
