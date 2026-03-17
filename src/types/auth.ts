@@ -23,15 +23,16 @@ export type AuthErrorCode =
   | 'NO_TOKEN'              // 无 Token
   | 'TOKEN_EXPIRED'         // Token 过期
   | 'TOKEN_INVALID'         // Token 无效
+  | 'TOKEN_INIT_FAILED'     // Token 初始化失败
   | 'REFRESH_FAILED'        // 刷新失败
+  | 'CHECK_FAILED'          // 检查失败
   | 'NETWORK_ERROR'         // 网络错误
   | 'TIMEOUT'               // 超时
   | 'SERVER_ERROR'          // 服务器错误
   | 'SCHOOL_SESSION_EXPIRED'// 学校会话过期
-  | 'UNKNOWN'               // 未知错误
-  | 'TOKEN_INIT_FAILED'
-  | 'CHECK_FAILED'
-  | 'UNKNOWN_ERROR'
+  | 'SESSION_INVALID'       // 会话无效（需要重新初始化）
+  | 'UNKNOWN_ERROR'         // 未知错误
+  | 'UNKNOWN'               // 未知错误（兼容）
 
 /** 认证错误 */
 export interface AuthError {
@@ -61,7 +62,7 @@ export interface RetryContext {
 /** 登录方式 */
 export type LoginType = 'SMS' | 'PASSWORD'
 
-/** 登录请求参数 （对应后端 LoginRequestCommand） */
+/** 登录请求参数 */
 export interface LoginRequestParams {
   userId: string
   loginType: LoginType
@@ -69,51 +70,43 @@ export interface LoginRequestParams {
   password?: string
 }
 
-/** 登录状态 VO （对应后端 LoginStatusVo） */
+/** 登录状态 VO */
 export interface LoginStatusVo {
-  logined: boolean           // 后端用 @JsonProperty("logined")
-  loginTypes?: LoginType[]
+  logined: boolean
   userId?: string
   realName?: string
   gender?: string
   schoolName?: string
   avatarURL?: string
+  loginTypes?: string[]
+  /**
+   * ⭐ 会话是否无效（需要重新初始化）
+   * 
+   * 当遇到以下情况时为 true：
+   * - 错误页面（"当前界面遇到了一些问题"）
+   * - 会话异常
+   * - Cookie 已被服务器清除
+   */
+  sessionInvalid?: boolean
 }
 
-/** 登录结果 VO  （对应后端 LoginResultsVo） */
+/** 登录结果 VO */
 export interface LoginResultsVo {
-  logined: boolean           // 后端用 @JsonProperty("logined")
+  logined: boolean
   wxId?: string
-  loginTypes?: LoginType[]
   userId?: string
   realName?: string
   gender?: string
   schoolName?: string
   avatarURL?: string
-}
-
-/** 用户信息 */
-export interface UserInfo {
-  userId: string
-  realName: string
-  gender?: string
-  schoolName?: string
-  avatarURL?: string
-}
-
-/** Token 响应 */
-export interface TokenVo {
-  token: string
-  expiresIn?: number
+  loginTypes?: string[]
+  /**
+   * ⭐ 会话是否无效（需要重新初始化）
+   */
+  sessionInvalid?: boolean
 }
 
 // ==================== 会话相关 ====================
-
-/** Token 响应 */
-export interface TokenVo {
-  token: string
-  expiresIn?: number
-}
 
 /** 初始化会话结果 */
 export interface InitSessionResult {
@@ -127,23 +120,4 @@ export interface CheckSessionResult {
   loginTypes?: string[]
   userId?: string
   realName?: string
-}
-
-// ==================== auth store 需要的类型 ====================
-
-/** 认证错误 */
-export interface AuthError {
-  code: AuthErrorCode
-  message: string
-  retryable: boolean
-  timestamp: number
-  raw?: any
-}
-
-/** 重试上下文 */
-export interface RetryContext {
-  action: 'check-token' | 'refresh-token' | 'check-school' | 'login'
-  retryCount: number
-  maxRetries: number
-  params?: any
 }

@@ -11,7 +11,7 @@
 
 <template>
   <PageLayout>
-    <!-- ⭐ 关键：只有认证就绪后才显示页面内容 -->
+    <!-- ⭐关键：只有认证就绪后才显示页面内容 -->
     <view v-if="isReady" class="home">
       <!-- 用户区域：点击头像触发登录检查 -->
       <view class="user-card" @tap="handleAvatarClick">
@@ -90,11 +90,12 @@
 </template>
 
 <script setup lang="ts">
+
 /**
  * 首页（改进版）
- * 
- * ⭐ 使用 useAuth hook 实现点击头像强制检查
+ * 使用 useAuth hook 实现点击头像强制检查
  */
+
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
@@ -102,12 +103,12 @@ import FloatingNotification from "@/components/FloatingNotification.vue"
 import { useUserStore } from '@/store/modules/user'
 import { useAuthStore } from '@/store/modules/auth'
 import { useAuthGuard } from '@/hooks/composables/useAuthGuard'
-import { useAuth } from '@/hooks/useAuth'  // ⭐ 新增
+import { useAuth } from '@/hooks/useAuth'
 
 const userStore = useUserStore()
 const authStore = useAuthStore()
 const { ensure, isReady } = useAuthGuard()
-const { checkStatusWithUI, goLogin } = useAuth()  // ⭐ 新增
+const { checkStatusWithUI, goLogin } = useAuth()
 
 // ==================== 状态 ====================
 

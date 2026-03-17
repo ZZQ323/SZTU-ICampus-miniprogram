@@ -1,11 +1,13 @@
 /**
- * 用户状态管理（修复版 - 类型正确）
+ * 用户状态管理（修复版 - 未登录时清除用户信息）
  * 
  * 文件：src/store/modules/user.ts
  * 
  * 职责：
  * - 管理 Token 和用户信息
  * - 提供认证相关的 API 调用方法
+ * 
+ * ⭐ 修复：当检测到未登录时，立即清除 userInfo
  * 
  * 注意：API 返回的直接是业务数据，不需要 .data 访问
  *    例如：const res = await wxAuthApi.getToken(code)
@@ -130,6 +132,8 @@ export const useUserStore = defineStore('user', () => {
   /**
    * 检查学校登录状态（轻量级）
    * 
+   * ⭐ 修复：当 logined=false 时，立即清除本地的 userInfo
+   * 
    * 返回的状态会自动更新本地的 userInfo
    */
   async function checkSchoolSession(): Promise<LoginStatusVo> {
@@ -139,8 +143,9 @@ export const useUserStore = defineStore('user', () => {
     // 更新本地状态
     loginTypes.value = status.loginTypes || []
 
-    // 如果已登录，同步用户信息
+    // ⭐ 关键修复：根据 logined 状态决定是否保留用户信息
     if (status.logined && status.userId) {
+      // 已登录，同步用户信息
       userInfo.value = {
         userId: status.userId,
         realName: status.realName || '',
@@ -148,6 +153,19 @@ export const useUserStore = defineStore('user', () => {
         schoolName: status.schoolName,
         avatarURL: status.avatarURL,
       }
+      console.log('[UserStore] 已登录，更新用户信息:', status.userId)
+    } else {
+      // ⭐ 未登录，立即清除用户信息
+      if (userInfo.value !== null) {
+        console.log('[UserStore] 未登录，清除用户信息')
+        userInfo.value = null
+      }
+    }
+
+    // ⭐ 如果会话无效（错误页面），提示用户需要重新登录
+    if (status.sessionInvalid) {
+      console.warn('[UserStore] 会话无效，需要重新初始化')
+      // 可以在这里触发一个事件或设置一个标志
     }
 
     return status
@@ -155,8 +173,14 @@ export const useUserStore = defineStore('user', () => {
 
   /**
    * 初始化会话（强制重建 Cookie）
+   * 
+   * ⭐ 修复：初始化前先清除本地用户信息
    */
   async function initSession(): Promise<LoginResultsVo> {
+    // ⭐ 初始化前先清除本地用户信息，避免显示过期数据
+    console.log('[UserStore] 初始化会话，清除旧的用户信息')
+    userInfo.value = null
+
     // API 直接返回 LoginResultsVo
     const result = await authApi.initSession()
 
@@ -171,23 +195,30 @@ export const useUserStore = defineStore('user', () => {
         schoolName: result.schoolName,
         avatarURL: result.avatarURL,
       }
+      console.log('[UserStore] 初始化后已登录:', result.userId)
+    } else {
+      console.log('[UserStore] 初始化后未登录')
     }
 
     return result
   }
 
   /**
- * 完全重置会话
- * 
- * 流程：
- * 1. 调用后端清除 Redis（TokenMeta + ProxySession）
- * 2. 清除本地存储
- * 3. 重新获取 Token
- * 4. 重新初始化学校会话
- * 
- * @returns 是否成功
- */
+   * 完全重置会话
+   * 
+   * 流程：
+   * 1. 调用后端清除 Redis（TokenMeta + ProxySession）
+   * 2. 清除本地存储
+   * 3. 重新获取 Token
+   * 4. 重新初始化学校会话
+   * 
+   * @returns 是否成功
+   */
   async function resetSession(): Promise<boolean> {
+    // ⭐ 立即清除本地用户信息
+    console.log('[UserStore] 重置会话，立即清除用户信息')
+    userInfo.value = null
+
     try {
       // 1. 调用后端清除 Redis
       await wxAuthApi.resetSession()
@@ -228,6 +259,20 @@ export const useUserStore = defineStore('user', () => {
   async function refreshSession(): Promise<LoginResultsVo> {
     // ⭐ API 直接返回 LoginResultsVo
     const result = await authApi.refreshSession()
+
+    // ⭐ 同样需要根据结果更新用户信息
+    if (result.logined && result.userId) {
+      userInfo.value = {
+        userId: result.userId,
+        realName: result.realName || '',
+        gender: result.gender,
+        schoolName: result.schoolName,
+        avatarURL: result.avatarURL,
+      }
+    } else {
+      userInfo.value = null
+    }
+
     return result
   }
 
@@ -318,8 +363,8 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /**
- * 设置上次使用的学号
- */
+   * 设置上次使用的学号
+   */
   function setLastUsedUserId(userId: string) {
     lastUsedUserId.value = userId
     // 添加到历史
