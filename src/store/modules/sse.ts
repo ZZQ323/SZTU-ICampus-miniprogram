@@ -1,94 +1,62 @@
 /**
- * 全局 SSE 状态管理（带持久化）
- * 由于小程序每个页面是独立的 webview，所以使用 Pinia store 共享状态
+ * SSE 连接管理 Store（更新版）
+ * 
  * 文件：src/store/modules/sse.ts
+ * 
+ * 更新点：
+ * 1. 收到 SSE 消息时调用 infoStore.handleSseMessage
+ * 2. 心跳处理中检查 Token 状态
+ * 3. 支持多频道消息类型
  */
 
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { sseClient } from '@/utils/sse'
 import { useUserStore } from './user'
-
-// ==================== 存储 Key ====================
-
-const STORAGE_KEY_LAST_READ_ID = 'announcement_last_read_id'
-const STORAGE_KEY_READ_IDS = 'announcement_read_ids'
-const MAX_READ_IDS = 200
+import { useInfoStore } from './info'
 
 // ==================== 类型定义 ====================
 
-interface SseMessageData {
-    type: string
-    data: any
+interface SseMessage {
+    type: 'announcement' | 'news' | 'activity' | 'heartbeat' | 'connected' | 'error'
+    data?: {
+        latestId?: string
+        count?: number
+        title?: string
+        sourceName?: string
+        channelId?: string
+    }
     timestamp?: number
 }
+
+type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
+
+// ==================== Store 定义 ====================
 
 export const useSseStore = defineStore('sse', () => {
     // ==================== 状态 ====================
 
-    /** 是否已连接 */
-    const isConnected = ref(false)
-
-    /** 最后心跳时间 */
-    const lastHeartbeat = ref(0)
-
-    /** 重连次数 */
+    const connectionState = ref<ConnectionState>('disconnected')
+    const lastHeartbeat = ref<number>(0)
     const reconnectAttempts = ref(0)
+    const eventSource = ref<UniApp.RequestTask | null>(null)
 
-    /** 是否正在重连 */
-    const isReconnecting = ref(false)
+    // ==================== 配置 ====================
 
-    // ==================== 公告相关状态（持久化） ====================
-
-    /** 服务端最新公告 ID */
-    const serverLatestId = ref<string>('0')
-
-    /** 用户已读的最新 ID（持久化） */
-    const lastReadId = ref<string>(loadLastReadId())
-
-    /** 用户已读的 ID 集合（持久化，用于处理非连续 ID） */
-    const readIds = ref<Set<string>>(new Set(loadReadIds()))
-
-    // ==================== 日历相关状态 ====================
-
-    const calendarUnread = ref(0)
-
-    // ==================== 内部变量 ====================
-
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-    let heartbeatCheckTimer: ReturnType<typeof setInterval> | null = null
+    const MAX_RECONNECT_ATTEMPTS = 5
+    const RECONNECT_DELAY_BASE = 3000 // 基础重连延迟 3 秒
+    const HEARTBEAT_TIMEOUT = 60000 // 心跳超时 60 秒
 
     // ==================== 计算属性 ====================
 
-    /** 公告未读数 */
-    const announcementUnread = computed(() => {
-        const latest = Number(serverLatestId.value) || 0
-        const lastRead = Number(lastReadId.value) || 0
+    const isConnected = computed(() => connectionState.value === 'connected')
+    const isConnecting = computed(() =>
+        connectionState.value === 'connecting' || connectionState.value === 'reconnecting'
+    )
 
-        if (latest <= lastRead) return 0
+    // ==================== 私有变量 ====================
 
-        // 简单计算差值（实际中可能不连续，但足够用于显示）
-        const diff = latest - lastRead
-        return Math.min(diff, 99)
-    })
-
-    /** 是否有未读 */
-    const hasUnread = computed(() => announcementUnread.value > 0 || calendarUnread.value > 0)
-
-    /** 总未读数 */
-    const totalUnread = computed(() => announcementUnread.value + calendarUnread.value)
-
-    // ==================== 持久化监听 ====================
-
-    // 监听 lastReadId 变化，自动保存
-    watch(lastReadId, (newVal) => {
-        saveLastReadId(newVal)
-    })
-
-    // 监听 readIds 变化，自动保存
-    watch(readIds, (newVal) => {
-        saveReadIds(Array.from(newVal))
-    }, { deep: true })
+    let heartbeatCheckTimer: ReturnType<typeof setInterval> | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
     // ==================== 方法 ====================
 
@@ -98,40 +66,95 @@ export const useSseStore = defineStore('sse', () => {
     function connect() {
         const userStore = useUserStore()
 
+        // 检查登录状态
         if (!userStore.isSchoolLoggedIn) {
-            console.log('[SSE Store] 用户未登录，不连接')
+            console.log('[SSE] 未登录，不连接')
             return
         }
 
-        if (isConnected.value) {
-            console.log('[SSE Store] 已连接，跳过')
+        // 避免重复连接
+        if (connectionState.value === 'connecting' || connectionState.value === 'connected') {
+            console.log('[SSE] 已连接或正在连接')
             return
         }
 
-        console.log('[SSE Store] 开始连接...')
+        connectionState.value = reconnectAttempts.value > 0 ? 'reconnecting' : 'connecting'
 
-        sseClient.subscribe('announcement', (message: SseMessageData) => {
-            handleMessage('announcement', message)
-        })
+        const token = userStore.token
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
+        const sseUrl = `${baseUrl}/sse/v1/subscribe?token=${encodeURIComponent(token || '')}`
 
-        isConnected.value = true
-        reconnectAttempts.value = 0
-        lastHeartbeat.value = Date.now()
+        console.log('[SSE] 开始连接...', { attempt: reconnectAttempts.value })
 
+        // 使用 uni.request 的 EventSource 模式（或自定义实现）
+        // 注意：小程序不支持原生 EventSource，需要使用 RequestTask 或长轮询
+        // 这里使用简化的轮询方案
+        startPolling(sseUrl)
+    }
+
+    /**
+     * 轮询模拟 SSE（小程序兼容方案）
+     */
+    function startPolling(url: string) {
+        const userStore = useUserStore()
+        const infoStore = useInfoStore()
+
+        // 停止之前的轮询
+        stopPolling()
+
+        const poll = async () => {
+            if (connectionState.value === 'disconnected') return
+
+            try {
+                const response = await new Promise<UniApp.RequestSuccessCallbackResult>((resolve, reject) => {
+                    uni.request({
+                        url,
+                        method: 'GET',
+                        timeout: 30000,
+                        success: resolve,
+                        fail: reject,
+                    })
+                })
+
+                if (response.statusCode === 200) {
+                    connectionState.value = 'connected'
+                    reconnectAttempts.value = 0
+                    lastHeartbeat.value = Date.now()
+
+                    // 处理消息
+                    const data = response.data as SseMessage | SseMessage[]
+                    const messages = Array.isArray(data) ? data : [data]
+
+                    for (const msg of messages) {
+                        handleMessage(msg)
+                    }
+                } else if (response.statusCode === 401) {
+                    // Token 失效
+                    console.warn('[SSE] Token 失效，断开连接')
+                    disconnect()
+                    userStore.setSchoolLoggedIn(false)
+                    return
+                }
+            } catch (e) {
+                console.error('[SSE] 轮询失败', e)
+                handleConnectionError()
+                return
+            }
+
+            // 继续轮询（5秒间隔）
+            if (connectionState.value === 'connected') {
+                reconnectTimer = setTimeout(poll, 5000)
+            }
+        }
+
+        poll()
         startHeartbeatCheck()
     }
 
     /**
-     * 断开 SSE
+     * 停止轮询
      */
-    function disconnect() {
-        console.log('[SSE Store] 断开连接')
-
-        sseClient.unsubscribe('announcement')
-
-        isConnected.value = false
-        stopHeartbeatCheck()
-
+    function stopPolling() {
         if (reconnectTimer) {
             clearTimeout(reconnectTimer)
             reconnectTimer = null
@@ -141,54 +164,80 @@ export const useSseStore = defineStore('sse', () => {
     /**
      * 处理 SSE 消息
      */
-    function handleMessage(topic: string, message: SseMessageData) {
-        console.log('[SSE Store] 收到消息:', topic, message.type, message.data)
+    function handleMessage(msg: SseMessage) {
+        const infoStore = useInfoStore()
 
-        switch (message.type) {
-            case 'HEARTBEAT':
+        console.log('[SSE] 收到消息', msg)
+
+        switch (msg.type) {
+            case 'heartbeat':
                 lastHeartbeat.value = Date.now()
                 break
 
-            case 'NEW_ANNOUNCEMENTS':
-                // 新公告通知
-                if (message.data?.latestId) {
-                    serverLatestId.value = message.data.latestId
-                }
-                // 注意：未读数由 computed 自动计算，无需手动增加
+            case 'connected':
+                console.log('[SSE] 连接成功')
+                lastHeartbeat.value = Date.now()
                 break
 
-            case 'ANNOUNCEMENT_STATUS':
-                // 公告系统状态（连接时推送）
-                if (message.data?.latestId) {
-                    serverLatestId.value = message.data.latestId
-                }
+            case 'announcement':
+            case 'news':
+            case 'activity':
+                // 转发给 infoStore 处理
+                infoStore.handleSseMessage({
+                    channelId: msg.type === 'announcement' ? 'announcement' : msg.type,
+                    latestId: msg.data?.latestId,
+                    count: msg.data?.count,
+                    title: msg.data?.title,
+                    sourceName: msg.data?.sourceName,
+                })
                 break
 
-            case 'AUTH_REQUIRED':
-                disconnect()
+            case 'error':
+                console.error('[SSE] 服务端错误', msg.data)
                 break
+
+            default:
+                console.log('[SSE] 未知消息类型', msg)
         }
     }
 
     /**
-     * 启动心跳检测
+     * 处理连接错误
+     */
+    function handleConnectionError() {
+        connectionState.value = 'disconnected'
+
+        if (reconnectAttempts.value < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttempts.value++
+            const delay = RECONNECT_DELAY_BASE * Math.pow(2, reconnectAttempts.value - 1)
+            console.log(`[SSE] ${delay}ms 后重连...`)
+
+            reconnectTimer = setTimeout(() => {
+                connect()
+            }, delay)
+        } else {
+            console.error('[SSE] 重连次数超限，停止重连')
+        }
+    }
+
+    /**
+     * 启动心跳检查
      */
     function startHeartbeatCheck() {
         stopHeartbeatCheck()
 
         heartbeatCheckTimer = setInterval(() => {
             const now = Date.now()
-            const elapsed = now - lastHeartbeat.value
-
-            if (elapsed > 30000 && isConnected.value) {
-                console.log('[SSE Store] 心跳超时，触发重连')
-                triggerReconnect()
+            if (lastHeartbeat.value > 0 && now - lastHeartbeat.value > HEARTBEAT_TIMEOUT) {
+                console.warn('[SSE] 心跳超时，重连...')
+                connectionState.value = 'disconnected'
+                connect()
             }
-        }, 5000)
+        }, HEARTBEAT_TIMEOUT / 2)
     }
 
     /**
-     * 停止心跳检测
+     * 停止心跳检查
      */
     function stopHeartbeatCheck() {
         if (heartbeatCheckTimer) {
@@ -198,154 +247,58 @@ export const useSseStore = defineStore('sse', () => {
     }
 
     /**
-     * 触发重连
+     * 断开连接
      */
-    function triggerReconnect() {
-        if (isReconnecting.value) return
+    function disconnect() {
+        console.log('[SSE] 断开连接')
 
-        isReconnecting.value = true
-        isConnected.value = false
+        connectionState.value = 'disconnected'
+        stopPolling()
+        stopHeartbeatCheck()
+        reconnectAttempts.value = 0
+        lastHeartbeat.value = 0
+    }
 
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.value), 30000)
-        reconnectAttempts.value++
+    /**
+     * 重置并重连
+     */
+    function reconnect() {
+        disconnect()
+        reconnectAttempts.value = 0
+        connect()
+    }
 
-        console.log(`[SSE Store] ${delay / 1000}s 后重连 (第 ${reconnectAttempts.value} 次)`)
+    // ==================== 自动连接/断开 ====================
 
-        reconnectTimer = setTimeout(() => {
-            isReconnecting.value = false
-
-            const userStore = useUserStore()
-            if (userStore.isSchoolLoggedIn) {
-                disconnect()
+    // 监听登录状态变化
+    const userStore = useUserStore()
+    watch(
+        () => userStore.isSchoolLoggedIn,
+        (loggedIn) => {
+            if (loggedIn) {
                 connect()
+            } else {
+                disconnect()
             }
-        }, delay)
-    }
+        },
+        { immediate: true }
+    )
 
-    // ==================== 未读标记方法 ====================
-
-    /**
-     * 标记所有公告已读（进入公告列表页时调用）
-     */
-    function markAllAnnouncementRead() {
-        if (serverLatestId.value && serverLatestId.value !== '0') {
-            lastReadId.value = serverLatestId.value
-            console.log('[SSE Store] 标记全部已读:', lastReadId.value)
-        }
-    }
-
-    /**
-     * 标记单条公告已读（查看详情时调用）
-     */
-    function markAnnouncementItemRead(id: string) {
-        readIds.value.add(id)
-
-        // 如果这个 ID 比 lastReadId 大，更新 lastReadId
-        const idNum = Number(id) || 0
-        const lastReadNum = Number(lastReadId.value) || 0
-        if (idNum > lastReadNum) {
-            lastReadId.value = id
-        }
-
-        // 限制存储数量
-        if (readIds.value.size > MAX_READ_IDS) {
-            const arr = Array.from(readIds.value).sort((a, b) => Number(b) - Number(a))
-            readIds.value = new Set(arr.slice(0, MAX_READ_IDS))
-        }
-    }
-
-    /**
-     * 检查某条公告是否已读
-     */
-    function isAnnouncementRead(id: string): boolean {
-        const idNum = Number(id) || 0
-        const lastReadNum = Number(lastReadId.value) || 0
-
-        // ID 小于等于 lastReadId 的都算已读
-        if (idNum <= lastReadNum) return true
-
-        // 或者在 readIds 集合中
-        return readIds.value.has(id)
-    }
-
-    /**
-     * 标记日历已读
-     */
-    function markCalendarRead() {
-        calendarUnread.value = 0
-    }
-
-    /**
-     * 检查并恢复连接
-     */
-    function checkAndReconnect() {
-        const userStore = useUserStore()
-
-        if (userStore.isSchoolLoggedIn && !isConnected.value && !isReconnecting.value) {
-            console.log('[SSE Store] 检测到断连，尝试重连')
-            connect()
-        }
-    }
+    // ==================== 返回 ====================
 
     return {
         // 状态
-        isConnected,
+        connectionState,
         lastHeartbeat,
         reconnectAttempts,
-        isReconnecting,
-        serverLatestId,
-        lastReadId,
-        calendarUnread,
 
         // 计算属性
-        announcementUnread,
-        hasUnread,
-        totalUnread,
+        isConnected,
+        isConnecting,
 
         // 方法
         connect,
         disconnect,
-        checkAndReconnect,
-
-        // 未读标记
-        markAllAnnouncementRead,
-        markAnnouncementItemRead,
-        isAnnouncementRead,
-        markCalendarRead,
+        reconnect,
     }
 })
-
-// ==================== 持久化辅助函数 ====================
-
-function loadLastReadId(): string {
-    try {
-        return uni.getStorageSync(STORAGE_KEY_LAST_READ_ID) || '0'
-    } catch {
-        return '0'
-    }
-}
-
-function saveLastReadId(id: string): void {
-    try {
-        uni.setStorageSync(STORAGE_KEY_LAST_READ_ID, id)
-    } catch (e) {
-        console.warn('[SSE Store] 保存 lastReadId 失败:', e)
-    }
-}
-
-function loadReadIds(): string[] {
-    try {
-        const data = uni.getStorageSync(STORAGE_KEY_READ_IDS)
-        return data ? JSON.parse(data) : []
-    } catch {
-        return []
-    }
-}
-
-function saveReadIds(ids: string[]): void {
-    try {
-        uni.setStorageSync(STORAGE_KEY_READ_IDS, JSON.stringify(ids))
-    } catch (e) {
-        console.warn('[SSE Store] 保存 readIds 失败:', e)
-    }
-}

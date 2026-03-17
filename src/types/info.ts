@@ -1,0 +1,140 @@
+/**
+ * 信息流类型定义
+ * 
+ * 文件：src/types/info.ts
+ */
+
+// ==================== 频道与分类 ====================
+
+export interface Channel {
+    id: string
+    name: string
+    icon: string
+    categories?: Category[]
+}
+
+export interface Category {
+    id: string
+    name: string
+    code?: string
+    color?: string
+}
+
+export interface CategoryTree {
+    channels: Channel[]
+}
+
+export interface ChannelWithUnread extends Channel {
+    unreadCount: number
+}
+
+// ==================== 列表项 ====================
+
+export interface InfoItemMeta {
+    id: string
+    title: string
+    sourceId?: string
+    sourceName?: string
+    channelId?: string
+    categoryId?: string
+    categoryName?: string
+    categoryCode?: string
+    publishDate?: string
+    summary?: string
+    coverImage?: string
+    hasAttachment?: boolean
+    detailUrl?: string
+    originalUrl?: string
+}
+
+export interface InfoListResult {
+    items: InfoItemMeta[]
+    totalPage: number
+    currentPage: number
+    latestId: string
+    hasMore: boolean
+    sourceId?: string
+    channelId?: string
+}
+
+// ==================== 详情 ====================
+
+export interface InfoContent {
+    id: string
+    title: string
+    content: string
+    plainText?: string
+    author?: string
+    publishTime?: string
+    sourceId?: string
+    sourceName?: string
+    channelId?: string
+    categoryId?: string
+    categoryName?: string
+    attachments: Attachment[]
+    navigation?: Navigation
+    cachedAt?: number
+}
+
+export interface Attachment {
+    name: string
+    url: string
+    type: string
+    size?: string
+}
+
+export interface Navigation {
+    prevId?: string
+    prevTitle?: string
+    nextId?: string
+    nextTitle?: string
+}
+
+// ==================== API 参数 ====================
+
+export interface InfoListParams {
+    channelId?: string
+    categoryCode?: string
+    page?: number
+    pageSize?: number
+}
+
+export interface MarkReadParams {
+    channelId: string
+    latestId: string
+}
+
+// ==================== 未读状态 ====================
+
+export interface ChannelUnreadState {
+    serverLatestId: string
+    lastReadId: string
+    readIds: Set<string>
+}
+
+// ==================== 分类列表（兼容现有代码） ====================
+
+export const CATEGORY_LIST = [
+    { code: '', name: '全部' },
+    { code: '1018', name: '教务', color: '#0052d9' },
+    { code: '1019', name: '科研', color: '#07c160' },
+    { code: '1020', name: '行政', color: '#fa5151' },
+    { code: '1021', name: '学工', color: '#ff976a' },
+    { code: '1022', name: '校园', color: '#9c27b0' },
+]
+
+export const CATEGORY_MAP: Record<string, string> = {
+    '1018': '教务',
+    '1019': '科研',
+    '1020': '行政',
+    '1021': '学工',
+    '1022': '校园',
+}
+
+export const CATEGORY_COLOR_MAP: Record<string, string> = {
+    '1018': '#0052d9',
+    '1019': '#07c160',
+    '1020': '#fa5151',
+    '1021': '#ff976a',
+    '1022': '#9c27b0',
+}

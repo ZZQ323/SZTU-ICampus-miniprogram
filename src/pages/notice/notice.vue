@@ -1,41 +1,38 @@
 <!--
-  公告列表页（改进版 - 等待认证完成后才显示内容）
+  公告列表页（重构版）
   
   文件：src/pages/notice/notice.vue
   
   改动点：
-  1. 使用 v-if="isReady" 控制内容显示
-  2. 认证检查完成前显示遮罩
-  3. 不强制登录，但需要等待认证状态确定
+  1. 使用新的 infoApi
+  2. 使用 useInfoStore 管理未读状态
+  3. 使用 InfoListItem 组件
+  4. 进入页面自动标记已读
 -->
 
 <script setup lang="ts">
-/**
- * 公告列表页（改进版）
- * 
- * 使用 isReady 控制内容显示
- */
 import { ref, computed } from 'vue'
 import { onShow, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
+import InfoListItem from '@/components/info/InfoListItem.vue'
 import { useUserStore } from '@/store/modules/user'
+import { useInfoStore } from '@/store/modules/info'
 import { useAuthGuard } from '@/hooks/composables/useAuthGuard'
-import { useAnnouncement } from '@/hooks/useAnnouncement'
-import { announcementApi } from '@/api/announcement-apis'
-import type { AnnouncementMeta } from '@/types/announcement'
-import { CATEGORY_LIST } from '@/types/announcement'
+import { infoApi } from '@/api/info-api'
+import type { InfoItemMeta } from '@/types/info'
+import { CATEGORY_LIST } from '@/types/info'
 
 // ==================== Hooks ====================
 
 const userStore = useUserStore()
+const infoStore = useInfoStore()
 const { ensure, isReady } = useAuthGuard()
-const { isRead, markAsRead, markItemAsRead, subscribeSSE } = useAnnouncement()
 
 // ==================== 状态 ====================
 
 const loading = ref(false)
 const refreshing = ref(false)
-const list = ref<AnnouncementMeta[]>([])
+const list = ref<InfoItemMeta[]>([])
 const page = ref(1)
 const hasMore = ref(true)
 const latestId = ref('0')
@@ -47,59 +44,60 @@ const isSearchMode = ref(false)
 
 const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 
-// ==================== Mock 数据 ====================
+// ==================== Mock 数据（未登录时显示） ====================
 
-const mockData: AnnouncementMeta[] = [
+const mockData: InfoItemMeta[] = [
   {
     id: '50731',
-    url: 'info/1018/50731.htm',
-    category: '1018',
-    categoryName: '教务',
-    department: '教务处',
     title: '关于2025年春季学期教学安排的通知',
-    publishDate: '2025-01-15'
+    categoryCode: '1018',
+    categoryName: '教务',
+    sourceName: '教务处',
+    publishDate: '2025-01-15',
+    channelId: 'announcement',
   },
   {
     id: '50730',
-    url: 'info/1020/50730.htm',
-    category: '1020',
-    categoryName: '行政',
-    department: '学校办公室',
     title: '关于春节假期值班安排的通知',
-    publishDate: '2025-01-14'
+    categoryCode: '1020',
+    categoryName: '行政',
+    sourceName: '学校办公室',
+    publishDate: '2025-01-14',
+    channelId: 'announcement',
   },
   {
     id: '50729',
-    url: 'info/1021/50729.htm',
-    category: '1021',
-    categoryName: '学工',
-    department: '学生处',
     title: '关于开展2025年学生资助工作的通知',
-    publishDate: '2025-01-13'
+    categoryCode: '1021',
+    categoryName: '学工',
+    sourceName: '学生处',
+    publishDate: '2025-01-13',
+    channelId: 'announcement',
   },
   {
     id: '50728',
-    url: 'info/1022/50728.htm',
-    category: '1022',
-    categoryName: '校园',
-    department: '后勤保障部',
     title: '图书馆寒假开放时间调整通知',
-    publishDate: '2025-01-12'
+    categoryCode: '1022',
+    categoryName: '校园',
+    sourceName: '后勤保障部',
+    publishDate: '2025-01-12',
+    channelId: 'announcement',
   },
   {
     id: '50727',
-    url: 'info/1019/50727.htm',
-    category: '1019',
-    categoryName: '科研',
-    department: '科研处',
     title: '关于申报2025年度科研项目的通知',
-    publishDate: '2025-01-11'
+    categoryCode: '1019',
+    categoryName: '科研',
+    sourceName: '科研处',
+    publishDate: '2025-01-11',
+    channelId: 'announcement',
   },
 ]
 
 // ==================== 方法 ====================
 
 async function fetchList(reset = false) {
+  // 未登录显示 mock 数据
   if (!isLoggedIn.value) {
     list.value = filterByCategory(mockData)
     return
@@ -116,25 +114,31 @@ async function fetchList(reset = false) {
   loading.value = true
 
   try {
-    const params = {
-      category: activeCategory.value || undefined,
+    const result = await infoApi.getList({
+      channelId: 'announcement',
+      categoryCode: activeCategory.value || undefined,
       page: page.value,
       pageSize: 20
-    }
+    })
 
-    const result = await announcementApi.getList(params)
+    // 转换字段（兼容）
+    const items = result.items.map(item => ({
+      ...item,
+      channelId: 'announcement',
+    }))
 
     if (reset) {
-      list.value = result.list
+      list.value = items
     } else {
-      list.value = [...list.value, ...result.list]
+      list.value = [...list.value, ...items]
     }
 
-    latestId.value = result.latestId
+    latestId.value = result.latestId || '0'
     hasMore.value = result.hasMore
 
-    if (reset && result.list.length > 0) {
-      markAsRead(result.latestId)
+    // 更新服务端最新 ID
+    if (result.latestId) {
+      infoStore.updateServerLatestId('announcement', result.latestId)
     }
 
   } catch (e) {
@@ -146,13 +150,13 @@ async function fetchList(reset = false) {
   }
 }
 
-function filterByCategory(data: AnnouncementMeta[]): AnnouncementMeta[] {
+function filterByCategory(data: InfoItemMeta[]): InfoItemMeta[] {
   if (!activeCategory.value) return data
-  return data.filter(item => item.category === activeCategory.value)
+  return data.filter(item => item.categoryCode === activeCategory.value)
 }
 
-function handleCategoryChange(category: string) {
-  activeCategory.value = category
+function handleCategoryChange(categoryCode: string) {
+  activeCategory.value = categoryCode
   searchKeyword.value = ''
   isSearchMode.value = false
   fetchList(true)
@@ -172,6 +176,12 @@ async function handleSearch() {
   }
 
   if (!isLoggedIn.value) {
+    // 未登录时本地搜索
+    const filtered = mockData.filter(item =>
+      item.title.toLowerCase().includes(keyword.toLowerCase())
+    )
+    list.value = filterByCategory(filtered)
+    isSearchMode.value = true
     return
   }
 
@@ -179,8 +189,11 @@ async function handleSearch() {
   isSearchMode.value = true
 
   try {
-    const result = await announcementApi.search(keyword, 50)
-    list.value = result
+    const result = await infoApi.search(keyword, 'announcement', 50)
+    list.value = result.map(item => ({
+      ...item,
+      channelId: 'announcement',
+    }))
     hasMore.value = false
   } catch (e) {
     console.error('[Notice] 搜索失败', e)
@@ -196,10 +209,10 @@ function handleClearSearch() {
   fetchList(true)
 }
 
-function handleItemClick(item: AnnouncementMeta) {
-  markItemAsRead(item.id)
+function handleItemClick(item: InfoItemMeta) {
+  // 已在 InfoListItem 组件中标记已读
   uni.navigateTo({
-    url: `/pages/notice/detail?id=${item.id}&category=${item.category}`
+    url: `/pages/notice/detail?id=${item.id}&category=${item.categoryCode || ''}`
   })
 }
 
@@ -213,9 +226,8 @@ async function handleRefresh() {
 // ==================== 生命周期 ====================
 
 onShow(async () => {
-  // ⭐ 改进：等待认证检查完成
-  // 不强制登录，但需要等待状态确定
-  const result = await ensure({
+  // 等待认证检查完成
+  await ensure({
     requireSchoolLogin: false
   })
 
@@ -224,9 +236,9 @@ onShow(async () => {
     fetchList(true)
   }
 
-  // 已登录则订阅 SSE
+  // 进入页面时标记频道已读
   if (isLoggedIn.value) {
-    subscribeSSE()
+    infoStore.markChannelRead('announcement')
   }
 })
 
@@ -246,7 +258,7 @@ onPullDownRefresh(() => {
 
 <template>
   <PageLayout>
-    <!-- ⭐ 关键：只有认证就绪后才显示页面内容 -->
+    <!-- 只有认证就绪后才显示页面内容 -->
     <view v-if="isReady" class="notice-page">
       <!-- 顶部搜索框 -->
       <view class="search-header">
@@ -296,20 +308,7 @@ onPullDownRefresh(() => {
 
       <!-- 公告列表 -->
       <view v-else class="list">
-        <view v-for="item in list" :key="item.id" :class="['notice-item', { unread: !isRead(item.id) }]"
-          @click="handleItemClick(item)">
-          <view class="item-header">
-            <view class="category-tag" :class="'cat-' + item.category">
-              {{ item.categoryName }}
-            </view>
-            <text class="date">{{ item.publishDate }}</text>
-          </view>
-          <view class="item-title">{{ item.title }}</view>
-          <view class="item-footer">
-            <text class="department">{{ item.department }}</text>
-            <t-icon name="chevron-right" size="32rpx" class="arrow" />
-          </view>
-        </view>
+        <InfoListItem v-for="item in list" :key="item.id" :item="item" @tap="handleItemClick" />
 
         <!-- 加载更多 -->
         <view v-if="loading && list.length > 0" class="load-more">
@@ -426,83 +425,6 @@ onPullDownRefresh(() => {
 
 .list {
   padding: 20rpx;
-}
-
-.notice-item {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 20rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
-
-  &.unread {
-    border-left: 6rpx solid #0052d9;
-  }
-}
-
-.item-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16rpx;
-}
-
-.category-tag {
-  font-size: 22rpx;
-  padding: 4rpx 16rpx;
-  border-radius: 4rpx;
-  color: #fff;
-
-  &.cat-1018 {
-    background: #0052d9;
-  }
-
-  &.cat-1019 {
-    background: #07c160;
-  }
-
-  &.cat-1020 {
-    background: #fa5151;
-  }
-
-  &.cat-1021 {
-    background: #ff976a;
-  }
-
-  &.cat-1022 {
-    background: #9c27b0;
-  }
-}
-
-.date {
-  font-size: 24rpx;
-  color: #999;
-}
-
-.item-title {
-  font-size: 30rpx;
-  color: #333;
-  line-height: 1.5;
-  margin-bottom: 16rpx;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.item-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.department {
-  font-size: 24rpx;
-  color: #666;
-}
-
-.arrow {
-  color: #ccc;
 }
 
 .load-more {

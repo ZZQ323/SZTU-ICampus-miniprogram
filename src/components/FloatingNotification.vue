@@ -1,182 +1,157 @@
 <!--
-  悬浮通知组件
+  悬浮按钮组件（重构版）
   
-  文件：src/components/FloatingNotification.vue
+  文件：src/components/common/FloatingNotification.vue
   
   功能：
-  - 右下角悬浮按钮，点击展开菜单
-  - 显示公告和日历的未读数
-  - 点击跳转到相应页面
-  - 自动管理 SSE 连接
-  
-  使用方式：在每个需要显示的页面中引入
-  <FloatingNotification />
+  - 主按钮显示总未读数
+  - 展开显示公告、日历入口（各自带未读数）
+  - 集成新消息浮窗
 -->
-
 <template>
-    <!-- 遮罩层（展开时显示） -->
-    <view v-if="expanded" class="fab-overlay" @tap="expanded = false" />
-
-    <!-- 悬浮按钮容器 -->
-    <view class="fab-container" :style="containerStyle">
-        <!-- 展开的菜单项 -->
-        <view v-if="expanded" class="fab-menu">
-            <!-- 公告按钮 -->
-            <view class="fab-menu-item" @tap="goAnnouncement">
-                <view class="fab-menu-icon announcement">
-                    <t-icon name="notification" size="40rpx" />
-                    <view v-if="sseStore.announcementUnread > 0" class="badge">
-                        {{ sseStore.announcementUnread > 99 ? '99+' : sseStore.announcementUnread }}
+    <view class="fab-wrapper">
+        <!-- 展开的菜单 -->
+        <view v-if="isExpanded" class="fab-menu">
+            <view v-for="item in menuItems" :key="item.id" class="fab-menu-item" @tap="handleMenuTap(item)">
+                <view class="menu-icon-wrapper">
+                    <t-icon :name="item.icon" size="40rpx" :color="item.color" />
+                    <view v-if="item.unread > 0" class="menu-badge">
+                        {{ item.unread > 99 ? '99+' : item.unread }}
                     </view>
                 </view>
-                <text class="fab-menu-label">公告</text>
-            </view>
-
-            <!-- 日历按钮 -->
-            <view class="fab-menu-item" @tap="goCalendar">
-                <view class="fab-menu-icon calendar">
-                    <t-icon name="calendar" size="40rpx" />
-                    <view v-if="sseStore.calendarUnread > 0" class="badge">
-                        {{ sseStore.calendarUnread > 99 ? '99+' : sseStore.calendarUnread }}
-                    </view>
-                </view>
-                <text class="fab-menu-label">日历</text>
+                <text class="menu-label">{{ item.label }}</text>
             </view>
         </view>
+
+        <!-- 遮罩层 -->
+        <view v-if="isExpanded" class="fab-overlay" @tap="isExpanded = false" />
 
         <!-- 主按钮 -->
-        <view class="fab-main" :class="{ expanded: expanded, 'has-unread': sseStore.hasUnread }" @tap="toggleExpand">
-            <t-icon :name="expanded ? 'close' : 'add'" size="48rpx" />
-            <view v-if="!expanded && sseStore.hasUnread" class="fab-badge">
-                {{ sseStore.totalUnread > 99 ? '99+' : sseStore.totalUnread }}
+        <view class="fab-main" :class="{ 'is-expanded': isExpanded }" @tap="toggleExpand">
+            <t-icon :name="isExpanded ? 'close' : 'notification'" size="44rpx" color="#fff" />
+
+            <!-- 总未读红点（折叠时显示） -->
+            <view v-if="!isExpanded && totalUnread > 0" class="fab-badge">
+                {{ totalUnread > 99 ? '99+' : totalUnread }}
             </view>
         </view>
+
+        <!-- 新消息浮窗 -->
+        <NewMessageToast :message="newMessage" @tap="handleToastTap" @close="handleToastClose" />
     </view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { onShow, onHide } from '@dcloudio/uni-app'
-import { useSseStore } from '@/store/modules/sse'
-import { useUserStore } from '@/store/modules/user'
+import { ref, computed, watch } from 'vue'
+import { useInfoStore } from '@/store/modules/info'
+import NewMessageToast from './NewMessageToast.vue'
 
-const sseStore = useSseStore()
-const userStore = useUserStore()
+// ==================== Store ====================
+
+const infoStore = useInfoStore()
 
 // ==================== 状态 ====================
 
-const expanded = ref(false)
+const isExpanded = ref(false)
 
 // ==================== 计算属性 ====================
 
-// 容器样式（避开 TabBar）
-const containerStyle = computed(() => {
-    // 获取页面信息判断是否是 TabBar 页面
-    const pages = getCurrentPages()
-    const currentPage = pages[pages.length - 1]
-    const isTabBarPage = isTabBar(currentPage?.route || '')
+const totalUnread = computed(() => infoStore.totalUnread)
+const newMessage = computed(() => infoStore.newMessage)
 
-    return {
-        bottom: isTabBarPage ? '180rpx' : '100rpx',
-        right: '40rpx'
+const menuItems = computed(() => [
+    {
+        id: 'announcement',
+        label: '公告',
+        icon: 'notification',
+        color: '#0052d9',
+        unread: infoStore.getUnreadCount('announcement'),
+        path: '/pages/notice/notice'
+    },
+    {
+        id: 'activity',
+        label: '日历',
+        icon: 'calendar',
+        color: '#07c160',
+        unread: infoStore.getUnreadCount('activity'),
+        path: '/pages/calendar/calendar'
     }
-})
+])
 
 // ==================== 方法 ====================
 
 function toggleExpand() {
-    expanded.value = !expanded.value
+    isExpanded.value = !isExpanded.value
 }
 
-function goAnnouncement() {
-    expanded.value = false
-    sseStore.markAnnouncementRead()
-    uni.switchTab({ url: '/pages/notice/notice' })
+function handleMenuTap(item: typeof menuItems.value[0]) {
+    isExpanded.value = false
+
+    // TabBar 页面用 switchTab，其他用 navigateTo
+    if (item.path === '/pages/notice/notice') {
+        uni.switchTab({ url: item.path })
+    } else {
+        uni.navigateTo({ url: item.path })
+    }
 }
 
-function goCalendar() {
-    expanded.value = false
-    sseStore.markCalendarRead()
-    uni.navigateTo({ url: '/pages/calendar/calendar' })
+function handleToastTap(message: any) {
+    infoStore.clearNewMessage()
+
+    // 跳转到公告页
+    if (message.channelId === 'announcement') {
+        uni.switchTab({ url: '/pages/notice/notice' })
+    } else {
+        uni.navigateTo({ url: `/pages/calendar/calendar` })
+    }
 }
+
+function handleToastClose() {
+    infoStore.clearNewMessage()
+}
+
+// ==================== 暴露方法 ====================
 
 /**
- * 判断是否是 TabBar 页面
+ * 显示新消息浮窗（供外部调用）
  */
-function isTabBar(route: string): boolean {
-    const tabBarPages = [
-        'pages/home/home',
-        'pages/schedule/schedule',
-        'pages/notice/notice',
-        'pages/mine/mine'
-    ]
-    return tabBarPages.some(p => route.includes(p))
+function showNewMessage(message: any) {
+    infoStore.newMessage = message
 }
 
-// ==================== 生命周期 ====================
-
-onShow(() => {
-    // 检查并恢复 SSE 连接
-    if (userStore.isSchoolLoggedIn) {
-        sseStore.checkAndReconnect()
-    }
-})
-
-onMounted(() => {
-    // 首次加载时连接 SSE
-    if (userStore.isSchoolLoggedIn && !sseStore.isConnected) {
-        sseStore.connect()
-    }
+defineExpose({
+    showNewMessage
 })
 </script>
 
 <style lang="scss" scoped>
-.fab-overlay {
+.fab-wrapper {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.3);
-    z-index: 998;
-}
-
-.fab-container {
-    position: fixed;
-    z-index: 999;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
+    right: 32rpx;
+    bottom: 200rpx;
+    z-index: 1000;
 }
 
 .fab-main {
-    width: 100rpx;
-    height: 100rpx;
+    width: 96rpx;
+    height: 96rpx;
     border-radius: 50%;
-    background: linear-gradient(135deg, #1976d2, #1565c0);
+    background: linear-gradient(135deg, #0052d9, #0066ff);
+    box-shadow: 0 8rpx 24rpx rgba(0, 82, 217, 0.4);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
-    box-shadow: 0 8rpx 24rpx rgba(25, 118, 210, 0.4);
-    transition: all 0.3s ease;
     position: relative;
-
-    &.expanded {
-        transform: rotate(45deg);
-        background: #666;
-    }
-
-    &.has-unread {
-        animation: pulse 2s infinite;
-    }
+    transition: all 0.2s ease;
 
     &:active {
         transform: scale(0.95);
+    }
 
-        &.expanded {
-            transform: rotate(45deg) scale(0.95);
-        }
+    &.is-expanded {
+        background: #666;
+        box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.2);
+        transform: rotate(90deg);
     }
 }
 
@@ -186,82 +161,39 @@ onMounted(() => {
     right: -8rpx;
     min-width: 36rpx;
     height: 36rpx;
-    padding: 0 8rpx;
-    background: #fa5151;
-    border-radius: 18rpx;
+    padding: 0 10rpx;
     font-size: 22rpx;
+    font-weight: 600;
     color: #fff;
+    background-color: #f54a45;
+    border-radius: 18rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 4rpx solid #fff;
+    box-shadow: 0 2rpx 8rpx rgba(245, 74, 69, 0.4);
+}
+
+.fab-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: -1;
 }
 
 .fab-menu {
+    position: absolute;
+    bottom: 116rpx;
+    right: 0;
     display: flex;
     flex-direction: column;
-    gap: 24rpx;
-    margin-bottom: 24rpx;
-    animation: slideUp 0.2s ease;
+    gap: 20rpx;
+    animation: fadeInUp 0.2s ease-out;
 }
 
-.fab-menu-item {
-    display: flex;
-    align-items: center;
-    gap: 16rpx;
-    padding: 16rpx 24rpx;
-    background: #fff;
-    border-radius: 48rpx;
-    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
-
-    &:active {
-        background: #f5f5f5;
-    }
-}
-
-.fab-menu-icon {
-    width: 72rpx;
-    height: 72rpx;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    position: relative;
-
-    &.announcement {
-        background: linear-gradient(135deg, #ff9800, #f57c00);
-    }
-
-    &.calendar {
-        background: linear-gradient(135deg, #4caf50, #388e3c);
-    }
-
-    .badge {
-        position: absolute;
-        top: -6rpx;
-        right: -6rpx;
-        min-width: 32rpx;
-        height: 32rpx;
-        padding: 0 6rpx;
-        background: #fa5151;
-        border-radius: 16rpx;
-        font-size: 20rpx;
-        color: #fff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: 3rpx solid #fff;
-    }
-}
-
-.fab-menu-label {
-    font-size: 28rpx;
-    color: #333;
-    white-space: nowrap;
-}
-
-@keyframes slideUp {
+@keyframes fadeInUp {
     from {
         opacity: 0;
         transform: translateY(20rpx);
@@ -273,15 +205,51 @@ onMounted(() => {
     }
 }
 
-@keyframes pulse {
+.fab-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+    padding: 16rpx 24rpx 16rpx 16rpx;
+    background: #fff;
+    border-radius: 48rpx;
+    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
 
-    0%,
-    100% {
-        box-shadow: 0 8rpx 24rpx rgba(25, 118, 210, 0.4);
+    &:active {
+        background: #f5f5f5;
     }
+}
 
-    50% {
-        box-shadow: 0 8rpx 32rpx rgba(25, 118, 210, 0.6), 0 0 0 8rpx rgba(25, 118, 210, 0.1);
-    }
+.menu-icon-wrapper {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 50%;
+    background: #f5f5f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.menu-badge {
+    position: absolute;
+    top: -6rpx;
+    right: -6rpx;
+    min-width: 28rpx;
+    height: 28rpx;
+    padding: 0 6rpx;
+    font-size: 18rpx;
+    font-weight: 600;
+    color: #fff;
+    background-color: #f54a45;
+    border-radius: 14rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.menu-label {
+    font-size: 28rpx;
+    color: #333;
+    white-space: nowrap;
 }
 </style>
