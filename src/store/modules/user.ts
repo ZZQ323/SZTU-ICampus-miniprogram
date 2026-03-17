@@ -7,7 +7,7 @@
  * - 管理 Token 和用户信息
  * - 提供认证相关的 API 调用方法
  * 
- * ⭐ 注意：API 返回的直接是业务数据，不需要 .data 访问
+ * 注意：API 返回的直接是业务数据，不需要 .data 访问
  *    例如：const res = await wxAuthApi.getToken(code)
  *          res.token  // 直接访问，res 的类型就是 TokenVo
  */
@@ -157,7 +157,7 @@ export const useUserStore = defineStore('user', () => {
    * 初始化会话（强制重建 Cookie）
    */
   async function initSession(): Promise<LoginResultsVo> {
-    // ⭐ API 直接返回 LoginResultsVo
+    // API 直接返回 LoginResultsVo
     const result = await authApi.initSession()
 
     loginTypes.value = result.loginTypes || []
@@ -174,6 +174,52 @@ export const useUserStore = defineStore('user', () => {
     }
 
     return result
+  }
+
+  /**
+ * 完全重置会话
+ * 
+ * 流程：
+ * 1. 调用后端清除 Redis（TokenMeta + ProxySession）
+ * 2. 清除本地存储
+ * 3. 重新获取 Token
+ * 4. 重新初始化学校会话
+ * 
+ * @returns 是否成功
+ */
+  async function resetSession(): Promise<boolean> {
+    try {
+      // 1. 调用后端清除 Redis
+      await wxAuthApi.resetSession()
+      console.log('[UserStore] 后端会话已清除')
+
+    } catch (e) {
+      console.warn('[UserStore] 清除后端会话失败（可能 token 已失效）', e)
+      // 继续执行，因为可能 token 本身就无效了
+    }
+
+    // 2. 清除本地存储
+    clearAll()
+
+    // 3. 重新获取 Token
+    try {
+      await initToken()
+      console.log('[UserStore] Token 已重新获取')
+    } catch (e) {
+      console.error('[UserStore] 重新获取 Token 失败', e)
+      return false
+    }
+
+    // 4. 重新初始化学校会话（获取 loginTypes）
+    try {
+      await initSession()
+      console.log('[UserStore] 学校会话已重新初始化')
+    } catch (e) {
+      console.warn('[UserStore] 初始化学校会话失败', e)
+      // 不影响整体流程
+    }
+
+    return true
   }
 
   /**
@@ -310,7 +356,7 @@ export const useUserStore = defineStore('user', () => {
     token,
     userInfo,
     loginTypes,
-    
+
     historyUserIds,
     lastUsedUserId,
     setLastUsedUserId,
@@ -327,6 +373,7 @@ export const useUserStore = defineStore('user', () => {
     // 会话管理
     checkSchoolSession,
     initSession,
+    resetSession,
     refreshSession,
     fetchHistoryUserIds,
 

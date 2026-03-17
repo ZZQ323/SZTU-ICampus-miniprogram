@@ -1,7 +1,7 @@
 <!--
-  App.vue（保活版）
+  App.vue（保活版 - 使用 useAuth hook）
   
-  新增功能：
+  功能：
   1. 全局 30 分钟保活定时器
   2. onShow 时检查是否超过 30 分钟未检查
   3. onHide 时停止定时器
@@ -17,24 +17,20 @@
 <script setup lang="ts">
 /**
  * 应用入口（保活版）
+ * 
+ * ⭐ 使用 useAuth hook 复用检查逻辑
  */
 import { onLaunch, onShow, onHide } from '@dcloudio/uni-app'
 import { useUserStore } from '@/store/modules/user'
-import { useAuthStore } from '@/store/modules/auth'
+import { useAuth, KEEP_ALIVE_INTERVAL } from '@/hooks/useAuth'
 
 const userStore = useUserStore()
-const authStore = useAuthStore()
+const { checkStatus, needsRefresh } = useAuth()
 
 // ==================== 保活配置 ====================
 
-/** 保活间隔：30 分钟（毫秒） */
-const KEEP_ALIVE_INTERVAL = 30 * 60 * 1000
-
 /** 保活定时器 */
 let keepAliveTimer: ReturnType<typeof setInterval> | null = null
-
-/** 上次检查时间 */
-let lastCheckTime = 0
 
 // ==================== 生命周期 ====================
 
@@ -53,7 +49,7 @@ onLaunch(async () => {
   }
 
   // 2. 启动时检查一次状态（静默）
-  await checkStatusSilent()
+  await checkStatus()
 
   // 3. 启动保活定时器
   startKeepAliveTimer()
@@ -63,10 +59,9 @@ onShow(() => {
   console.log('[App] 应用进入前台')
 
   // 检查是否超过保活间隔
-  const elapsed = Date.now() - lastCheckTime
-  if (elapsed > KEEP_ALIVE_INTERVAL) {
+  if (needsRefresh()) {
     console.log('[App] 距上次检查超过 30 分钟，立即检查')
-    checkStatusSilent()
+    checkStatus()
   }
 
   // 恢复保活定时器
@@ -93,7 +88,7 @@ function startKeepAliveTimer() {
 
   keepAliveTimer = setInterval(() => {
     console.log('[App] 保活定时器触发')
-    checkStatusSilent()
+    checkStatus()
   }, KEEP_ALIVE_INTERVAL)
 
   console.log('[App] 保活定时器已启动，间隔 30 分钟')
@@ -107,50 +102,6 @@ function stopKeepAliveTimer() {
     clearInterval(keepAliveTimer)
     keepAliveTimer = null
     console.log('[App] 保活定时器已停止')
-  }
-}
-
-/**
- * 静默检查状态
- * 
- * 调用 /auth/v1/status 接口：
- * - 刷新学校 Cookie（通过重定向保活）
- * - 更新本地登录状态
- * - 触发 Token 续签（通过 AccessTouchInterceptor）
- */
-async function checkStatusSilent() {
-  // 更新检查时间
-  lastCheckTime = Date.now()
-
-  // 如果没有 Token，不检查（会在具体页面处理）
-  if (!userStore.hasToken) {
-    console.log('[App] 无 Token，跳过状态检查')
-    return
-  }
-
-  try {
-    console.log('[App] 开始静默检查状态...')
-    const status = await userStore.checkSchoolSession()
-    console.log('[App] 状态检查完成: logined=', status.logined)
-  } catch (e: any) {
-    console.warn('[App] 状态检查失败:', e?.message || e)
-
-    // 如果是 401，尝试刷新 Token
-    if (e?.code === 401) {
-      try {
-        await userStore.refreshTokenIfNeeded()
-        console.log('[App] Token 刷新成功，重试状态检查')
-        await userStore.checkSchoolSession()
-      } catch (refreshError) {
-        console.error('[App] Token 刷新失败:', refreshError)
-        // 不阻塞，后续页面会处理
-      }
-    }
-
-    // 如果是 403，表示 Cookie 过期，后续页面会处理
-    if (e?.code === 403) {
-      console.log('[App] Cookie 已过期，后续页面会处理')
-    }
   }
 }
 </script>

@@ -159,7 +159,7 @@ export function navigateToLogin() {
  * 跳转到首页
  */
 export function navigateToHome() {
-  uni.switchTab({ url: '/pages/home/index' })
+  uni.switchTab({ url: '/pages/home/home' })
 }
 
 /**

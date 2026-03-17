@@ -105,7 +105,7 @@ function goCalendar() {
  */
 function isTabBar(route: string): boolean {
     const tabBarPages = [
-        'pages/home/index',
+        'pages/home/home',
         'pages/schedule/schedule',
         'pages/notice/notice',
         'pages/mine/mine'

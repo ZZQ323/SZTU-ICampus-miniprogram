@@ -17,7 +17,7 @@ import { onLoad } from '@dcloudio/uni-app'
 
 const errorMessage = ref('连接失败')
 const retryable = ref(true)
-const redirectTo = ref('/pages/home/index')
+const redirectTo = ref('/pages/home/home')
 const redirectType = ref<'switchTab' | 'navigateTo' | 'reLaunch'>('switchTab')
 
 onLoad((options) => {
@@ -62,7 +62,7 @@ function handleRetry() {
 }
 
 function handleGoHome() {
-    uni.switchTab({ url: '/pages/home/index' })
+    uni.switchTab({ url: '/pages/home/home' })
 }
 
 function handleGoBack() {

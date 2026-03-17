@@ -405,7 +405,7 @@ function handleAuthFailure() {
   }
 
   // 跳转到首页（让用户重新走流程）
-  uni.reLaunch({ url: '/pages/home/index' })
+  uni.reLaunch({ url: '/pages/home/home' })
 }
 
 /**

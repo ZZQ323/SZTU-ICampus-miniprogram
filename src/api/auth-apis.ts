@@ -40,6 +40,12 @@ export const wxAuthApi = {
    */
   refreshToken: (wxCode: string) =>
     request.post<TokenVo>('/wx-auth/v1/refresh-token', { wxCode }),
+
+  /**
+   * 重置会话（清除后端 Redis 缓存）
+   */
+  resetSession: () =>
+    request.post<{ success: boolean; message: string }>('/wx-auth/v1/reset-session'),
 }
 
 // ==================== 认证管理（/auth） ====================

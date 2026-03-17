@@ -8,27 +8,6 @@
  * 2. isReady 状态：认证完成后才为 true
  * 3. 自动控制遮罩显示/隐藏
  * 4. 支持等待认证完成的 Promise
- * 
- * 使用方式：
- * ```vue
- * <template>
- *   <PageLayout>
- *     <view v-if="isReady" class="page-content">
- *       <!-- 认证完成后才显示的内容 -->
- *     </view>
- *   </PageLayout>
- * </template>
- * 
- * <script setup>
- * const { ensure, isReady } = useAuthGuard()
- * 
- * onShow(async () => {
- *   await ensure({ requireSchoolLogin: true })
- *   // 认证完成后执行
- *   loadData()
- * })
- * </script>
- * ```
  */
 
 import { ref, readonly, computed } from 'vue'

@@ -1,12 +1,12 @@
 <!--
-  首页（改进版 - 等待认证完成后才显示内容）
+  首页（改进版 - 使用 useAuth hook）
   
-  文件：src/pages/home/index.vue
+  文件：src/pages/home/home.vue
   
-  改动点：
+  功能：
   1. 使用 v-if="isReady" 控制内容显示
-  2. 认证检查完成前显示遮罩
-  3. 跳转登录页前确保 loginTypes 已获取
+  2. 点击头像时强制检查登录状态（使用 useAuth）
+  3. 如果登录已过期，提示并跳转登录页
 -->
 
 <template>
@@ -62,13 +62,27 @@
       <view class="section">
         <text class="section-title">关于</text>
         <t-cell-group>
-          <t-cell title="版本信息" note="v0.0.4" />
+          <t-cell title="版本信息" note="v0.0.3" />
+          <!-- 更新会话按钮 -->
+          <t-cell title="刷新会话" note="提示会话异常时点击" arrow @click="handleResetSession">
+            <template #left-icon>
+              <t-icon name="refresh" size="48rpx" color="#f44336" />
+            </template>
+          </t-cell>
         </t-cell-group>
       </view>
+
+      <!-- 重置确认弹窗 -->
+      <t-dialog :visible="showResetConfirm" title="更新会话" content="将清除所有登录状态并重新初始化，确定继续吗？" confirm-btn="确定"
+        cancel-btn="取消" @confirm="confirmResetSession" @cancel="showResetConfirm = false" />
 
       <!-- 登出确认弹窗 -->
       <t-dialog :visible="showLogoutConfirm" title="退出登录" content="确定要退出登录吗？" confirm-btn="确定" cancel-btn="取消"
         @confirm="confirmLogout" @cancel="showLogoutConfirm = false" />
+
+      <!-- 登录过期弹窗 -->
+      <t-dialog :visible="showExpiredDialog" title="登录已过期" content="需要重新登录，是否前往登录页？" confirm-btn="去登录" cancel-btn="取消"
+        @confirm="handleGoLogin" @cancel="showExpiredDialog = false" />
     </view>
 
     <FloatingNotification />
@@ -79,56 +93,75 @@
 /**
  * 首页（改进版）
  * 
- * 使用 isReady 控制内容显示，确保认证信息完全到达后才渲染
+ * ⭐ 使用 useAuth hook 实现点击头像强制检查
  */
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
 import FloatingNotification from "@/components/FloatingNotification.vue"
 import { useUserStore } from '@/store/modules/user'
+import { useAuthStore } from '@/store/modules/auth'
 import { useAuthGuard } from '@/hooks/composables/useAuthGuard'
+import { useAuth } from '@/hooks/useAuth'  // ⭐ 新增
 
 const userStore = useUserStore()
+const authStore = useAuthStore()
 const { ensure, isReady } = useAuthGuard()
+const { checkStatusWithUI, goLogin } = useAuth()  // ⭐ 新增
+
+// ==================== 状态 ====================
+
+const showLogoutConfirm = ref(false)
+const showResetConfirm = ref(false)
+const showExpiredDialog = ref(false)  // ⭐ 新增：登录过期弹窗
 
 // ==================== 生命周期 ====================
 
 /**
  * 页面显示时进行认证检查
- * 
- * ⭐ 改进设计：
- * - 不传 silent: true，会显示遮罩
- * - 等待 ensure 完成后，isReady 才会变为 true
- * - 页面内容使用 v-if="isReady" 控制，确保信息完全到达后才显示
  */
 onShow(async () => {
   await ensure({
     requireSchoolLogin: false,  // 不强制登录
-    // 不传 silent，使用遮罩
   })
 })
 
 // ==================== 事件处理 ====================
 
 /**
- * 点击头像：跳转登录
+ * 点击头像
  * 
- * ⭐ 改进：loginTypes 已经在 ensure 时获取，直接使用
+ * - 如果已登录，强制检查一次状态（带 UI 反馈）
+ * - 如果检查后发现登录已过期，弹窗提示并跳转登录页
+ * - 如果未登录，直接跳转登录页
  */
 async function handleAvatarClick() {
   if (userStore.isSchoolLoggedIn) {
-    uni.showToast({ title: '已登录', icon: 'success' })
-  } else {
-    // loginTypes 已经通过 ensure 获取，存储在 userStore 中
-    const loginTypesParam = userStore.loginTypes?.join(',') || 'SMS'
-    uni.navigateTo({
-      url: `/pages/common/login/login?loginTypes=${loginTypesParam}`
+    // ⭐ 强制检查一次状态（带 UI 反馈）
+    const result = await checkStatusWithUI({
+      showLoading: true,
+      showResult: true
     })
+
+    // 如果检查后发现未登录（Cookie 过期），弹窗提示
+    if (!result.logined) {
+      showExpiredDialog.value = true
+    }
+  } else {
+    // 未登录，直接跳转登录页
+    goLogin()
   }
 }
 
-// 显示登出确认
-const showLogoutConfirm = ref(false)
+/**
+ * 处理跳转登录（从过期弹窗）
+ */
+function handleGoLogin() {
+  showExpiredDialog.value = false
+  goLogin()
+}
+
+// ==================== 登出确认 ====================
 
 function handleLogout() {
   showLogoutConfirm.value = true
@@ -138,6 +171,37 @@ async function confirmLogout() {
   showLogoutConfirm.value = false
   await userStore.logoutSchool()
   uni.showToast({ title: '已退出登录', icon: 'success' })
+}
+
+// ==================== 更新会话 ====================
+
+function handleResetSession() {
+  showResetConfirm.value = true
+}
+
+async function confirmResetSession() {
+  showResetConfirm.value = false
+
+  // 显示加载
+  uni.showLoading({ title: '正在重置...' })
+
+  try {
+    const success = await userStore.resetSession()
+
+    uni.hideLoading()
+
+    if (success) {
+      uni.showToast({ title: '会话已更新', icon: 'success' })
+
+      // 重新执行认证检查
+      await ensure({ requireSchoolLogin: false, forceCheck: true })
+    } else {
+      uni.showToast({ title: '重置失败，请重试', icon: 'error' })
+    }
+  } catch (e) {
+    uni.hideLoading()
+    uni.showToast({ title: '重置失败', icon: 'error' })
+  }
 }
 
 // ==================== 页面跳转 ====================

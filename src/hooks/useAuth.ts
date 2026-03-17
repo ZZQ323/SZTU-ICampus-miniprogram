@@ -3,179 +3,243 @@
  * 
  * 文件：src/hooks/useAuth.ts
  * 
- * 封装认证流程的核心逻辑，供页面复用
+ * 提供：
+ * - checkStatus()         静默检查状态（App.vue 保活用）
+ * - checkStatusWithUI()   带 UI 反馈的检查（点击头像确认登录状态）
+ * - forceRefresh()        强制刷新会话（Cookie 过期时）
+ * - goLogin()             跳转登录页
+ * - needsRefresh()        检查是否需要刷新（超过 30 分钟）
  */
 
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useUserStore } from '@/store/modules/user'
-import type { LoginStatusVo, LoginType } from '@/types/auth'
+import { useAuthStore } from '@/store/modules/auth'
 
-/** 认证状态枚举 */
-export type AuthState =
-    | 'checking'      // 检查中
-    | 'no-token'      // 无 token
-    | 'need-login'    // 有 token，需要登录学校
-    | 'logged-in'     // 已登录学校
-    | 'error'         // 出错
+// ==================== 全局状态 ====================
 
-/** 认证检查结果 */
-export interface AuthCheckResult {
-    state: AuthState
-    loginTypes?: LoginType[]
+/** 上次检查时间（全局共享） */
+let lastCheckTime = 0
+
+/** 保活间隔：30 分钟（毫秒） */
+export const KEEP_ALIVE_INTERVAL = 30 * 60 * 1000
+
+// ==================== 类型定义 ====================
+
+export interface CheckResult {
+    success: boolean
+    logined: boolean
+    loginTypes?: string[]
     error?: string
 }
 
-/**
- * 认证逻辑 Hook
- * 
- * 使用示例：
- * ```ts
- * const { authState, checkAuth, ensureAuth } = useAuth()
- * 
- * onShow(async () => {
- *   const result = await ensureAuth()
- *   if (result.state === 'logged-in') {
- *     // 加载数据
- *   }
- * })
- * ```
- */
+// ==================== Hook ====================
+
 export function useAuth() {
     const userStore = useUserStore()
+    const authStore = useAuthStore()
 
-    const authState = ref<AuthState>('checking')
-    const lastStatus = ref<LoginStatusVo | null>(null)
-    const errorMessage = ref('')
+    /** 是否正在检查中 */
+    const isChecking = ref(false)
 
-    // 计算属性
-    const isLoggedIn = computed(() => authState.value === 'logged-in')
-    const isChecking = computed(() => authState.value === 'checking')
-    const needLogin = computed(() => authState.value === 'need-login')
+    // ==================== 核心方法 ====================
 
     /**
-     * 检查认证状态（不做任何跳转）
+     * 静默检查状态（不显示 UI）
+     * 
+     * 用于：
+     * - App.vue 启动时检查
+     * - App.vue 30 分钟保活
+     * - 后台自动检查
      */
-    async function checkAuth(): Promise<AuthCheckResult> {
-        authState.value = 'checking'
-        errorMessage.value = ''
+    async function checkStatus(): Promise<CheckResult> {
+        // 更新检查时间
+        lastCheckTime = Date.now()
+
+        // 如果没有 Token，跳过
+        if (!userStore.hasToken) {
+            console.log('[useAuth] 无 Token，跳过状态检查')
+            return { success: false, logined: false, error: '无 Token' }
+        }
 
         try {
-            // 1. 检查 token
-            if (!userStore.hasToken) {
-                authState.value = 'no-token'
-                return { state: 'no-token' }
-            }
-
-            // 2. 检查学校登录状态
+            console.log('[useAuth] 开始静默检查状态...')
             const status = await userStore.checkSchoolSession()
-            lastStatus.value = status
-
-            if (status.logined) {
-                authState.value = 'logged-in'
-
-                // 如果 Cookie 即将过期，后台静默刷新
-                if (status.cookieExpiringSoon) {
-                    refreshSessionSilently()
-                }
-
-                return { state: 'logged-in' }
-            } else {
-                authState.value = 'need-login'
-                return {
-                    state: 'need-login',
-                    loginTypes: status.loginTypes
-                }
+            console.log('[useAuth] 状态检查完成: logined=', status.logined)
+            return {
+                success: true,
+                logined: status.logined,
+                loginTypes: status.loginTypes
             }
         } catch (e: any) {
-            authState.value = 'error'
-            errorMessage.value = e?.message || '检查登录状态失败'
-            return { state: 'error', error: errorMessage.value }
+            console.warn('[useAuth] 状态检查失败:', e?.message || e)
+
+            // 如果是 401，尝试刷新 Token
+            if (e?.code === 401) {
+                try {
+                    await userStore.refreshTokenIfNeeded()
+                    console.log('[useAuth] Token 刷新成功，重试状态检查')
+                    const status = await userStore.checkSchoolSession()
+                    return {
+                        success: true,
+                        logined: status.logined,
+                        loginTypes: status.loginTypes
+                    }
+                } catch (refreshError: any) {
+                    console.error('[useAuth] Token 刷新失败:', refreshError)
+                    return { success: false, logined: false, error: 'Token 刷新失败' }
+                }
+            }
+
+            // 如果是 403，表示 Cookie 过期
+            if (e?.code === 403) {
+                console.log('[useAuth] Cookie 已过期')
+                return { success: false, logined: false, error: 'Cookie 已过期' }
+            }
+
+            return { success: false, logined: false, error: e?.message || '检查失败' }
         }
     }
 
     /**
-     * 确保已认证（检查 + 必要时跳转）
+     * 带 UI 反馈的检查（显示遮罩和 Toast）
      * 
-     * @param redirectOnFail 未登录时是否跳转登录页，默认 true
+     * 用于：
+     * - 用户点击头像确认登录状态
+     * - 用户手动刷新
+     * 
+     * @param options.showLoading 是否显示加载遮罩（默认 true）
+     * @param options.showResult  是否显示结果 Toast（默认 true）
      */
-    async function ensureAuth(redirectOnFail = true): Promise<AuthCheckResult> {
-        const result = await checkAuth()
+    async function checkStatusWithUI(options?: {
+        showLoading?: boolean
+        showResult?: boolean
+    }): Promise<CheckResult> {
+        const { showLoading = true, showResult = true } = options || {}
 
-        if (redirectOnFail) {
-            if (result.state === 'no-token') {
-                // 无 token，需要先获取 token
-                await initTokenAndRedirect()
-                return result
-            }
-
-            if (result.state === 'need-login') {
-                // 有 token 但未登录学校，跳转登录页
-                uni.navigateTo({ url: '/pages/common/login/login' })
-                return result
-            }
+        // 防止重复检查
+        if (isChecking.value) {
+            console.log('[useAuth] 正在检查中，跳过')
+            return { success: false, logined: false, error: '正在检查中' }
         }
 
-        return result
-    }
+        isChecking.value = true
 
-    /**
-     * 初始化 token 并跳转
-     */
-    async function initTokenAndRedirect() {
+        // 显示加载遮罩
+        if (showLoading) {
+            authStore.setShowMask(true)
+            authStore.setCheckingMessage('正在检查登录状态...')
+        }
+
         try {
-            await userStore.initToken()
-            // token 获取成功后，再次检查学校登录状态
-            const result = await checkAuth()
-            if (result.state === 'need-login') {
-                uni.navigateTo({ url: '/pages/common/login/login' })
+            const result = await checkStatus()
+
+            // 显示结果
+            if (showResult) {
+                if (result.logined) {
+                    uni.showToast({ title: '已登录', icon: 'success' })
+                } else if (result.error === 'Cookie 已过期') {
+                    uni.showToast({ title: '登录已过期', icon: 'none' })
+                } else if (!result.success) {
+                    uni.showToast({ title: '检查失败', icon: 'none' })
+                }
             }
-        } catch (e) {
-            authState.value = 'error'
-            errorMessage.value = '初始化失败，请重试'
-            uni.showToast({ title: '初始化失败', icon: 'error' })
+
+            return result
+        } finally {
+            isChecking.value = false
+            if (showLoading) {
+                authStore.setShowMask(false)
+            }
         }
     }
 
     /**
-     * 静默刷新会话（不阻塞用户操作）
+     * 强制刷新会话（重新初始化 Cookie）
+     * 
+     * 用于：
+     * - Cookie 过期后重新获取
+     * - 用户主动刷新会话
      */
-    function refreshSessionSilently() {
-        userStore.refreshSession()
-            .then(() => console.log('会话已静默刷新'))
-            .catch(e => console.warn('静默刷新失败', e))
-    }
+    async function forceRefresh(): Promise<CheckResult> {
+        isChecking.value = true
+        authStore.setShowMask(true)
+        authStore.setCheckingMessage('正在刷新会话...')
 
-    /**
-     * 处理 401 错误（供 HTTP 拦截器调用）
-     */
-    async function handle401(): Promise<boolean> {
         try {
-            // 尝试刷新 token
-            const success = await userStore.refreshTokenIfNeeded()
-            return success
-        } catch (e) {
-            // 刷新失败，跳转登录
-            userStore.clearAll()
-            uni.reLaunch({ url: '/pages/common/login/login' })
-            return false
+            // 调用 initSession 重新初始化
+            const result = await userStore.initSession()
+
+            lastCheckTime = Date.now()
+
+            return {
+                success: true,
+                logined: result.logined,
+                loginTypes: result.loginTypes
+            }
+        } catch (e: any) {
+            console.error('[useAuth] 刷新会话失败:', e)
+            return {
+                success: false,
+                logined: false,
+                error: e?.message || '刷新失败'
+            }
+        } finally {
+            isChecking.value = false
+            authStore.setShowMask(false)
         }
     }
+
+    // ==================== 辅助方法 ====================
+
+    /**
+     * 获取上次检查时间
+     */
+    function getLastCheckTime(): number {
+        return lastCheckTime
+    }
+
+    /**
+     * 更新检查时间（外部调用）
+     */
+    function updateLastCheckTime(): void {
+        lastCheckTime = Date.now()
+    }
+
+    /**
+     * 检查是否需要刷新（超过 30 分钟）
+     */
+    function needsRefresh(): boolean {
+        return Date.now() - lastCheckTime > KEEP_ALIVE_INTERVAL
+    }
+
+    /**
+     * 跳转到登录页
+     */
+    function goLogin(): void {
+        const loginTypesParam = userStore.loginTypes?.join(',') || 'SMS'
+        uni.navigateTo({
+            url: `/pages/common/login/login?loginTypes=${loginTypesParam}`
+        })
+    }
+
+    // ==================== 返回 ====================
 
     return {
         // 状态
-        authState,
-        lastStatus,
-        errorMessage,
-
-        // 计算属性
-        isLoggedIn,
         isChecking,
-        needLogin,
 
-        // 方法
-        checkAuth,
-        ensureAuth,
-        handle401,
-        refreshSessionSilently,
+        // 核心方法
+        checkStatus,
+        checkStatusWithUI,
+        forceRefresh,
+
+        // 辅助方法
+        getLastCheckTime,
+        updateLastCheckTime,
+        needsRefresh,
+        goLogin,
+
+        // 常量
+        KEEP_ALIVE_INTERVAL
     }
 }
