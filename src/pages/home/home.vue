@@ -56,22 +56,22 @@ const features = [
     path: '/pages/schedule/schedule',
     badge: () => 0,
   },
-  {
-    id: 'grade',
-    icon: 'chart',
-    title: '成绩',
-    desc: '查看考试成绩',
-    path: '/pages/grade/grade',
-    badge: () => 0,
-  },
-  {
-    id: 'library',
-    icon: 'browse',
-    title: '图书馆',
-    desc: '借阅查询',
-    path: '/pages/library/library',
-    badge: () => 0,
-  },
+  // {
+  //   id: 'grade',
+  //   icon: 'chart',
+  //   title: '成绩',
+  //   desc: '查看考试成绩',
+  //   path: '/pages/grade/grade',
+  //   badge: () => 0,
+  // },
+  // {
+  //   id: 'library',
+  //   icon: 'browse',
+  //   title: '图书馆',
+  //   desc: '借阅查询',
+  //   path: '/pages/library/library',
+  //   badge: () => 0,
+  // },
 ]
 
 // ==================== 方法 ====================
@@ -93,7 +93,6 @@ async function handleRefresh() {
     if (needsRefresh()) {
       await checkStatusWithUI()
     }
-
     // 刷新未读计数
     await infoStore.init()
   } catch (e) {
@@ -148,11 +147,12 @@ function goSetting() {
       <!-- 用户信息卡片 -->
       <view class="user-card">
         <view class="user-avatar">
-          <t-icon v-if="!userInfo?.avatar" name="user" size="48rpx" color="#fff" />
-          <image v-else :src="userInfo.avatar" class="avatar-img" mode="aspectFill" />
+          <t-icon v-if="!userInfo?.avatarURL" name="user" size="48rpx" color="#fff" />
+          <image v-else :src="userInfo.avatarURL" class="avatar-img" mode="aspectFill" />
         </view>
         <view class="user-info">
-          <text class="user-name">{{ userInfo?.name || '未登录' }}</text>
+          <text class="user-name">{{ userInfo?.realName || '未登录' }}</text>
+          <text class="user-name">{{ userInfo?.userId || '****' }}</text>
           <text class="user-school">{{ isLoggedIn ? '深圳技术大学' : '点击登录校园账号' }}</text>
         </view>
         <view v-if="!isLoggedIn" class="login-btn" @tap="goLogin">

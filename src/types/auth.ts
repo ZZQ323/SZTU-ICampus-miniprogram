@@ -90,6 +90,14 @@ export interface LoginStatusVo {
   sessionInvalid?: boolean
 }
 
+export interface UserInfo {
+  userId:string
+  realName?: string
+  gender?: string
+  schoolName?: string
+  avatarURL?: string
+}
+
 /** 登录结果 VO */
 export interface LoginResultsVo {
   logined: boolean
