@@ -78,10 +78,13 @@ async function fetchDetail() {
 
     loading.value = true
     error.value = ''
-    
+
     try {
-        const result = await infoApi.getDetail(id.value)
-        content.value = result
+        const result = await infoApi.getDetail(id.value, 'announcement', category.value)
+        content.value = {
+            ...result,
+            content: (result as any).htmlContent || result.content || '',
+        }
     } catch (e: any) {
         console.error('[Detail] 获取详情失败', e)
         error.value = e.message || '加载失败'

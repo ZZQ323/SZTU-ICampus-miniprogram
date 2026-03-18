@@ -2,6 +2,11 @@
  * 信息流类型定义
  * 
  * 文件：src/types/info.ts
+ * 
+ * ⭐ 修复：
+ * 1. Attachment.type 改为可选（后端 ContentParserResult.AttachmentInfo 中 type 非必填）
+ * 2. InfoContent 的导航字段改为扁平结构，与后端 ContentParserResult 一致
+ *    （后端直接返回 prevId/prevTitle/nextId/nextTitle，不嵌套在 navigation 对象中）
  */
 
 // ==================== 频道与分类 ====================
@@ -32,12 +37,15 @@ export interface ChannelWithUnread extends Channel {
 
 export interface InfoItemMeta {
     id: string
+    url: string
     title: string
-    sourceId?: string
-    sourceName?: string
     channelId?: string
-    categoryId?: string
+    author?: string
+    source?: string
+    crawledAt?: string
+    extra?: string
     categoryName?: string
+    category?: string
     categoryCode?: string
     publishDate?: string
     summary?: string
@@ -45,6 +53,8 @@ export interface InfoItemMeta {
     hasAttachment?: boolean
     detailUrl?: string
     originalUrl?: string
+    department?: string
+    
 }
 
 export interface InfoListResult {
@@ -59,6 +69,13 @@ export interface InfoListResult {
 
 // ==================== 详情 ====================
 
+/**
+ * 详情内容
+ * 
+ * ⭐ 字段与后端 ContentParserResult.java 一一对应：
+ * - htmlContent 在后端返回，前端映射为 content
+ * - prevId/prevTitle/nextId/nextTitle 是扁平字段（不嵌套）
+ */
 export interface InfoContent {
     id: string
     title: string
@@ -69,20 +86,38 @@ export interface InfoContent {
     sourceId?: string
     sourceName?: string
     channelId?: string
-    categoryId?: string
+    categoryCode?: string
     categoryName?: string
     attachments: Attachment[]
-    navigation?: Navigation
+
+    /** 上一篇 ID */
+    prevId?: string
+    /** 上一篇标题 */
+    prevTitle?: string
+    /** 下一篇 ID */
+    nextId?: string
+    /** 下一篇标题 */
+    nextTitle?: string
+
     cachedAt?: number
 }
 
+/**
+ * 附件信息
+ * 
+ * ⭐ type 改为可选，与后端 ContentParserResult.AttachmentInfo 一致
+ */
 export interface Attachment {
     name: string
     url: string
-    type: string
+    type?: string
     size?: string
 }
 
+/**
+ * 导航信息（保留类型定义，但 InfoContent 不再使用嵌套结构）
+ * @deprecated 已改为扁平字段直接放在 InfoContent 上
+ */
 export interface Navigation {
     prevId?: string
     prevTitle?: string

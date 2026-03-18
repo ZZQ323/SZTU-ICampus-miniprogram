@@ -20,7 +20,8 @@
     {
       "path": "pages/notice/notice",
       "style": {
-        "navigationBarTitleText": "公告通知"
+        "navigationBarTitleText": "公告通知",
+        "enablePullDownRefresh": true
       }
     },
     {

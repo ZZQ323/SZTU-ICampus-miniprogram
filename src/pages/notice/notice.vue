@@ -49,46 +49,51 @@ const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 const mockData: InfoItemMeta[] = [
   {
     id: '50731',
+    url:"",
     title: '关于2025年春季学期教学安排的通知',
     categoryCode: '1018',
     categoryName: '教务',
-    sourceName: '教务处',
+    department: '教务处',
     publishDate: '2025-01-15',
     channelId: 'announcement',
   },
   {
     id: '50730',
+    url:"",
     title: '关于春节假期值班安排的通知',
     categoryCode: '1020',
     categoryName: '行政',
-    sourceName: '学校办公室',
+    department: '学校办公室',
     publishDate: '2025-01-14',
     channelId: 'announcement',
   },
   {
     id: '50729',
+    url:"",
     title: '关于开展2025年学生资助工作的通知',
     categoryCode: '1021',
     categoryName: '学工',
-    sourceName: '学生处',
+    department: '学生处',
     publishDate: '2025-01-13',
     channelId: 'announcement',
   },
   {
     id: '50728',
+    url:"",
     title: '图书馆寒假开放时间调整通知',
     categoryCode: '1022',
     categoryName: '校园',
-    sourceName: '后勤保障部',
+    department: '后勤保障部',
     publishDate: '2025-01-12',
     channelId: 'announcement',
   },
   {
     id: '50727',
+    url:"",
     title: '关于申报2025年度科研项目的通知',
     categoryCode: '1019',
     categoryName: '科研',
-    sourceName: '科研处',
+    department: '科研处',
     publishDate: '2025-01-11',
     channelId: 'announcement',
   },
@@ -140,7 +145,6 @@ async function fetchList(reset = false) {
     if (result.latestId) {
       infoStore.updateServerLatestId('announcement', result.latestId)
     }
-
   } catch (e) {
     console.error('[Notice] 获取列表失败', e)
     uni.showToast({ title: '加载失败', icon: 'error' })
@@ -211,6 +215,7 @@ function handleClearSearch() {
 
 function handleItemClick(item: InfoItemMeta) {
   // 已在 InfoListItem 组件中标记已读
+  console.log("点击"+item.id+" , "+item.categoryCode);
   uni.navigateTo({
     url: `/pages/notice/detail?id=${item.id}&category=${item.categoryCode || ''}`
   })
@@ -308,8 +313,7 @@ onPullDownRefresh(() => {
 
       <!-- 公告列表 -->
       <view v-else class="list">
-        <InfoListItem v-for="item in list" :key="item.id" :item="item" @tap="handleItemClick" />
-
+        <InfoListItem v-for="item in list" :key="item.id" :item="item" @tap="handleItemClick(item)" />
         <!-- 加载更多 -->
         <view v-if="loading && list.length > 0" class="load-more">
           <t-loading theme="circular" size="40rpx" />
