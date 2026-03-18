@@ -1,19 +1,19 @@
 /**
- * 统一信息状态管理 Store
- * 
+ * 统一信息状态管理 Store（WebSocket 版）
+ *
  * 文件：src/store/modules/info.ts
- * 
- * 功能：
- * 1. 管理多频道未读状态
- * 2. 分类树缓存
- * 3. 已读状态持久化
- * 4. SSE 消息处理
+ *
+ * 改造点：
+ * - handleSseMessage → handleWsMessage
+ * - 消息类型对齐后端 StreamKeys（NEW_ANNOUNCEMENTS / SCHEDULE_DATA 等）
+ * - sseConnected → wsConnected（语义更新）
  */
 
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { infoApi } from '@/api/info-api'
 import type { CategoryTree, ChannelUnreadState } from '@/types/info'
+import type { WsMessage } from '@/utils/websocket'
 
 // ==================== 存储 Key ====================
 
@@ -27,7 +27,6 @@ const MAX_READ_IDS = 200
 export const useInfoStore = defineStore('info', () => {
     // ==================== 状态 ====================
 
-    /** 各频道的未读状态 */
     const channelStates = ref<Record<string, ChannelUnreadState>>({
         announcement: createChannelState('announcement'),
         news: createChannelState('news'),
@@ -35,49 +34,36 @@ export const useInfoStore = defineStore('info', () => {
         job: createChannelState('job'),
     })
 
-    /** 分类树（从后端获取，缓存） */
     const categoryTree = ref<CategoryTree | null>(null)
 
-    /** SSE 连接状态 */
-    const sseConnected = ref(false)
+    /** WebSocket 连接状态（原 sseConnected） */
+    const wsConnected = ref(false)
 
-    /** 新消息（用于浮窗显示） */
+    /** 新消息（浮窗 + 红点用） */
     const newMessage = ref<any>(null)
 
     // ==================== 计算属性 ====================
 
-    /** 各频道未读数 */
     const unreadCounts = computed(() => {
         const result: Record<string, number> = {}
-
         for (const [channelId, state] of Object.entries(channelStates.value)) {
             const latest = Number(state.serverLatestId) || 0
             const lastRead = Number(state.lastReadId) || 0
-
-            if (latest <= lastRead) {
-                result[channelId] = 0
-            } else {
-                result[channelId] = Math.min(latest - lastRead, 99)
-            }
+            result[channelId] = latest <= lastRead ? 0 : Math.min(latest - lastRead, 99)
         }
-
         return result
     })
 
-    /** 总未读数 */
-    const totalUnread = computed(() => {
-        return Object.values(unreadCounts.value).reduce((a, b) => a + b, 0)
-    })
+    const totalUnread = computed(() =>
+        Object.values(unreadCounts.value).reduce((a, b) => a + b, 0)
+    )
 
-    /** 是否有未读 */
     const hasUnread = computed(() => totalUnread.value > 0)
 
-    /** 公告未读数（兼容旧代码） */
     const announcementUnread = computed(() => unreadCounts.value.announcement || 0)
 
-    // ==================== 持久化监听 ====================
+    // ==================== 持久化 ====================
 
-    // 监听状态变化，自动保存
     watch(channelStates, (newVal) => {
         for (const [channelId, state] of Object.entries(newVal)) {
             saveToStorage(STORAGE_LAST_READ(channelId), state.lastReadId)
@@ -87,12 +73,8 @@ export const useInfoStore = defineStore('info', () => {
 
     // ==================== 方法 ====================
 
-    /**
-     * 初始化（获取最新 ID）
-     */
     async function init() {
         try {
-            // 获取各频道最新 ID
             const result = await infoApi.getLatestId('announcement')
             if (result?.latestId) {
                 updateServerLatestId('announcement', result.latestId)
@@ -102,12 +84,8 @@ export const useInfoStore = defineStore('info', () => {
         }
     }
 
-    /**
-     * 加载分类树
-     */
     async function loadCategoryTree() {
         if (categoryTree.value) return categoryTree.value
-
         try {
             const result = await infoApi.getCategoryTree()
             categoryTree.value = result
@@ -118,32 +96,27 @@ export const useInfoStore = defineStore('info', () => {
         }
     }
 
-    /**
-     * 更新服务端最新 ID（SSE 推送时调用）
-     */
     function updateServerLatestId(channelId: string, latestId: string) {
         ensureChannelState(channelId)
         const state = channelStates.value[channelId]
 
-        // 检测是否有新消息
         const oldLatest = Number(state.serverLatestId) || 0
         const newLatest = Number(latestId) || 0
 
         if (newLatest > oldLatest && oldLatest > 0) {
-            // 触发新消息事件
             newMessage.value = {
                 channelId,
                 latestId,
                 count: newLatest - oldLatest,
             }
+
+            // 更新 TabBar 红点
+            updateTabBarBadge()
         }
 
         state.serverLatestId = latestId
     }
 
-    /**
-     * 标记频道全部已读（进入列表页时调用）
-     */
     function markChannelRead(channelId: string) {
         ensureChannelState(channelId)
         const state = channelStates.value[channelId]
@@ -152,32 +125,25 @@ export const useInfoStore = defineStore('info', () => {
             state.lastReadId = state.serverLatestId
             console.log(`[Info Store] 标记 ${channelId} 全部已读:`, state.lastReadId)
 
-            // 同步到后端
-            infoApi.markRead({
-                channelId,
-                latestId: state.lastReadId,
-            }).catch(e => console.warn('[Info Store] 同步已读状态失败', e))
+            infoApi.markRead({ channelId, latestId: state.lastReadId })
+                .catch(e => console.warn('[Info Store] 同步已读状态失败', e))
+
+            // 清除 TabBar 红点
+            updateTabBarBadge()
         }
     }
 
-    /**
-     * 标记单条已读（查看详情时调用）
-     */
     function markItemRead(channelId: string, id: string) {
         ensureChannelState(channelId)
         const state = channelStates.value[channelId]
-
-        // 添加到已读集合
         state.readIds.add(id)
 
-        // 如果这个 ID 比 lastReadId 大，更新
         const idNum = Number(id) || 0
         const lastReadNum = Number(state.lastReadId) || 0
         if (idNum > lastReadNum) {
             state.lastReadId = id
         }
 
-        // 限制存储数量
         if (state.readIds.size > MAX_READ_IDS) {
             const arr = Array.from(state.readIds)
                 .sort((a, b) => Number(b) - Number(a))
@@ -186,67 +152,77 @@ export const useInfoStore = defineStore('info', () => {
         }
     }
 
-    /**
-     * 检查单条是否已读
-     */
     function isItemRead(channelId: string, id: string): boolean {
         const state = channelStates.value[channelId]
         if (!state) return false
-
         const idNum = Number(id) || 0
         const lastReadNum = Number(state.lastReadId) || 0
-
-        // ID <= lastReadId 的都算已读
         if (idNum <= lastReadNum) return true
-
-        // 或者在已读集合中
         return state.readIds.has(id)
     }
 
-    /**
-     * 获取频道未读数
-     */
     function getUnreadCount(channelId: string): number {
         return unreadCounts.value[channelId] || 0
     }
 
     /**
-     * 处理 SSE 消息
+     * ★ 处理 WebSocket 消息（核心替换点）
+     *
+     * 由 ws.ts store 转发调用。消息类型对应后端 StreamKeys：
+     * - NEW_ANNOUNCEMENTS → 新公告通知
+     * - ANNOUNCEMENT_STATUS → 公告系统状态
+     * - SCHEDULE_DATA → 课表数据
+     * - CALENDAR_DATA → 日历数据
      */
-    function handleSseMessage(message: any) {
-        console.log('[Info Store] SSE 消息:', message.type, message.data)
+    function handleWsMessage(message: WsMessage) {
+        console.log('[Info Store] WS 消息:', message.type, message.data)
 
         switch (message.type) {
             case 'NEW_ANNOUNCEMENTS':
             case 'ANNOUNCEMENT_STATUS':
+            case 'ANNOUNCEMENT_DATA':
                 if (message.data?.latestId) {
                     updateServerLatestId('announcement', message.data.latestId)
                 }
                 break
 
-            case 'NEW_NEWS':
-                if (message.data?.latestId) {
-                    updateServerLatestId('news', message.data.latestId)
-                }
+            case 'SCHEDULE_DATA':
+                // TODO: 课表推送处理
                 break
 
-            case 'NEW_ACTIVITY':
-                if (message.data?.latestId) {
-                    updateServerLatestId('activity', message.data.latestId)
-                }
+            case 'CALENDAR_DATA':
+                // TODO: 日历推送处理
                 break
 
             case 'HEARTBEAT':
-                // 心跳不处理
+            case 'CONNECTED':
                 break
+
+            default:
+                console.log('[Info Store] 未处理消息类型:', message.type)
         }
     }
 
-    /**
-     * 清除新消息（浮窗关闭后）
-     */
     function clearNewMessage() {
         newMessage.value = null
+    }
+
+    // ==================== TabBar 红点 ====================
+
+    function updateTabBarBadge() {
+        const count = totalUnread.value
+        try {
+            if (count > 0) {
+                uni.setTabBarBadge({
+                    index: 2,  // 公告 tab 的 index（根据你的 tabBar 配置调整）
+                    text: count > 99 ? '99+' : String(count),
+                })
+            } else {
+                uni.removeTabBarBadge({ index: 2 })
+            }
+        } catch (e) {
+            // 非 tabBar 页面调用会报错，忽略
+        }
     }
 
     // ==================== 内部方法 ====================
@@ -268,19 +244,16 @@ export const useInfoStore = defineStore('info', () => {
     // ==================== 返回 ====================
 
     return {
-        // 状态
         channelStates,
         categoryTree,
-        sseConnected,
+        wsConnected,
         newMessage,
 
-        // 计算属性
         unreadCounts,
         totalUnread,
         hasUnread,
-        announcementUnread,  // 兼容
+        announcementUnread,
 
-        // 方法
         init,
         loadCategoryTree,
         updateServerLatestId,
@@ -288,12 +261,12 @@ export const useInfoStore = defineStore('info', () => {
         markItemRead,
         isItemRead,
         getUnreadCount,
-        handleSseMessage,
+        handleWsMessage,     // ★ 原 handleSseMessage
         clearNewMessage,
     }
 })
 
-// ==================== 辅助函数 ====================
+// ==================== 辅助 ====================
 
 function loadFromStorage<T>(key: string, defaultValue: T): T {
     try {
