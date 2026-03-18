@@ -122,7 +122,7 @@ async function fetchList(reset = false) {
     })
 
     // 转换字段（兼容）
-    const items = result.items.map(item => ({
+    const items = (result.items || []).map(item => ({
       ...item,
       channelId: 'announcement',
     }))

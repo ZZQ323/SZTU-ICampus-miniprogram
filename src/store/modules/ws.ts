@@ -3,10 +3,8 @@
  *
  * 文件：src/store/modules/ws.ts
  *
- * 替代原 sse.ts：
- * - 使用真实 WebSocket（uni.connectSocket），不是轮询
- * - 收到消息后转发给 infoStore.handleWsMessage()
- * - Token 过期时收到 AUTH_REQUIRED，触发 refresh 流程后重连
+ * ★ 修改点：watch immediate: false → true
+ *   确保启动时如果已登录，WS 立即连接
  */
 
 import { defineStore } from 'pinia'
@@ -20,7 +18,6 @@ export const useWsStore = defineStore('ws', () => {
     // ==================== 状态 ====================
 
     const connectionState = ref<WsConnectionState>('disconnected')
-    const reconnectAttempts = ref(0)
 
     // ==================== 计算属性 ====================
 
@@ -35,10 +32,6 @@ export const useWsStore = defineStore('ws', () => {
 
     // ==================== 方法 ====================
 
-    /**
-     * 建立 WebSocket 连接
-     * 在登录成功 / App onShow 时调用
-     */
     function connect() {
         const userStore = useUserStore()
 
@@ -47,13 +40,11 @@ export const useWsStore = defineStore('ws', () => {
             return
         }
 
-        // 如果已连接，不重复连接
         if (client && connectionState.value === 'connected') {
             console.log('[WS Store] 已连接')
             return
         }
 
-        // 如果有旧 client，先断开
         if (client) {
             client.disconnect()
             client = null
@@ -76,10 +67,6 @@ export const useWsStore = defineStore('ws', () => {
         client.connect()
     }
 
-    /**
-     * 断开连接
-     * 在退出登录时调用
-     */
     function disconnect() {
         if (client) {
             client.disconnect()
@@ -88,10 +75,6 @@ export const useWsStore = defineStore('ws', () => {
         connectionState.value = 'disconnected'
     }
 
-    /**
-     * 用新 token 重连
-     * 在 token 刷新成功后调用
-     */
     function reconnectWithNewToken(newToken: string) {
         if (client) {
             client.reconnectWithNewToken(newToken)
@@ -100,9 +83,6 @@ export const useWsStore = defineStore('ws', () => {
         }
     }
 
-    /**
-     * 手动重连
-     */
     function reconnect() {
         disconnect()
         connect()
@@ -112,7 +92,6 @@ export const useWsStore = defineStore('ws', () => {
 
     function handleMessage(msg: WsMessage) {
         const infoStore = useInfoStore()
-        const userStore = useUserStore()
 
         console.log('[WS Store] 收到消息:', msg.type)
 
@@ -122,7 +101,6 @@ export const useWsStore = defineStore('ws', () => {
                 break
 
             case 'AUTH_REQUIRED':
-                // Token 过期，触发刷新
                 console.warn('[WS Store] 收到 AUTH_REQUIRED，需刷新 token')
                 handleAuthRequired()
                 break
@@ -130,30 +108,22 @@ export const useWsStore = defineStore('ws', () => {
             case 'HEARTBEAT':
                 break
 
-            case 'NEW_ANNOUNCEMENTS':
-            case 'ANNOUNCEMENT_DATA':
-            case 'ANNOUNCEMENT_STATUS':
-            case 'SCHEDULE_DATA':
-            case 'CALENDAR_DATA':
-                // 转发给 infoStore 统一处理
-                infoStore.handleWsMessage(msg)
-                break
-
             default:
-                console.log('[WS Store] 未知消息类型:', msg.type)
-                // 也转发，让 infoStore 决定是否处理
+                // 所有业务消息转发给 infoStore
                 infoStore.handleWsMessage(msg)
         }
     }
 
     async function handleAuthRequired() {
         const userStore = useUserStore()
-
         try {
-            // 走 token refresh 流程
-            const newToken = await userStore.refreshToken()
-            if (newToken && client) {
-                client.reconnectWithNewToken(newToken)
+            // refreshTokenIfNeeded 返回 boolean，不是 token 字符串
+            const success = await userStore.refreshTokenIfNeeded()
+            if (success && userStore.token) {
+                // 刷新成功后，从 store 取新 token
+                client?.reconnectWithNewToken(userStore.token)
+            } else {
+                disconnect()
             }
         } catch (e) {
             console.error('[WS Store] token 刷新失败，断开 WS')
@@ -164,8 +134,7 @@ export const useWsStore = defineStore('ws', () => {
     // ==================== 工具 ====================
 
     function getWsBaseUrl(): string {
-        // 从 HTTP base URL 推导 WS URL
-        const httpBase = import.meta.env.VITE_API_BASE_URL || ''
+        const httpBase = import.meta.env.VITE_API_BASE_URL || 'http://192.168.3.35:8080'
 
         if (httpBase.startsWith('https://')) {
             return httpBase.replace('https://', 'wss://')
@@ -173,13 +142,12 @@ export const useWsStore = defineStore('ws', () => {
             return httpBase.replace('http://', 'ws://')
         }
 
-        // 默认用当前域名
         return httpBase
     }
 
     // ==================== 自动连接/断开 ====================
 
-    // 监听登录状态：登录后自动连接，登出后自动断开
+    // ★ immediate: true → 启动时如果已登录就立即连接
     const userStore = useUserStore()
     watch(
         () => userStore.isSchoolLoggedIn,
@@ -190,7 +158,7 @@ export const useWsStore = defineStore('ws', () => {
                 disconnect()
             }
         },
-        { immediate: false }  // 不立即执行，等明确登录后再连
+        { immediate: true }
     )
 
     // ==================== 返回 ====================

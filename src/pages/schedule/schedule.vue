@@ -11,87 +11,7 @@
 
 <template>
   <PageLayout>
-    <!-- ⭐ 关键：只有认证就绪后才显示页面内容 -->
-    <view v-if="isReady" class="schedule-page">
-      <!-- 连接状态栏 -->
-      <view class="status-bar" :class="connectionStatus">
-        <view class="status-dot" />
-        <text>{{ statusText }}</text>
-      </view>
-
-      <!-- 头部 -->
-      <view class="header">
-        <text class="title">我的课表</text>
-        <view class="week-selector" @click="showWeekPicker = true">
-          <text>第 {{ currentWeek }} 周</text>
-          <t-icon name="chevron-down" size="32rpx" />
-        </view>
-      </view>
-
-      <!-- 课表网格 -->
-      <view class="schedule-grid">
-        <!-- 表头 -->
-        <view class="grid-header">
-          <view class="corner-cell" />
-          <view v-for="day in weekDays" :key="day.value" class="day-cell" :class="{ today: isToday(day.value) }">
-            <text class="day-name">{{ day.label }}</text>
-            <text class="day-date">{{ day.date }}</text>
-          </view>
-        </view>
-
-        <!-- 课表主体 -->
-        <view class="grid-body">
-          <view v-for="slot in timeSlots" :key="slot.row" class="time-row">
-            <!-- 时间列 -->
-            <view class="time-cell">
-              <text class="time-index">{{ slot.label }}</text>
-              <text class="time-range">{{ slot.time }}</text>
-            </view>
-
-            <!-- 课程单元格 -->
-            <view v-for="day in 7" :key="day" class="course-cell" @click="handleCourseClick(slot.row, day - 1)">
-              <template v-if="getCourse(slot.row, day - 1)">
-                <view class="course-card" :style="{ backgroundColor: getCourseColor(getCourse(slot.row, day - 1)) }">
-                  <text class="course-name">{{ getCourse(slot.row, day - 1)?.courseName }}</text>
-                  <text class="course-location">{{ getCourse(slot.row, day - 1)?.location }}</text>
-                </view>
-              </template>
-            </view>
-          </view>
-        </view>
-      </view>
-
-      <!-- 空状态 -->
-      <view v-if="!loading && courses.length === 0" class="empty-state">
-        <t-icon name="calendar" size="120rpx" color="#ddd" />
-        <text class="empty-text">暂无课程数据</text>
-        <t-button theme="light" size="small" @click="handleRefresh">
-          刷新
-        </t-button>
-      </view>
-
-      <!-- 课程详情弹窗 -->
-      <t-popup :visible="showCourseDetail" placement="bottom" @visible-change="showCourseDetail = $event">
-        <view class="course-detail">
-          <view class="detail-header">
-            <text class="detail-title">{{ selectedCourse?.courseName }}</text>
-            <t-icon name="close" size="40rpx" @click="showCourseDetail = false" />
-          </view>
-          <view class="detail-item">
-            <t-icon name="location" size="36rpx" color="#999" />
-            <text>{{ selectedCourse?.location || '未知地点' }}</text>
-          </view>
-          <view class="detail-item">
-            <t-icon name="user" size="36rpx" color="#999" />
-            <text>{{ selectedCourse?.teacher || '未知教师' }}</text>
-          </view>
-          <view class="detail-item">
-            <t-icon name="time" size="36rpx" color="#999" />
-            <text>第 {{ selectedCourse?.startWeek }}-{{ selectedCourse?.endWeek }} 周</text>
-          </view>
-        </view>
-      </t-popup>
-    </view>
+    课表
   </PageLayout>
 </template>
 
@@ -101,128 +21,119 @@
  * 
  * 使用 isReady 控制内容显示，强制登录
  */
-import { ref, computed } from 'vue'
-import { onShow, onHide } from '@dcloudio/uni-app'
-import PageLayout from '@/components/PageLayout.vue'
-import { useAuthGuard } from '@/hooks/composables/useAuthGuard'
-import { useSchedule } from '@/hooks/useSchedule'
-import { useSSE } from '@/hooks/useSSE'
+// import { ref, computed } from 'vue'
+// import { onShow, onHide } from '@dcloudio/uni-app'
+// import PageLayout from '@/components/PageLayout.vue'
+// import { useAuthGuard } from '@/hooks/composables/useAuthGuard'
+// import { useSchedule } from '@/hooks/useSchedule'
 
-// ==================== Hooks ====================
+// // ==================== Hooks ====================
 
-const { ensure, isReady } = useAuthGuard()
+// const { ensure, isReady } = useAuthGuard()
 
-const {
-  courses,
-  currentWeek,
-  loading,
-  weekDays,
-  timeSlots,
-  updateCourses,
-  getCourse,
-  getCourseColor,
-  isToday,
-  fetchSchedule
-} = useSchedule()
+// const {
+//   courses,
+//   currentWeek,
+//   loading,
+//   weekDays,
+//   timeSlots,
+//   updateCourses,
+//   getCourse,
+//   getCourseColor,
+//   isToday,
+//   fetchSchedule
+// } = useSchedule()
 
-const {
-  status: sseStatus,
-  connect: connectSSE,
-  disconnect: disconnectSSE
-} = useSSE('schedule', {
-  onMessage: handleSSEMessage,
-  onError: handleSSEError
-})
 
-// ==================== 状态 ====================
+// // ==================== 状态 ====================
 
-const showWeekPicker = ref(false)
-const showCourseDetail = ref(false)
-const selectedCourse = ref<any>(null)
+// const showWeekPicker = ref(false)
+// const showCourseDetail = ref(false)
+// const selectedCourse = ref<any>(null)
 
-// ==================== 计算属性 ====================
+// // ==================== 计算属性 ====================
 
-const connectionStatus = computed(() => {
-  switch (sseStatus.value) {
-    case 'connected': return 'connected'
-    case 'connecting': return 'connecting'
-    case 'error': return 'error'
-    default: return 'disconnected'
-  }
-})
+// const connectionStatus = computed(() => {
+//   switch (sseStatus.value) {
+//     case 'connected': return 'connected'
+//     case 'connecting': return 'connecting'
+//     case 'error': return 'error'
+//     default: return 'disconnected'
+//   }
+// })
 
-const statusText = computed(() => {
-  switch (sseStatus.value) {
-    case 'connected': return '实时连接中'
-    case 'connecting': return '正在连接...'
-    case 'error': return '连接失败'
-    default: return '未连接'
-  }
-})
+// const statusText = computed(() => {
+//   switch (sseStatus.value) {
+//     case 'connected': return '实时连接中'
+//     case 'connecting': return '正在连接...'
+//     case 'error': return '连接失败'
+//     default: return '未连接'
+//   }
+// })
 
-// ==================== 生命周期 ====================
+// // ==================== 生命周期 ====================
 
-onShow(async () => {
-  // ⭐ 改进：使用 ensure 进行认证检查
-  // requireSchoolLogin: true 表示必须登录
-  // redirectOnFail: true 表示登录失败时跳转登录页
-  const result = await ensure({
-    requireSchoolLogin: true,
-    redirectOnFail: true
-  })
+// onShow(async () => {
+//   // ⭐ 改进：使用 ensure 进行认证检查
+//   // requireSchoolLogin: true 表示必须登录
+//   // redirectOnFail: true 表示登录失败时跳转登录页
+//   const result = await ensure({
+//     requireSchoolLogin: true,
+//     redirectOnFail: true
+//   })
 
-  // 只有认证成功才加载数据
-  if (result.success) {
-    await loadData()
-    connectSSE()
-  }
-})
+//   // 只有认证成功才加载数据
+//   if (result.success) {
+//     await loadData()
+//     connectSSE()
+//   }
+// })
 
-onHide(() => {
-  disconnectSSE()
-})
+// onHide(() => {
+//   disconnectSSE()
+// })
 
-// ==================== 方法 ====================
+// // ==================== 方法 ====================
 
-async function loadData() {
-  try {
-    await fetchSchedule()
-  } catch (e) {
-    console.error('[Schedule] 加载课表失败', e)
-  }
-}
+// async function loadData() {
+//   try {
+//     await fetchSchedule()
+//   } catch (e) {
+//     console.error('[Schedule] 加载课表失败', e)
+//   }
+// }
 
-function handleSSEMessage(data: any) {
-  console.log('[Schedule] 收到 SSE 消息', data)
+// function handleSSEMessage(data: any) {
+//   console.log('[Schedule] 收到 SSE 消息', data)
 
-  if (data?.action === 'REFRESH_HINT') {
-    uni.showToast({
-      title: data.message || '课表有更新',
-      icon: 'none'
-    })
-    return
-  }
+//   if (data?.action === 'REFRESH_HINT') {
+//     uni.showToast({
+//       title: data.message || '课表有更新',
+//       icon: 'none'
+//     })
+//     return
+//   }
 
-  if (data?.courses) {
-    updateCourses(data)
-  }
-}
+//   if (data?.courses) {
+//     updateCourses(data)
+//   }
+// }
 
-function handleSSEError(error: any) {
-  console.warn('[Schedule] SSE 错误', error)
-}
+// function handleSSEError(error: any) {
+//   console.warn('[Schedule] SSE 错误', error)
+// }
 
-function handleCourseClick(row: number, day: number) {
-  const course = getCourse(row, day)
-  if (course) {
-    selectedCourse.value = course
-    showCourseDetail.value = true
-  }
-}
+// function handleCourseClick(row: number, day: number) {
+//   const course = getCourse(row, day)
+//   if (course) {
+//     selectedCourse.value = course
+//     showCourseDetail.value = true
+//   }
+// }
 
-async function handleRefresh() {
-  await loadData()
-}
+// async function handleRefresh() {
+//   await loadData()
+// }
 </script>
 
 <style lang="scss" scoped>

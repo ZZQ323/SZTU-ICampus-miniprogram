@@ -13,17 +13,17 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { onShow, onHide } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
-import FloatingNotification from '@/components/common/FloatingNotification.vue'
+import FloatingNotification from '@/components/FloatingNotification.vue'
 import { useUserStore } from '@/store/modules/user'
 import { useInfoStore } from '@/store/modules/info'
-import { useSseStore } from '@/store/modules/sse'
-import { useAuth } from '@/hooks/composables/useAuth'
+import { useWsStore } from '@/store/modules/ws'
+import { useAuth } from '@/hooks/useAuth'
 
 // ==================== Store ====================
 
 const userStore = useUserStore()
 const infoStore = useInfoStore()
-const sseStore = useSseStore()
+const sseStore = useWsStore()
 const { checkStatusWithUI, needsRefresh } = useAuth()
 
 // ==================== 状态 ====================
@@ -130,6 +130,16 @@ watch(isLoggedIn, (loggedIn) => {
     infoStore.init()
   }
 })
+
+
+function goLogin() {
+  uni.navigateTo({ url: '/pages/common/login/login' })
+}
+
+function goSetting() {
+  uni.navigateTo({ url: '/pages/common/setting' })
+}
+
 </script>
 
 <template>
@@ -145,7 +155,7 @@ watch(isLoggedIn, (loggedIn) => {
           <text class="user-name">{{ userInfo?.name || '未登录' }}</text>
           <text class="user-school">{{ isLoggedIn ? '深圳技术大学' : '点击登录校园账号' }}</text>
         </view>
-        <view v-if="!isLoggedIn" class="login-btn" @tap="() => uni.navigateTo({ url: '/pages/login/login' })">
+        <view v-if="!isLoggedIn" class="login-btn" @tap="goLogin">
           <text>登录</text>
         </view>
       </view>
@@ -172,7 +182,7 @@ watch(isLoggedIn, (loggedIn) => {
             <t-icon name="refresh" size="36rpx" />
             <text>刷新数据</text>
           </view>
-          <view class="action-item" @tap="() => uni.navigateTo({ url: '/pages/setting/setting' })">
+          <view class="action-item" @tap="goSetting">
             <t-icon name="setting" size="36rpx" />
             <text>设置</text>
           </view>

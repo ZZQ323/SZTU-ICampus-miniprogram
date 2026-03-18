@@ -44,7 +44,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useInfoStore } from '@/store/modules/info'
-import NewMessageToast from './NewMessageToast.vue'
+import NewMessageToast from './common/NewMessageToast.vue'
 
 // ==================== Store ====================
 

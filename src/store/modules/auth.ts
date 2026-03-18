@@ -203,7 +203,11 @@ export const useAuthStore = defineStore('auth', () => {
             'TIMEOUT': '请求超时',
             'SERVER_ERROR': '服务器错误',
             'SCHOOL_SESSION_EXPIRED': '校园服务已断开',
-            'UNKNOWN': '发生错误'
+            'UNKNOWN': '发生错误',
+            TOKEN_INIT_FAILED: 'Token 初始化失败',
+            CHECK_FAILED: '检查失败',
+            SESSION_INVALID: '会话无效',
+            UNKNOWN_ERROR: '未知错误',
         }
         return titles[error.value.code] || '发生错误'
     }

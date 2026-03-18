@@ -18,7 +18,7 @@ import axios from 'axios'
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { createUniAppAxiosAdapter } from '@uni-helper/axios-adapter'
 import { getToken, setToken } from '@/utils/storage'
-import type { HttpError } from '@/types/auth'
+import type { AuthError } from '@/types/auth'
 
 // ==================== 配置常量 ====================
 
@@ -292,13 +292,8 @@ function createHttpError(
   message: string,
   retryable: boolean,
   raw?: any
-): HttpError {
-  return {
-    code,
-    message,
-    retryable,
-    timestamp: Date.now()
-  }
+) {               // ← 让 TS 自动推断
+  return { code, message, retryable, timestamp: Date.now(), raw }
 }
 
 function isRetryableCode(code: number): boolean {
