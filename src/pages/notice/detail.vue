@@ -19,6 +19,7 @@ const userStore = useUserStore()
 
 const id = ref('')
 const category = ref('')
+const channelId = ref('announcement')
 
 // ==================== 状态 ====================
 
@@ -80,7 +81,7 @@ async function fetchDetail() {
     error.value = ''
 
     try {
-        const result = await infoApi.getDetail(id.value, 'announcement', category.value)
+        const result = await infoApi.getDetail(id.value, channelId.value, category.value);
         content.value = {
             ...result,
             content: (result as any).htmlContent || result.content || '',
@@ -97,7 +98,7 @@ async function fetchDetail() {
 function navigateTo(targetId: string | undefined, targetCategory?: string) {
     if (!targetId) return
     uni.redirectTo({
-        url: `/pages/notice/detail?id=${targetId}&category=${targetCategory || category.value}`
+        url: `/pages/notice/detail?id=${targetId}&channelId=${channelId.value}&category=${targetCategory || category.value}`
     })
 }
 
@@ -146,8 +147,9 @@ function handleShare() {
 // ==================== 生命周期 ====================
 
 onLoad((options) => {
-    id.value = options?.id || ''
-    category.value = options?.category || '1018'
+    if (options?.id) id.value = options.id
+    if (options?.category) category.value = options.category
+    if (options?.channelId) channelId.value = options.channelId  // ⭐ 新增
     fetchDetail()
 })
 </script>

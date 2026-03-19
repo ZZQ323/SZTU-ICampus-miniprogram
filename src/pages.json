@@ -20,14 +20,14 @@
     {
       "path": "pages/notice/notice",
       "style": {
-        "navigationBarTitleText": "公告通知",
+        "navigationBarTitleText": "信息流",
         "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/notice/detail",
       "style": {
-        "navigationBarTitleText": "公告详情",
+        "navigationBarTitleText": "详情",
         "enablePullDownRefresh": false
       }
     },
@@ -62,7 +62,7 @@
       },
       {
         "pagePath": "pages/notice/notice",
-        "text": "公告",
+        "text": "信息流",
         "iconPath": "static/tab/normal/notice.png",
         "selectedIconPath": "static/tab/active/notice.png"
       }

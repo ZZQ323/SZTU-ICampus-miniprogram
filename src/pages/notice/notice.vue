@@ -1,13 +1,14 @@
 <!--
-  公告列表页（重构版）
+  信息流页面（频道切换版）
   
   文件：src/pages/notice/notice.vue
   
-  改动点：
-  1. 使用新的 infoApi
-  2. 使用 useInfoStore 管理未读状态
-  3. 使用 InfoListItem 组件
-  4. 进入页面自动标记已读
+  ⭐ 改动：
+  1. 顶部新增频道 Tab（公告/教务/校园/新闻）
+  2. channelId 从 Tab 选择传入，不再写死 'announcement'
+  3. 分类 pills 仅在公告频道显示（其他频道暂无子分类）
+  4. 搜索、详情跳转、标记已读均使用当前 channelId
+  5. 外链文章点击时复制链接而非跳转详情
 -->
 
 <script setup lang="ts">
@@ -22,11 +23,18 @@ import { infoApi } from '@/api/info-api'
 import type { InfoItemMeta } from '@/types/info'
 import { CATEGORY_LIST } from '@/types/info'
 
-// ==================== Hooks ====================
-
 const userStore = useUserStore()
 const infoStore = useInfoStore()
 const { ensure, isReady } = useAuthGuard()
+
+// ==================== 频道配置 ====================
+
+const CHANNEL_LIST = [
+  { id: 'announcement', name: '公告', hasCategories: true },
+  { id: 'academic', name: '教务', hasCategories: false },
+  { id: 'campus-life', name: '校园', hasCategories: false },
+  { id: 'news', name: '新闻', hasCategories: false },
+]
 
 // ==================== 状态 ====================
 
@@ -36,6 +44,7 @@ const list = ref<InfoItemMeta[]>([])
 const page = ref(1)
 const hasMore = ref(true)
 const latestId = ref('0')
+const activeChannel = ref('announcement')
 const activeCategory = ref('')
 const searchKeyword = ref('')
 const isSearchMode = ref(false)
@@ -44,65 +53,29 @@ const isSearchMode = ref(false)
 
 const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 
-// ==================== Mock 数据（未登录时显示） ====================
+const showCategories = computed(() => {
+  const ch = CHANNEL_LIST.find(c => c.id === activeChannel.value)
+  return ch?.hasCategories ?? false
+})
+
+// ==================== Mock 数据 ====================
 
 const mockData: InfoItemMeta[] = [
   {
-    id: '50731',
-    url:"",
-    title: '关于2025年春季学期教学安排的通知',
-    categoryCode: '1018',
-    categoryName: '教务',
-    department: '教务处',
-    publishDate: '2025-01-15',
-    channelId: 'announcement',
+    id: '50731', url: '', title: '关于2025年春季学期教学安排的通知',
+    categoryCode: '1018', categoryName: '教务', department: '教务处',
+    publishDate: '2025-01-15', channelId: 'announcement',
   },
   {
-    id: '50730',
-    url:"",
-    title: '关于春节假期值班安排的通知',
-    categoryCode: '1020',
-    categoryName: '行政',
-    department: '学校办公室',
-    publishDate: '2025-01-14',
-    channelId: 'announcement',
-  },
-  {
-    id: '50729',
-    url:"",
-    title: '关于开展2025年学生资助工作的通知',
-    categoryCode: '1021',
-    categoryName: '学工',
-    department: '学生处',
-    publishDate: '2025-01-13',
-    channelId: 'announcement',
-  },
-  {
-    id: '50728',
-    url:"",
-    title: '图书馆寒假开放时间调整通知',
-    categoryCode: '1022',
-    categoryName: '校园',
-    department: '后勤保障部',
-    publishDate: '2025-01-12',
-    channelId: 'announcement',
-  },
-  {
-    id: '50727',
-    url:"",
-    title: '关于申报2025年度科研项目的通知',
-    categoryCode: '1019',
-    categoryName: '科研',
-    department: '科研处',
-    publishDate: '2025-01-11',
-    channelId: 'announcement',
+    id: '50730', url: '', title: '关于春节假期值班安排的通知',
+    categoryCode: '1020', categoryName: '行政', department: '党政办公室',
+    publishDate: '2025-01-14', channelId: 'announcement',
   },
 ]
 
 // ==================== 方法 ====================
 
 async function fetchList(reset = false) {
-  // 未登录显示 mock 数据
   if (!isLoggedIn.value) {
     list.value = filterByCategory(mockData)
     return
@@ -115,21 +88,19 @@ async function fetchList(reset = false) {
   }
 
   if (!hasMore.value && !reset) return
-
   loading.value = true
 
   try {
     const result = await infoApi.getList({
-      channelId: 'announcement',
+      channelId: activeChannel.value,
       categoryCode: activeCategory.value || undefined,
       page: page.value,
       pageSize: 20
     })
 
-    // 转换字段（兼容）
     const items = (result.items || []).map(item => ({
       ...item,
-      channelId: 'announcement',
+      channelId: activeChannel.value,
     }))
 
     if (reset) {
@@ -141,9 +112,8 @@ async function fetchList(reset = false) {
     latestId.value = result.latestId || '0'
     hasMore.value = result.hasMore
 
-    // 更新服务端最新 ID
     if (result.latestId) {
-      infoStore.updateServerLatestId('announcement', result.latestId)
+      infoStore.updateServerLatestId(activeChannel.value, result.latestId)
     }
   } catch (e) {
     console.error('[Notice] 获取列表失败', e)
@@ -159,6 +129,15 @@ function filterByCategory(data: InfoItemMeta[]): InfoItemMeta[] {
   return data.filter(item => item.categoryCode === activeCategory.value)
 }
 
+function handleChannelChange(channelId: string) {
+  if (activeChannel.value === channelId) return
+  activeChannel.value = channelId
+  activeCategory.value = ''
+  searchKeyword.value = ''
+  isSearchMode.value = false
+  fetchList(true)
+}
+
 function handleCategoryChange(categoryCode: string) {
   activeCategory.value = categoryCode
   searchKeyword.value = ''
@@ -172,33 +151,23 @@ function onSearchInputChanged(context: { value: string }) {
 
 async function handleSearch() {
   const keyword = searchKeyword.value.trim()
-
-  if (!keyword) {
-    isSearchMode.value = false
-    fetchList(true)
-    return
-  }
-
+  if (!keyword) return
   if (!isLoggedIn.value) {
-    // 未登录时本地搜索
-    const filtered = mockData.filter(item =>
-      item.title.toLowerCase().includes(keyword.toLowerCase())
-    )
-    list.value = filterByCategory(filtered)
+    list.value = mockData.filter(item => item.title.includes(keyword))
     isSearchMode.value = true
     return
   }
 
   loading.value = true
   isSearchMode.value = true
+  hasMore.value = false
 
   try {
-    const result = await infoApi.search(keyword, 'announcement', 50)
+    const result = await infoApi.search(keyword, activeChannel.value, 50)
     list.value = result.map(item => ({
       ...item,
-      channelId: 'announcement',
+      channelId: activeChannel.value,
     }))
-    hasMore.value = false
   } catch (e) {
     console.error('[Notice] 搜索失败', e)
     uni.showToast({ title: '搜索失败', icon: 'error' })
@@ -214,10 +183,18 @@ function handleClearSearch() {
 }
 
 function handleItemClick(item: InfoItemMeta) {
-  // 已在 InfoListItem 组件中标记已读
-  console.log("点击"+item.id+" , "+item.categoryCode);
+  // 外链文章：复制链接
+  if (item.extra && item.extra.includes('"external"')) {
+    uni.setClipboardData({
+      data: item.url,
+      success: () => uni.showToast({ title: '链接已复制', icon: 'success' })
+    })
+    return
+  }
+
+  // 站内文章：跳转详情页
   uni.navigateTo({
-    url: `/pages/notice/detail?id=${item.id}&category=${item.categoryCode || ''}`
+    url: `/pages/notice/detail?id=${item.id}&channelId=${item.channelId || activeChannel.value}&category=${item.categoryCode || ''}`
   })
 }
 
@@ -231,20 +208,9 @@ async function handleRefresh() {
 // ==================== 生命周期 ====================
 
 onShow(async () => {
-  // 等待认证检查完成
-  await ensure({
-    requireSchoolLogin: false
-  })
-
-  // 认证检查完成后加载数据
-  if (!isSearchMode.value) {
-    fetchList(true)
-  }
-
-  // 进入页面时标记频道已读
-  if (isLoggedIn.value) {
-    infoStore.markChannelRead('announcement')
-  }
+  await ensure({ requireSchoolLogin: false })
+  if (!isSearchMode.value) fetchList(true)
+  if (isLoggedIn.value) infoStore.markChannelRead(activeChannel.value)
 })
 
 onReachBottom(() => {
@@ -255,20 +221,26 @@ onReachBottom(() => {
 })
 
 onPullDownRefresh(() => {
-  handleRefresh().finally(() => {
-    uni.stopPullDownRefresh()
-  })
+  handleRefresh().finally(() => uni.stopPullDownRefresh())
 })
 </script>
 
 <template>
   <PageLayout>
-    <!-- 只有认证就绪后才显示页面内容 -->
     <view v-if="isReady" class="notice-page">
-      <!-- 顶部搜索框 -->
+
+      <!-- 频道 Tab -->
+      <view class="channel-tabs">
+        <view v-for="ch in CHANNEL_LIST" :key="ch.id" :class="['channel-tab', { active: activeChannel === ch.id }]"
+          @tap="handleChannelChange(ch.id)">
+          {{ ch.name }}
+        </view>
+      </view>
+
+      <!-- 搜索框 -->
       <view class="search-header">
         <view class="search-box">
-          <t-input :value="searchKeyword" placeholder="搜索公告标题..." clearable @change="onSearchInputChanged"
+          <t-input :value="searchKeyword" placeholder="搜索标题..." clearable @change="onSearchInputChanged"
             @confirm="handleSearch" @clear="handleClearSearch">
             <template #prefix-icon>
               <t-icon name="search" size="40rpx" />
@@ -280,8 +252,8 @@ onPullDownRefresh(() => {
         </t-button>
       </view>
 
-      <!-- 分类标签 -->
-      <scroll-view scroll-x class="category-scroll" :show-scrollbar="false">
+      <!-- 分类标签（仅公告频道） -->
+      <scroll-view v-if="showCategories" scroll-x class="category-scroll" :show-scrollbar="false">
         <view class="category-list">
           <view v-for="cat in CATEGORY_LIST" :key="cat.code"
             :class="['category-item', { active: activeCategory === cat.code }]" @click="handleCategoryChange(cat.code)">
@@ -302,7 +274,7 @@ onPullDownRefresh(() => {
       <!-- 未登录提示 -->
       <view v-if="!isLoggedIn" class="login-tip">
         <t-icon name="info-circle" size="32rpx" />
-        <text>登录后可查看最新公告</text>
+        <text>登录后可查看最新内容</text>
       </view>
 
       <!-- 加载状态 -->
@@ -311,22 +283,20 @@ onPullDownRefresh(() => {
         <text class="loading-text">加载中...</text>
       </view>
 
-      <!-- 公告列表 -->
+      <!-- 列表 -->
       <view v-else class="list">
         <InfoListItem v-for="item in list" :key="item.id" :item="item" @tap="handleItemClick(item)" />
-        <!-- 加载更多 -->
+
         <view v-if="loading && list.length > 0" class="load-more">
           <t-loading theme="circular" size="40rpx" />
           <text>加载中...</text>
         </view>
 
-        <!-- 没有更多 -->
         <view v-if="!hasMore && list.length > 0 && !isSearchMode" class="no-more">
           —— 没有更多了 ——
         </view>
 
-        <!-- 空状态 -->
-        <t-empty v-if="!loading && list.length === 0" :description="isSearchMode ? '未找到相关公告' : '暂无公告'" />
+        <t-empty v-if="!loading && list.length === 0" :description="isSearchMode ? '未找到相关内容' : '暂无内容'" />
       </view>
     </view>
   </PageLayout>
@@ -336,6 +306,39 @@ onPullDownRefresh(() => {
 .notice-page {
   min-height: 100vh;
   background: #f5f5f5;
+}
+
+.channel-tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 1rpx solid #eee;
+}
+
+.channel-tab {
+  flex: 1;
+  text-align: center;
+  padding: 24rpx 0;
+  font-size: 28rpx;
+  color: #666;
+  position: relative;
+  transition: color 0.2s;
+
+  &.active {
+    color: #0052d9;
+    font-weight: 600;
+
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 48rpx;
+      height: 4rpx;
+      background: #0052d9;
+      border-radius: 2rpx;
+    }
+  }
 }
 
 .search-header {
