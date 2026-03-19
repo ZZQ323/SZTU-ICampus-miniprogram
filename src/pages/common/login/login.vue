@@ -104,6 +104,8 @@ import PageLayout from '@/components/PageLayout.vue'
 import { useUserStore } from '@/store/modules/user'
 import { useAuthStore } from '@/store/modules/auth'
 import { authApi } from '@/api/auth-apis'
+import { useInfoStore } from '@/store/modules/info'
+import {type LoginType} from "@/types/auth"
 
 // ==================== Store ====================
 
@@ -278,19 +280,21 @@ async function handleLogin() {
   try {
     const loginData = {
       userId: userId.value.trim(),
-      loginType: activeTab.value === 'sms' ? 'SMS' : 'PASSWORD',
+      loginType: activeTab.value === 'sms' ? 'SMS' : 'PASSWORD' as LoginType,
       smsCode: activeTab.value === 'sms' ? smsCode.value.trim() : undefined,
       password: activeTab.value === 'password' ? password.value : undefined
     }
 
     const success = await userStore.loginSchool(loginData)
 
-    if (success) { 
+    if (success) {
       uni.showToast({ title: '登录成功', icon: 'success' })
 
       // 保存学号供下次使用
       userStore.setLastUsedUserId(userId.value.trim())
-
+      // 登录成功后，重置失败标记
+      const infoStore = useInfoStore()
+      infoStore.resetInitState()
       // 延迟返回
       setTimeout(() => {
         uni.navigateBack()

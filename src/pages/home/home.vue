@@ -1,13 +1,13 @@
 <!--
-  首页（完善版）
-  
+  首页（三层分治 + TDesign 重构版）
+
   文件：src/pages/home/home.vue
-  
-  ⭐ 改动：
-  1. 登录后显示 userId + realName
-  2. 新增退出登录按钮
-  3. 新增刷新会话（refresh cookie）按钮
-  4. 新增重置会话（清空远程+本地）按钮
+
+  设计：
+  - 顶部：用户卡片（渐变背景 + 头像 + 姓名学号）
+  - 中间：功能宫格（公告 / 课表，带 badge）
+  - 下方：cell 列表（操作项）
+  - 风格：扁平、干净、与 notice 页统一
 -->
 
 <script setup lang="ts">
@@ -17,259 +17,251 @@ import PageLayout from '@/components/PageLayout.vue'
 import FloatingNotification from '@/components/FloatingNotification.vue'
 import { useUserStore } from '@/store/modules/user'
 import { useInfoStore } from '@/store/modules/info'
-import { useWsStore } from '@/store/modules/ws'
-import { useAuth } from '@/hooks/useAuth'
+import { useAuthGuard } from '@/hooks/useAuthGuard'
 
 // ==================== Store ====================
 
 const userStore = useUserStore()
 const infoStore = useInfoStore()
-const wsStore = useWsStore()
-const { checkStatusWithUI, needsRefresh } = useAuth()
+const { ensure, isReady } = useAuthGuard()
 
 // ==================== 状态 ====================
 
-const loading = ref(false)
-const fabRef = ref<InstanceType<typeof FloatingNotification> | null>(null)
+const refreshing = ref(false)
 
 // ==================== 计算属性 ====================
 
 const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 const userInfo = computed(() => userStore.userInfo)
-const totalUnread = computed(() => infoStore.totalUnread)
 
-// ==================== 功能入口 ====================
+const greeting = computed(() => {
+  const h = new Date().getHours()
+  if (h < 6) return '夜深了'
+  if (h < 11) return '上午好'
+  if (h < 14) return '中午好'
+  if (h < 18) return '下午好'
+  return '晚上好'
+})
 
-const features = [
-  {
-    id: 'notice',
-    icon: 'notification',
-    title: '公告',
-    desc: '校园公文通知',
-    path: '/pages/notice/notice',
-    badge: () => infoStore.getUnreadCount('announcement'),
-  },
-  {
-    id: 'schedule',
-    icon: 'calendar',
-    title: '课表',
-    desc: '查看课程安排',
-    path: '/pages/schedule/schedule',
-    badge: () => 0,
-  },
-]
+const displayName = computed(() => {
+  if (!isLoggedIn.value) return '同学'
+  return userInfo.value?.realName || '同学'
+})
+
+const announcementBadge = computed(() => infoStore.getUnreadCount('announcement'))
 
 // ==================== 方法 ====================
 
-function handleFeatureTap(feature: typeof features[0]) {
-  if (feature.path === '/pages/notice/notice') {
-    uni.switchTab({ url: feature.path })
-  } else {
-    uni.navigateTo({ url: feature.path })
-  }
+function goNotice() {
+  uni.switchTab({ url: '/pages/notice/notice' })
 }
 
-async function handleRefreshData() {
-  if (!isLoggedIn.value) return
-  loading.value = true
-  try {
-    if (needsRefresh()) {
-      await checkStatusWithUI()
-    }
-    await infoStore.init()
-    uni.showToast({ title: '已刷新', icon: 'success' })
-  } catch (e) {
-    console.error('[Home] 刷新失败', e)
-  } finally {
-    loading.value = false
-  }
-}
-
-/** ⭐ 刷新会话（远程 refresh cookie） */
-async function handleRefreshSession() {
-  uni.showLoading({ title: '刷新会话中...' })
-  try {
-    await userStore.refreshSession()
-    uni.showToast({ title: '会话已刷新', icon: 'success' })
-  } catch (e: any) {
-    console.error('[Home] 刷新会话失败', e)
-    uni.showToast({ title: e.message || '刷新失败', icon: 'none' })
-  } finally {
-    uni.hideLoading()
-  }
-}
-
-/** ⭐ 退出登录 */
-async function handleLogout() {
-  uni.showModal({
-    title: '确认退出',
-    content: '退出后需要重新登录学校账号',
-    success: async (res) => {
-      if (res.confirm) {
-        uni.showLoading({ title: '退出中...' })
-        try {
-          await userStore.logoutSchool()
-          uni.showToast({ title: '已退出', icon: 'success' })
-        } catch (e) {
-          console.error('[Home] 退出失败', e)
-        } finally {
-          uni.hideLoading()
-        }
-      }
-    }
-  })
-}
-
-/** ⭐ 重置会话（核弹选项：清空远程 Redis + 本地存储 + 重新获取 Token） */
-async function handleResetSession() {
-  uni.showModal({
-    title: '重置会话',
-    content: '将清空服务器和本地的所有会话数据，然后重新初始化。确定要继续吗？',
-    success: async (res) => {
-      if (res.confirm) {
-        uni.showLoading({ title: '重置中...' })
-        try {
-          const success = await userStore.resetSession()
-          if (success) {
-            uni.showToast({ title: '已重置，请重新登录', icon: 'none' })
-          } else {
-            uni.showToast({ title: '重置失败', icon: 'error' })
-          }
-        } catch (e) {
-          console.error('[Home] 重置失败', e)
-          uni.showToast({ title: '重置失败', icon: 'error' })
-        } finally {
-          uni.hideLoading()
-        }
-      }
-    }
-  })
+function goSchedule() {
+  uni.switchTab({ url: '/pages/schedule/schedule' })
 }
 
 function goLogin() {
   uni.navigateTo({ url: '/pages/common/login/login' })
 }
 
-function goSetting() {
-  uni.navigateTo({ url: '/pages/common/setting' })
+async function handleRefreshData() {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    await infoStore.init()
+    uni.showToast({ title: '已刷新', icon: 'success' })
+  } catch (e) {
+    console.error('[Home] 刷新失败', e)
+  } finally {
+    refreshing.value = false
+  }
+}
+
+async function handleRefreshSession() {
+  uni.showLoading({ title: '刷新中...' })
+  try {
+    await userStore.refreshSession()
+    uni.showToast({ title: '会话已刷新', icon: 'success' })
+  } catch (e: any) {
+    uni.showToast({ title: e.message || '刷新失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+  }
+}
+
+function handleLogout() {
+  uni.showModal({
+    title: '确认退出',
+    content: '退出后需要重新登录学校账号',
+    success: async (res) => {
+      if (!res.confirm) return
+      uni.showLoading({ title: '退出中...' })
+      try {
+        await userStore.logoutSchool()
+        uni.showToast({ title: '已退出', icon: 'success' })
+      } catch (e) {
+        console.error('[Home] 退出失败', e)
+      } finally {
+        uni.hideLoading()
+      }
+    }
+  })
+}
+
+function handleResetSession() {
+  uni.showModal({
+    title: '重置会话',
+    content: '将清空所有登录状态，确定继续？',
+    confirmColor: '#fa5151',
+    success: async (res) => {
+      if (!res.confirm) return
+      uni.showLoading({ title: '重置中...' })
+      try {
+        const ok = await userStore.resetSession()
+        uni.showToast({
+          title: ok ? '已重置' : '重置失败',
+          icon: ok ? 'success' : 'error'
+        })
+      } catch (e) {
+        uni.showToast({ title: '重置失败', icon: 'error' })
+      } finally {
+        uni.hideLoading()
+      }
+    }
+  })
 }
 
 // ==================== 生命周期 ====================
 
 onShow(async () => {
-  if (isLoggedIn.value && needsRefresh()) {
-    await checkStatusWithUI()
-  }
+  await ensure()
   if (isLoggedIn.value) {
     infoStore.init()
   }
 })
 
-watch(isLoggedIn, (loggedIn) => {
-  if (loggedIn) {
-    infoStore.init()
-  }
+watch(isLoggedIn, (val) => {
+  if (val) infoStore.init()
 })
 </script>
 
 <template>
   <PageLayout>
-    <view class="home-page">
-      <!-- 用户信息卡片 -->
-      <view class="user-card">
-        <view class="user-avatar">
-          <t-icon v-if="!userInfo?.avatarURL" name="user" size="48rpx" color="#fff" />
-          <image v-else :src="userInfo.avatarURL" class="avatar-img" mode="aspectFill" />
-        </view>
-        <view class="user-info">
-          <!-- ⭐ 修复：显示 realName 和 userId -->
-          <text class="user-name">{{ isLoggedIn ? (userInfo?.realName || '已登录') : '未登录' }}</text>
-          <text class="user-school">{{ isLoggedIn ? (userInfo?.userId || '深圳技术大学') : '点击登录校园账号' }}</text>
-        </view>
-        <!-- 未登录：登录按钮 -->
-        <view v-if="!isLoggedIn" class="login-btn" @tap="goLogin">
-          <text>登录</text>
-        </view>
-        <!-- ⭐ 已登录：退出按钮 -->
-        <view v-else class="logout-btn" @tap="handleLogout">
-          <text>退出</text>
+    <view v-if="isReady" class="home">
+
+      <!-- ==================== 顶部卡片 ==================== -->
+      <view class="profile-card">
+        <view class="profile-row">
+          <!-- 头像 -->
+          <view class="avatar" @tap="isLoggedIn ? undefined : goLogin()">
+            <image v-if="userInfo?.avatarURL" :src="userInfo.avatarURL" class="avatar-img" mode="aspectFill" />
+            <t-icon v-else name="user" size="44rpx" color="rgba(255,255,255,0.9)" />
+          </view>
+
+          <!-- 文字 -->
+          <view class="profile-text">
+            <text class="profile-greeting">{{ greeting }}，{{ displayName }}</text>
+            <text v-if="isLoggedIn" class="profile-id">{{ userInfo?.userId }} · 深圳技术大学</text>
+            <text v-else class="profile-id" @tap="goLogin">点击登录校园账号 →</text>
+          </view>
+
+          <!-- 右侧按钮 -->
+          <view v-if="isLoggedIn" class="profile-action" @tap="handleLogout">
+            <t-icon name="poweroff" size="36rpx" color="rgba(255,255,255,0.8)" />
+          </view>
+          <view v-else class="profile-action login-action" @tap="goLogin">
+            <text>登录</text>
+          </view>
         </view>
       </view>
 
-      <!-- 功能入口 -->
-      <view class="features-grid">
-        <view v-for="item in features" :key="item.id" class="feature-item" @tap="handleFeatureTap(item)">
-          <view class="feature-icon-wrap">
-            <t-icon :name="item.icon" size="48rpx" color="#0052d9" />
-            <view v-if="item.badge() > 0" class="feature-badge">
-              {{ item.badge() > 99 ? '99+' : item.badge() }}
+      <!-- ==================== 功能入口 ==================== -->
+      <view class="section">
+        <view class="grid-2">
+          <!-- 信息流 -->
+          <view class="grid-card" @tap="goNotice">
+            <view class="grid-icon notice-icon">
+              <t-icon name="notification" size="44rpx" color="#0052d9" />
+              <view v-if="announcementBadge > 0" class="badge">
+                {{ announcementBadge > 99 ? '99+' : announcementBadge }}
+              </view>
             </view>
+            <text class="grid-title">信息流</text>
+            <text class="grid-desc">公告 · 教务 · 新闻</text>
           </view>
-          <text class="feature-title">{{ item.title }}</text>
-          <text class="feature-desc">{{ item.desc }}</text>
-        </view>
-      </view>
 
-      <!-- ⭐ 快捷操作（增强版） -->
-      <view class="quick-actions">
-        <view class="section-title">快捷操作</view>
-        <view class="action-list">
-          <view class="action-item" @tap="handleRefreshData">
-            <t-icon name="refresh" size="36rpx" />
-            <text>刷新数据</text>
-          </view>
-          <view v-if="isLoggedIn" class="action-item" @tap="handleRefreshSession">
-            <t-icon name="secured" size="36rpx" />
-            <text>刷新会话</text>
-          </view>
-          <view class="action-item" @tap="goSetting">
-            <t-icon name="setting" size="36rpx" />
-            <text>设置</text>
+          <!-- 课表 -->
+          <view class="grid-card" @tap="goSchedule">
+            <view class="grid-icon schedule-icon">
+              <t-icon name="calendar" size="44rpx" color="#07c160" />
+            </view>
+            <text class="grid-title">课表</text>
+            <text class="grid-desc">查看课程安排</text>
           </view>
         </view>
       </view>
 
-      <!-- ⭐ 调试/高级操作（仅登录后显示） -->
-      <view v-if="isLoggedIn" class="quick-actions">
-        <view class="section-title">高级操作</view>
-        <view class="action-list">
-          <view class="action-item danger" @tap="handleResetSession">
-            <t-icon name="delete" size="36rpx" />
-            <text>重置会话</text>
-          </view>
+      <!-- ==================== 操作列表 ==================== -->
+      <view class="section">
+        <view class="section-header">
+          <text class="section-title">快捷操作</text>
         </view>
-        <view class="action-hint">重置会话将清空服务器和本地的所有登录状态</view>
+        <t-cell-group theme="card">
+          <t-cell title="刷新数据" left-icon="refresh" arrow hover :note="refreshing ? '刷新中...' : ''"
+            @click="handleRefreshData" />
+          <t-cell v-if="isLoggedIn" title="刷新会话" left-icon="secured" arrow hover description="续期学校 Cookie"
+            @click="handleRefreshSession" />
+        </t-cell-group>
       </view>
 
-      <!-- 悬浮通知按钮 -->
-      <FloatingNotification ref="fabRef" />
+      <!-- ==================== 高级操作（登录后） ==================== -->
+      <view v-if="isLoggedIn" class="section">
+        <view class="section-header">
+          <text class="section-title">高级操作</text>
+        </view>
+        <t-cell-group theme="card">
+          <t-cell title="重置会话" left-icon="delete" arrow hover description="清空服务器和本地的所有登录状态"
+            @click="handleResetSession" />
+        </t-cell-group>
+      </view>
+
+      <!-- 底部留白 -->
+      <view style="height: 120rpx;" />
+
+      <!-- 悬浮通知 -->
+      <FloatingNotification />
     </view>
   </PageLayout>
 </template>
 
 <style lang="scss" scoped>
-.home-page {
+.home {
   min-height: 100vh;
   background: #f5f5f5;
-  padding-bottom: 120rpx;
 }
 
-.user-card {
+/* ==================== 顶部卡片 ==================== */
+
+.profile-card {
+  background: linear-gradient(135deg, #0052d9 0%, #2b7bef 100%);
+  padding: 48rpx 32rpx 40rpx;
+}
+
+.profile-row {
   display: flex;
   align-items: center;
-  padding: 40rpx 32rpx;
-  background: linear-gradient(135deg, #0052d9, #0066ff);
-  gap: 24rpx;
+  gap: 20rpx;
 }
 
-.user-avatar {
-  width: 96rpx;
-  height: 96rpx;
+.avatar {
+  width: 88rpx;
+  height: 88rpx;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   overflow: hidden;
 }
 
@@ -278,149 +270,126 @@ watch(isLoggedIn, (loggedIn) => {
   height: 100%;
 }
 
-.user-info {
+.profile-text {
   flex: 1;
+  min-width: 0;
 }
 
-.user-name {
-  font-size: 34rpx;
+.profile-greeting {
+  display: block;
+  font-size: 32rpx;
   font-weight: 600;
   color: #fff;
-  display: block;
+  line-height: 1.4;
 }
 
-.user-school {
+.profile-id {
+  display: block;
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.7);
   margin-top: 4rpx;
-  display: block;
 }
 
-.login-btn,
-.logout-btn {
-  padding: 12rpx 32rpx;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 32rpx;
-  color: #fff;
-  font-size: 26rpx;
-}
-
-.logout-btn {
-  background: rgba(255, 100, 100, 0.3);
-}
-
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20rpx;
-  padding: 24rpx;
-}
-
-.feature-item {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 32rpx 24rpx;
-  text-align: center;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+.profile-action {
+  flex-shrink: 0;
+  padding: 12rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
 
   &:active {
-    background: #f9f9f9;
+    background: rgba(255, 255, 255, 0.2);
   }
 }
 
-.feature-icon-wrap {
-  width: 80rpx;
-  height: 80rpx;
-  margin: 0 auto 16rpx;
-  background: rgba(0, 82, 217, 0.08);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.feature-badge {
-  position: absolute;
-  top: -8rpx;
-  right: -8rpx;
-  min-width: 32rpx;
-  height: 32rpx;
-  padding: 0 8rpx;
-  font-size: 20rpx;
-  font-weight: 600;
+.login-action {
+  border-radius: 32rpx;
+  padding: 10rpx 28rpx;
+  font-size: 26rpx;
   color: #fff;
-  background-color: #f54a45;
-  border-radius: 16rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
-.feature-title {
-  font-size: 30rpx;
-  font-weight: 500;
-  color: #333;
-  display: block;
+/* ==================== 功能宫格 ==================== */
+
+.section {
+  margin: 24rpx 24rpx 0;
 }
 
-.feature-desc {
-  font-size: 22rpx;
-  color: #999;
-  margin-top: 4rpx;
-  display: block;
-}
-
-.quick-actions {
-  margin: 24rpx;
-  padding: 24rpx;
-  background: #fff;
-  border-radius: 16rpx;
+.section-header {
+  padding: 0 8rpx 16rpx;
 }
 
 .section-title {
   font-size: 28rpx;
   font-weight: 500;
   color: #333;
-  margin-bottom: 20rpx;
 }
 
-.action-list {
-  display: flex;
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 20rpx;
-  flex-wrap: wrap;
 }
 
-.action-item {
-  flex: 1;
-  min-width: 0;
+.grid-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 28rpx 24rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8rpx;
-  padding: 20rpx;
-  background: #f5f5f5;
-  border-radius: 12rpx;
-  color: #666;
-  font-size: 24rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+  transition: background 0.15s;
 
   &:active {
-    background: #eee;
-  }
-
-  &.danger {
-    color: #fa5151;
-    background: #fff0f0;
-
-    &:active {
-      background: #ffe0e0;
-    }
+    background: #f9f9f9;
   }
 }
 
-.action-hint {
+.grid-icon {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin-bottom: 4rpx;
+}
+
+.notice-icon {
+  background: rgba(0, 82, 217, 0.08);
+}
+
+.schedule-icon {
+  background: rgba(7, 193, 96, 0.08);
+}
+
+.badge {
+  position: absolute;
+  top: -6rpx;
+  right: -10rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  padding: 0 8rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+  color: #fff;
+  background: #fa5151;
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid-title {
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #333;
+}
+
+.grid-desc {
   font-size: 22rpx;
   color: #999;
-  margin-top: 12rpx;
 }
 </style>

@@ -2,7 +2,7 @@ import { createSSRApp } from 'vue'
 import { createPinia } from 'pinia'
 import piniaPersistedstate from 'pinia-plugin-persistedstate'
 import App from './App.vue'
-import { setupRouterGuard } from './utils/router'
+// import { setupRouterGuard } from '@/utils/router'
 import 'tdesign-uniapp/common/style/theme/index.css';
 
 export function createApp() {
@@ -14,7 +14,7 @@ export function createApp() {
   app.use(pinia)
 
   // 初始化路由守卫（拦截需要登录的页面）
-  setupRouterGuard()
+  // setupRouterGuard()
 
   return { app }
 }

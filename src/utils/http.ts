@@ -1,22 +1,29 @@
 /**
- * HTTP 请求封装（修复版 - 防 401 风暴）
- * 
+ * HTTP 请求封装（三层分治版）
+ *
  * 文件：src/utils/http/index.ts
- * 
- * ⭐ 修复：
- * 1. handleAuthFailure() 加防重入锁 + 冷却期（5秒内不重复触发）
- * 2. refreshToken() 失败时不再 reLaunch（避免死循环），改为静默失败
- * 3. 401 处理添加最大重试限制
+ *
+ * 职责（且仅此）：
+ *   1. 请求时附加 token
+ *   2. 401 时调 TokenManager 刷新 1 次，成功重试，失败 reject
+ *   3. 其他错误原样 reject
+ *
+ * 禁止：
+ *   - reLaunch / navigateTo / switchTab
+ *   - uni.showToast / uni.showModal
+ *   - removeStorageSync（不清 token，那是 TokenManager 的事）
+ *   - 自动 initSession（那是页面守卫的事）
  */
 
 import axios from 'axios'
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { createUniAppAxiosAdapter } from '@uni-helper/axios-adapter'
 import { getToken, setToken } from '@/utils/storage'
+import { refreshToken as tmRefreshToken } from '@/utils/token-manager'
 
-// ==================== 配置常量 ====================
+// ==================== 配置 ====================
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://192.168.3.35:8080'
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://192.168.3.35:8080'
 const DEFAULT_TIMEOUT = 15 * 1000
 const SLOW_TIMEOUT = 100 * 1000
 
@@ -25,10 +32,10 @@ const SLOW_APIS = [
   '/auth/v1/session/refresh',
   '/auth/v1/login',
   '/auth/v1/status',
-  '/auth/v1/cookie/refresh',
   '/acdm/v1/schedule',
 ]
 
+/** 公开接口：不附 token，401 不重试 */
 const PUBLIC_APIS = [
   '/wx-auth/v1/get-token',
   '/wx-auth/v1/refresh-token',
@@ -42,32 +49,22 @@ interface BackendResponse<T = any> {
   data: T
 }
 
-// ==================== 刷新队列管理 ====================
+// ==================== 401 队列管理 ====================
 
-let isRefreshingToken = false
-let isRefreshingSession = false
+let _isRefreshing = false
 
-let pendingTokenRequests: Array<{
+let _pendingRequests: Array<{
   resolve: (value: any) => void
   reject: (error: any) => void
   config: InternalAxiosRequestConfig
 }> = []
 
-let pendingSessionRequests: Array<{
-  resolve: (value: any) => void
-  reject: (error: any) => void
-  config: InternalAxiosRequestConfig
-}> = []
-
-// ⭐ 防重入：handleAuthFailure 冷却期
-let _authFailureHandled = false
-let _authFailureCooldown = 0
-
-function processTokenQueue(error?: any) {
-  pendingTokenRequests.forEach(({ resolve, reject, config }) => {
+function _processPendingQueue(error?: any) {
+  _pendingRequests.forEach(({ resolve, reject, config }) => {
     if (error) {
       reject(error)
     } else {
+      // 重新附上新 token
       const newToken = getToken()
       if (newToken && config.headers) {
         config.headers['Authorization'] = `Bearer ${newToken}`
@@ -75,21 +72,10 @@ function processTokenQueue(error?: any) {
       resolve(instance(config))
     }
   })
-  pendingTokenRequests = []
+  _pendingRequests = []
 }
 
-function processSessionQueue(error?: any) {
-  pendingSessionRequests.forEach(({ resolve, reject, config }) => {
-    if (error) {
-      reject(error)
-    } else {
-      resolve(instance(config))
-    }
-  })
-  pendingSessionRequests = []
-}
-
-// ==================== 创建 Axios 实例 ====================
+// ==================== Axios 实例 ====================
 
 const instance: AxiosInstance = axios.create({
   baseURL: BASE_URL,
@@ -103,289 +89,133 @@ instance.interceptors.request.use(
   (config) => {
     const url = config.url || ''
 
+    // 慢接口加长超时
     if (SLOW_APIS.some(api => url.includes(api))) {
       config.timeout = SLOW_TIMEOUT
     }
 
-    const isPublicApi = PUBLIC_APIS.some(api => url.includes(api))
-    if (!isPublicApi) {
+    // 非公开接口附 token
+    if (!PUBLIC_APIS.some(api => url.includes(api))) {
       const token = getToken()
       if (token && config.headers) {
         config.headers['Authorization'] = `Bearer ${token}`
       }
     }
 
-    config.headers = config.headers || {}
-    config.headers['X-Request-ID'] = generateRequestId()
-
     return config
   },
-  (error) => {
-    return Promise.reject(createHttpError(0, '请求配置错误', false, error))
-  }
+  (error) => Promise.reject(_makeError(0, '请求配置错误', false, error))
 )
 
 // ==================== 响应拦截器 ====================
 
 instance.interceptors.response.use(
+  // ===== 成功响应 =====
   (response: AxiosResponse<BackendResponse>) => {
     const { data, headers } = response
 
+    // 如果后端通过 header 下发了新 token
     const newToken = headers['x-new-token']
-    if (newToken) {
-      setToken(newToken)
-    }
+    if (newToken) setToken(newToken)
 
+    // 业务错误码
     if (data.code !== undefined && data.code !== 200) {
-      return Promise.reject(createHttpError(
-        data.code,
-        data.message || '请求失败',
-        isRetryableCode(data.code),
-        data
-      ))
+      return Promise.reject(_makeError(data.code, data.message || '请求失败', false, data))
     }
 
+    // 返回业务数据（已解包）
     return data.data as any
   },
+
+  // ===== 错误响应 =====
   async (error) => {
     const { config, response } = error
 
-    // ========== 401 处理：刷新 Token ==========
-    if (response?.status === 401 && config && !config._retryToken) {
+    // ==================== 401：调 TokenManager 刷新 ====================
+    if (response?.status === 401 && config && !config._retried) {
       const url = config.url || ''
 
+      // 公开接口的 401 不处理
       if (PUBLIC_APIS.some(api => url.includes(api))) {
-        return Promise.reject(createHttpError(401, '认证失败', false, error))
+        return Promise.reject(_makeError(401, '认证失败', false))
       }
 
-      // ⭐ 如果已经在认证失败冷却期，直接拒绝，不再尝试刷新
-      if (_authFailureHandled && Date.now() - _authFailureCooldown < 5000) {
-        return Promise.reject(createHttpError(401, '登录已过期，请重新登录', false))
-      }
-
-      if (isRefreshingToken) {
+      // 如果已经在刷新中，排队等待
+      if (_isRefreshing) {
         return new Promise((resolve, reject) => {
-          pendingTokenRequests.push({ resolve, reject, config })
+          _pendingRequests.push({ resolve, reject, config })
         })
       }
 
-      isRefreshingToken = true
-      config._retryToken = true
+      // 标记：这个请求已经重试过了
+      _isRefreshing = true
+      config._retried = true
 
       try {
-        const refreshSuccess = await refreshToken()
+        // ⭐ 委托 TokenManager 刷新（带锁，全局只跑一次）
+        const ok = await tmRefreshToken()
 
-        if (refreshSuccess) {
-          // ⭐ 刷新成功，清除失败标记
-          _authFailureHandled = false
-          processTokenQueue()
+        if (ok) {
+          // 刷新成功，放行队列中的请求
+          _processPendingQueue()
+
+          // 重试当前请求
           const newToken = getToken()
           if (newToken && config.headers) {
             config.headers['Authorization'] = `Bearer ${newToken}`
           }
           return instance(config)
-        } else {
-          const refreshError = createHttpError(401, '登录已过期，请重新登录', false)
-          processTokenQueue(refreshError)
-          // ⭐ 标记失败 + 冷却期，不再 reLaunch（由调用方决定怎么处理）
-          handleAuthFailure()
-          return Promise.reject(refreshError)
         }
-      } catch (refreshErr) {
-        const refreshError = createHttpError(401, '刷新登录状态失败', false, refreshErr)
-        processTokenQueue(refreshError)
-        handleAuthFailure()
-        return Promise.reject(refreshError)
+
+        // 刷新失败 → reject 所有等待中的请求
+        const err = _makeError(401, '登录已过期', false)
+        _processPendingQueue(err)
+        return Promise.reject(err)
+
+      } catch (e) {
+        const err = _makeError(401, '刷新登录状态失败', false, e)
+        _processPendingQueue(err)
+        return Promise.reject(err)
       } finally {
-        isRefreshingToken = false
+        _isRefreshing = false
       }
     }
 
-    // ========== 403 处理：刷新 Session ==========
-    if (response?.status === 403 && config && !config._retrySession) {
-      console.log('[HTTP] 收到 403，Cookie 可能已过期，尝试重新初始化 Session')
-
-      if (isRefreshingSession) {
-        return new Promise((resolve, reject) => {
-          pendingSessionRequests.push({ resolve, reject, config })
-        })
-      }
-
-      isRefreshingSession = true
-      config._retrySession = true
-
-      try {
-        const refreshSuccess = await refreshSession()
-
-        if (refreshSuccess) {
-          processSessionQueue()
-          return instance(config)
-        } else {
-          const refreshError = createHttpError(403, '学校会话已过期，请重新登录', false)
-          processSessionQueue(refreshError)
-          return Promise.reject(refreshError)
-        }
-      } catch (refreshErr) {
-        const refreshError = createHttpError(403, '重新初始化会话失败', false, refreshErr)
-        processSessionQueue(refreshError)
-        return Promise.reject(refreshError)
-      } finally {
-        isRefreshingSession = false
-      }
+    // ==================== 403：直接 reject（页面守卫决定怎么办） ====================
+    if (response?.status === 403) {
+      return Promise.reject(_makeError(403, '学校会话已过期', false, error))
     }
 
-    // ========== 超时错误 ==========
+    // ==================== 超时 ====================
     if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-      return Promise.reject(createHttpError(504, '请求超时，请检查网络后重试', true, error))
+      return Promise.reject(_makeError(504, '请求超时，请检查网络', true, error))
     }
 
-    // ========== 网络错误 ==========
+    // ==================== 网络错误 ====================
     if (error.message === 'Network Error' || !response) {
-      return Promise.reject(createHttpError(0, '网络连接失败，请检查网络设置', true, error))
+      return Promise.reject(_makeError(0, '网络连接失败', true, error))
     }
 
-    // ========== 其他 HTTP 错误 ==========
+    // ==================== 其他 HTTP 错误 ====================
     const status = response?.status || 500
-    const message = response?.data?.message || getDefaultErrorMessage(status)
-    return Promise.reject(createHttpError(status, message, isRetryableCode(status), error))
+    const msg = response?.data?.message || _defaultMsg(status)
+    return Promise.reject(_makeError(status, msg, status >= 500, error))
   }
 )
 
-// ==================== 辅助函数 ====================
+// ==================== 工具函数 ====================
 
-function createHttpError(code: number, message: string, retryable: boolean, raw?: any) {
+function _makeError(code: number, message: string, retryable: boolean, raw?: any) {
   return { code, message, retryable, timestamp: Date.now(), raw }
 }
 
-function isRetryableCode(code: number): boolean {
-  return code >= 500 || code === 0 || code === 504 || code === 408
-}
-
-function getDefaultErrorMessage(status: number): string {
-  const messages: Record<number, string> = {
-    400: '请求参数错误',
-    401: '身份验证失败',
-    403: '学校会话已过期',
-    404: '请求的资源不存在',
-    408: '请求超时',
-    429: '请求过于频繁，请稍后再试',
-    500: '服务器内部错误',
-    502: '网关错误',
-    503: '服务暂时不可用',
-    504: '网关超时'
+function _defaultMsg(status: number): string {
+  const m: Record<number, string> = {
+    400: '请求参数错误', 401: '身份验证失败', 403: '学校会话已过期',
+    404: '资源不存在', 429: '请求过于频繁', 500: '服务器错误',
+    502: '网关错误', 503: '服务不可用', 504: '网关超时',
   }
-  return messages[status] || `请求失败 (${status})`
-}
-
-function generateRequestId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-}
-
-/**
- * 刷新 Token
- */
-async function refreshToken(): Promise<boolean> {
-  try {
-    const loginResult = await uni.login()
-    if (!loginResult.code) {
-      console.error('[HTTP] 获取 wx code 失败')
-      return false
-    }
-
-    const response = await axios.post<BackendResponse<{ token: string }>>(
-      `${BASE_URL}/wx-auth/v1/refresh-token`,
-      { wxCode: loginResult.code },
-      {
-        headers: {
-          'Authorization': `Bearer ${getToken()}`,
-          'Content-Type': 'application/json'
-        },
-        adapter: createUniAppAxiosAdapter(),
-        timeout: DEFAULT_TIMEOUT
-      }
-    )
-
-    if (response.data?.data?.token) {
-      setToken(response.data.data.token)
-      console.log('[HTTP] Token 刷新成功')
-      return true
-    }
-
-    return false
-  } catch (e) {
-    console.error('[HTTP] Token 刷新失败', e)
-    return false
-  }
-}
-
-/**
- * 刷新 Session
- */
-async function refreshSession(): Promise<boolean> {
-  try {
-    const response = await axios.post<BackendResponse<any>>(
-      `${BASE_URL}/auth/v1/session/init`,
-      {},
-      {
-        headers: {
-          'Authorization': `Bearer ${getToken()}`,
-          'Content-Type': 'application/json'
-        },
-        adapter: createUniAppAxiosAdapter(),
-        timeout: SLOW_TIMEOUT
-      }
-    )
-
-    if (response.data?.code === 200) {
-      console.log('[HTTP] Session 重新初始化成功')
-      return true
-    }
-
-    return false
-  } catch (e) {
-    console.error('[HTTP] Session 重新初始化失败', e)
-    return false
-  }
-}
-
-/**
- * ⭐ 处理认证失败（防重入版）
- * 
- * 不再 reLaunch！只做：
- * 1. 清除本地 token
- * 2. 设置冷却期（5秒内不再触发 refresh）
- * 3. 让调用方自己处理 UI（弹窗 / 跳登录页）
- */
-function handleAuthFailure() {
-  // 防重入：5秒内只处理一次
-  const now = Date.now()
-  if (_authFailureHandled && (now - _authFailureCooldown) < 5000) {
-    return
-  }
-
-  _authFailureHandled = true
-  _authFailureCooldown = now
-
-  console.warn('[HTTP] 认证失败，清除本地 token')
-
-  // 清除本地存储
-  try {
-    uni.removeStorageSync('token')
-    uni.removeStorageSync('userInfo')
-  } catch (e) {
-    console.error('[HTTP] 清除存储失败', e)
-  }
-
-  // ⭐ 不再 reLaunch！前端 useAuthGuard 或页面级代码会根据 token 缺失自动响应
-  // 如果需要提示用户，由调用方（页面组件）决定
-}
-
-/**
- * ⭐ 重置认证失败状态（登录成功后调用）
- */
-export function resetAuthFailureState() {
-  _authFailureHandled = false
-  _authFailureCooldown = 0
+  return m[status] || `请求失败 (${status})`
 }
 
 // ==================== 导出 ====================
@@ -395,27 +225,15 @@ export default instance
 export const request = {
   get: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> =>
     instance.get(url, config),
-
   post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> =>
     instance.post(url, data, config),
-
   put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> =>
     instance.put(url, data, config),
-
   delete: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> =>
     instance.delete(url, config),
 }
 
-export function isRetryable(error: any): boolean {
-  return error?.retryable === true
-}
-
-export function isAuthError(error: any): boolean {
-  return error?.code === 401
-}
-
-export function isSessionError(error: any): boolean {
-  return error?.code === 403
-}
-
-export { BASE_URL }
+/** 错误类型判断（页面 catch 里用） */
+export function isAuthError(e: any): boolean { return e?.code === 401 }
+export function isSessionError(e: any): boolean { return e?.code === 403 }
+export function isRetryable(e: any): boolean { return e?.retryable === true }

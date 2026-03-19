@@ -22,14 +22,14 @@
  * 使用 isReady 控制内容显示，强制登录
  */
 // import { ref, computed } from 'vue'
-// import { onShow, onHide } from '@dcloudio/uni-app'
+import { onShow, onHide } from '@dcloudio/uni-app'
 // import PageLayout from '@/components/PageLayout.vue'
-// import { useAuthGuard } from '@/hooks/composables/useAuthGuard'
+import { useAuthGuard } from '@/hooks/useAuthGuard'
 // import { useSchedule } from '@/hooks/useSchedule'
 
 // // ==================== Hooks ====================
 
-// const { ensure, isReady } = useAuthGuard()
+const { ensure, isReady } = useAuthGuard()
 
 // const {
 //   courses,
@@ -73,21 +73,14 @@
 
 // // ==================== 生命周期 ====================
 
-// onShow(async () => {
-//   // ⭐ 改进：使用 ensure 进行认证检查
-//   // requireSchoolLogin: true 表示必须登录
-//   // redirectOnFail: true 表示登录失败时跳转登录页
-//   const result = await ensure({
-//     requireSchoolLogin: true,
-//     redirectOnFail: true
-//   })
-
+onShow(async () => {
+  await ensure({ requireSchoolLogin: true })
 //   // 只有认证成功才加载数据
 //   if (result.success) {
 //     await loadData()
 //     connectSSE()
 //   }
-// })
+})
 
 // onHide(() => {
 //   disconnectSSE()

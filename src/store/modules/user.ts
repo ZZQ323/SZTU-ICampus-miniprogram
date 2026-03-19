@@ -25,6 +25,8 @@ import {
   setUserInfo,
   removeUserInfo
 } from '@/utils/storage'
+import { clearToken } from '@/utils/token-manager'
+
 import type {
   LoginType,
   UserInfo,
@@ -357,9 +359,8 @@ export const useUserStore = defineStore('user', () => {
    */
   function clearAll(): void {
     token.value = ''
-    removeToken()
+    clearToken()  // ⭐ 用 TokenManager 的方法
     clearSchoolSession()
-    // 保留历史学号
   }
 
   /**

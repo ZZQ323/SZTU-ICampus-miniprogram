@@ -1,17 +1,18 @@
 /**
- * 统一信息状态管理 Store（WebSocket 版）
+ * 统一信息状态管理 Store（三层分治版）
  *
  * 文件：src/store/modules/info.ts
  *
- * 改造点：
- * - handleSseMessage → handleWsMessage
- * - 消息类型对齐后端 StreamKeys（NEW_ANNOUNCEMENTS / SCHEDULE_DATA 等）
- * - sseConnected → wsConnected（语义更新）
+ * ⭐ 修改点：
+ *   1. init() 检查 hasLocalToken 再请求（防 401 风暴）
+ *   2. 加锁 + 失败标记（防并发 + 防重试）
+ *   3. 不再自己管 token（那是 TokenManager 的事）
  */
 
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { infoApi } from '@/api/info-api'
+import { hasLocalToken } from '@/utils/token-manager'
 import type { CategoryTree, ChannelUnreadState } from '@/types/info'
 import type { WsMessage } from '@/utils/websocket'
 
@@ -35,12 +36,13 @@ export const useInfoStore = defineStore('info', () => {
     })
 
     const categoryTree = ref<CategoryTree | null>(null)
-
-    /** WebSocket 连接状态（原 sseConnected） */
     const wsConnected = ref(false)
-
-    /** 新消息（浮窗 + 红点用） */
     const newMessage = ref<any>(null)
+
+    /** 防并发 */
+    let _initing = false
+    /** 认证失败后停止重试 */
+    let _authFailed = false
 
     // ==================== 计算属性 ====================
 
@@ -59,7 +61,6 @@ export const useInfoStore = defineStore('info', () => {
     )
 
     const hasUnread = computed(() => totalUnread.value > 0)
-
     const announcementUnread = computed(() => unreadCounts.value.announcement || 0)
 
     // ==================== 持久化 ====================
@@ -73,15 +74,40 @@ export const useInfoStore = defineStore('info', () => {
 
     // ==================== 方法 ====================
 
+    /**
+     * 初始化（拉取最新 ID）
+     *
+     * ⭐ 三道防护：
+     *   1. 无 token → 跳过
+     *   2. 正在初始化 → 跳过
+     *   3. 上次认证失败 → 跳过（直到 resetInitState）
+     */
     async function init() {
+        if (!hasLocalToken()) return
+        if (_initing) return
+        if (_authFailed) return
+
+        _initing = true
         try {
             const result = await infoApi.getLatestId('announcement')
             if (result?.latestId) {
                 updateServerLatestId('announcement', result.latestId)
             }
-        } catch (e) {
-            console.warn('[Info Store] 初始化失败', e)
+            _authFailed = false
+        } catch (e: any) {
+            console.warn('[Info Store] 初始化失败:', e?.message)
+            if (e?.code === 401 || e?.code === 403) {
+                _authFailed = true
+            }
+        } finally {
+            _initing = false
         }
+    }
+
+    /** 重置失败标记（登录成功后调用） */
+    function resetInitState() {
+        _authFailed = false
+        _initing = false
     }
 
     async function loadCategoryTree() {
@@ -99,36 +125,22 @@ export const useInfoStore = defineStore('info', () => {
     function updateServerLatestId(channelId: string, latestId: string) {
         ensureChannelState(channelId)
         const state = channelStates.value[channelId]
-
         const oldLatest = Number(state.serverLatestId) || 0
         const newLatest = Number(latestId) || 0
 
         if (newLatest > oldLatest && oldLatest > 0) {
-            newMessage.value = {
-                channelId,
-                latestId,
-                count: newLatest - oldLatest,
-            }
-
-            // 更新 TabBar 红点
+            newMessage.value = { channelId, latestId, count: newLatest - oldLatest }
             updateTabBarBadge()
         }
-
         state.serverLatestId = latestId
     }
 
     function markChannelRead(channelId: string) {
         ensureChannelState(channelId)
         const state = channelStates.value[channelId]
-
         if (state.serverLatestId && state.serverLatestId !== '0') {
             state.lastReadId = state.serverLatestId
-            console.log(`[Info Store] 标记 ${channelId} 全部已读:`, state.lastReadId)
-
-            infoApi.markRead({ channelId, latestId: state.lastReadId })
-                .catch(e => console.warn('[Info Store] 同步已读状态失败', e))
-
-            // 清除 TabBar 红点
+            infoApi.markRead({ channelId, latestId: state.lastReadId }).catch(() => { })
             updateTabBarBadge()
         }
     }
@@ -137,17 +149,11 @@ export const useInfoStore = defineStore('info', () => {
         ensureChannelState(channelId)
         const state = channelStates.value[channelId]
         state.readIds.add(id)
-
         const idNum = Number(id) || 0
         const lastReadNum = Number(state.lastReadId) || 0
-        if (idNum > lastReadNum) {
-            state.lastReadId = id
-        }
-
+        if (idNum > lastReadNum) state.lastReadId = id
         if (state.readIds.size > MAX_READ_IDS) {
-            const arr = Array.from(state.readIds)
-                .sort((a, b) => Number(b) - Number(a))
-                .slice(0, MAX_READ_IDS)
+            const arr = Array.from(state.readIds).sort((a, b) => Number(b) - Number(a)).slice(0, MAX_READ_IDS)
             state.readIds = new Set(arr)
         }
     }
@@ -155,9 +161,7 @@ export const useInfoStore = defineStore('info', () => {
     function isItemRead(channelId: string, id: string): boolean {
         const state = channelStates.value[channelId]
         if (!state) return false
-        const idNum = Number(id) || 0
-        const lastReadNum = Number(state.lastReadId) || 0
-        if (idNum <= lastReadNum) return true
+        if ((Number(id) || 0) <= (Number(state.lastReadId) || 0)) return true
         return state.readIds.has(id)
     }
 
@@ -165,47 +169,17 @@ export const useInfoStore = defineStore('info', () => {
         return unreadCounts.value[channelId] || 0
     }
 
-    /**
-     * ★ 处理 WebSocket 消息（核心替换点）
-     *
-     * 由 ws.ts store 转发调用。消息类型对应后端 StreamKeys：
-     * - NEW_ANNOUNCEMENTS → 新公告通知
-     * - ANNOUNCEMENT_STATUS → 公告系统状态
-     * - SCHEDULE_DATA → 课表数据
-     * - CALENDAR_DATA → 日历数据
-     */
     function handleWsMessage(message: WsMessage) {
-        console.log('[Info Store] WS 消息:', message.type, message.data)
-
         switch (message.type) {
             case 'NEW_ANNOUNCEMENTS':
             case 'ANNOUNCEMENT_STATUS':
             case 'ANNOUNCEMENT_DATA':
-                if (message.data?.latestId) {
-                    updateServerLatestId('announcement', message.data.latestId)
-                }
+                if (message.data?.latestId) updateServerLatestId('announcement', message.data.latestId)
                 break
-
-            case 'SCHEDULE_DATA':
-                // TODO: 课表推送处理
-                break
-
-            case 'CALENDAR_DATA':
-                // TODO: 日历推送处理
-                break
-
-            case 'HEARTBEAT':
-            case 'CONNECTED':
-                break
-
-            default:
-                console.log('[Info Store] 未处理消息类型:', message.type)
         }
     }
 
-    function clearNewMessage() {
-        newMessage.value = null
-    }
+    function clearNewMessage() { newMessage.value = null }
 
     // ==================== TabBar 红点 ====================
 
@@ -213,19 +187,14 @@ export const useInfoStore = defineStore('info', () => {
         const count = totalUnread.value
         try {
             if (count > 0) {
-                uni.setTabBarBadge({
-                    index: 2,  // 公告 tab 的 index（根据你的 tabBar 配置调整）
-                    text: count > 99 ? '99+' : String(count),
-                })
+                uni.setTabBarBadge({ index: 2, text: count > 99 ? '99+' : String(count) })
             } else {
                 uni.removeTabBarBadge({ index: 2 })
             }
-        } catch (e) {
-            // 非 tabBar 页面调用会报错，忽略
-        }
+        } catch { /* 非 tabBar 页面会报错 */ }
     }
 
-    // ==================== 内部方法 ====================
+    // ==================== 内部 ====================
 
     function ensureChannelState(channelId: string) {
         if (!channelStates.value[channelId]) {
@@ -241,28 +210,12 @@ export const useInfoStore = defineStore('info', () => {
         }
     }
 
-    // ==================== 返回 ====================
-
     return {
-        channelStates,
-        categoryTree,
-        wsConnected,
-        newMessage,
-
-        unreadCounts,
-        totalUnread,
-        hasUnread,
-        announcementUnread,
-
-        init,
-        loadCategoryTree,
-        updateServerLatestId,
-        markChannelRead,
-        markItemRead,
-        isItemRead,
-        getUnreadCount,
-        handleWsMessage,     // ★ 原 handleSseMessage
-        clearNewMessage,
+        channelStates, categoryTree, wsConnected, newMessage,
+        unreadCounts, totalUnread, hasUnread, announcementUnread,
+        init, resetInitState, loadCategoryTree,
+        updateServerLatestId, markChannelRead, markItemRead,
+        isItemRead, getUnreadCount, handleWsMessage, clearNewMessage,
     }
 })
 
@@ -271,20 +224,13 @@ export const useInfoStore = defineStore('info', () => {
 function loadFromStorage<T>(key: string, defaultValue: T): T {
     try {
         const data = uni.getStorageSync(key)
-        if (data) {
-            return typeof defaultValue === 'string' ? data : JSON.parse(data)
-        }
-    } catch (e) {
-        console.warn('[Info Store] 读取存储失败:', key, e)
-    }
+        if (data) return typeof defaultValue === 'string' ? data : JSON.parse(data)
+    } catch { /* ignore */ }
     return defaultValue
 }
 
 function saveToStorage(key: string, value: any): void {
     try {
-        const data = typeof value === 'string' ? value : JSON.stringify(value)
-        uni.setStorageSync(key, data)
-    } catch (e) {
-        console.warn('[Info Store] 保存存储失败:', key, e)
-    }
+        uni.setStorageSync(key, typeof value === 'string' ? value : JSON.stringify(value))
+    } catch { /* ignore */ }
 }
