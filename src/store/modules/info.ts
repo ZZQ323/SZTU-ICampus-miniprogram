@@ -140,7 +140,7 @@ export const useInfoStore = defineStore('info', () => {
         const state = channelStates.value[channelId]
         if (state.serverLatestId && state.serverLatestId !== '0') {
             state.lastReadId = state.serverLatestId
-            infoApi.markRead({ channelId, latestId: state.lastReadId }).catch(() => { })
+            // infoApi.markRead({ channelId, latestId: state.lastReadId }).catch(() => { })
             updateTabBarBadge()
         }
     }
