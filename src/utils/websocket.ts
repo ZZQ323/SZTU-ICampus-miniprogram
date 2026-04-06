@@ -1,10 +1,9 @@
 /**
- * WebSocket 连接工具
+ * WebSocket 连接工具（Cookie 直通版）
  *
  * 文件：src/utils/websocket.ts
  *
- * 替代原 utils/sse.ts，使用 uni.connectSocket 建立真实 WebSocket 长连接。
- * 不是轮询，是服务端主动推送。
+ * 变更：token → openId（连接参数）
  */
 
 type MessageCallback = (message: WsMessage) => void
@@ -23,8 +22,8 @@ export interface WsMessage<T = any> {
 interface WsOptions {
     /** 后端基础 URL（如 ws://192.168.1.100:8080 或 wss://xxx） */
     baseUrl: string
-    /** JWT token */
-    token: string
+    /** openId（用户标识） */
+    openId: string
     /** 订阅的 topic 列表 */
     topics?: string[]
     /** 消息回调 */
@@ -39,23 +38,6 @@ interface WsOptions {
     heartbeatInterval?: number
 }
 
-/**
- * WebSocket 连接管理器
- *
- * 用法：
- * ```ts
- * const ws = new WsClient({
- *   baseUrl: 'ws://localhost:8080',
- *   token: userStore.token,
- *   topics: ['announcement', 'schedule'],
- *   onMessage: (msg) => infoStore.handleWsMessage(msg),
- *   onStateChange: (state) => console.log('WS:', state),
- * })
- * ws.connect()
- * // ...
- * ws.disconnect()
- * ```
- */
 export class WsClient {
     private socket: UniApp.SocketTask | null = null
     private options: Required<WsOptions>
@@ -68,7 +50,7 @@ export class WsClient {
     constructor(opts: WsOptions) {
         this.options = {
             baseUrl: opts.baseUrl,
-            token: opts.token,
+            openId: opts.openId,
             topics: opts.topics || ['announcement'],
             onMessage: opts.onMessage || (() => { }),
             onStateChange: opts.onStateChange || (() => { }),
@@ -88,7 +70,7 @@ export class WsClient {
         this.setState(this.reconnectAttempts > 0 ? 'reconnecting' : 'connecting')
 
         const topics = this.options.topics.join(',')
-        const url = `${this.options.baseUrl}/ws?token=${encodeURIComponent(this.options.token)}&topics=${encodeURIComponent(topics)}`
+        const url = `${this.options.baseUrl}/ws?openId=${encodeURIComponent(this.options.openId)}&topics=${encodeURIComponent(topics)}`
 
         console.log('[WS] 连接中...', { attempt: this.reconnectAttempts, topics })
 
@@ -103,7 +85,6 @@ export class WsClient {
             },
         })
 
-        // 连接成功
         this.socket.onOpen(() => {
             console.log('[WS] 连接建立')
             this.setState('connected')
@@ -111,12 +92,10 @@ export class WsClient {
             this.startHeartbeat()
         })
 
-        // 收到消息
         this.socket.onMessage((res) => {
             this.handleMessage(res.data as string)
         })
 
-        // 连接关闭
         this.socket.onClose((res) => {
             console.log('[WS] 连接关闭', res.code, res.reason)
             this.stopHeartbeat()
@@ -127,14 +106,13 @@ export class WsClient {
             }
         })
 
-        // 连接错误
         this.socket.onError((err) => {
             console.error('[WS] 连接错误', err)
             this.handleError()
         })
     }
 
-    /** 断开连接（手动调用，不触发重连） */
+    /** 断开连接 */
     disconnect() {
         console.log('[WS] 手动断开')
         this.manualClose = true
@@ -154,16 +132,15 @@ export class WsClient {
         this.reconnectAttempts = 0
     }
 
-    /** 用新 token 重连（token 刷新后调用） */
-    reconnectWithNewToken(newToken: string) {
-        this.options.token = newToken
+    /** 用新 openId 重连 */
+    reconnectWithNewOpenId(newOpenId: string) {
+        this.options.openId = newOpenId
         this.reconnectAttempts = 0
         this.disconnect()
-        this.manualClose = false // 允许重连
+        this.manualClose = false
         this.connect()
     }
 
-    /** 当前状态 */
     getState(): WsConnectionState {
         return this.state
     }
@@ -171,15 +148,13 @@ export class WsClient {
     // ==================== 内部方法 ====================
 
     private handleMessage(raw: string) {
-        // 处理简单 pong
         if (raw === 'pong') return
 
         try {
             const msg: WsMessage = JSON.parse(raw)
 
-            // AUTH_REQUIRED：token 过期，通知前端刷新
             if (msg.type === 'AUTH_REQUIRED') {
-                console.warn('[WS] 收到 AUTH_REQUIRED，需要刷新 token')
+                console.warn('[WS] 收到 AUTH_REQUIRED，需要重新登录')
             }
 
             this.options.onMessage(msg)

@@ -1,30 +1,11 @@
 /**
  * 本地存储工具函数
- * 
+ *
  * 文件：src/utils/storage.ts
  */
 
-const TOKEN_KEY = 'icampus_token'
 const USER_INFO_KEY = 'icampus_user_info'
 const HISTORY_IDS_KEY = 'icampus_history_ids'
-
-// ==================== Token ====================
-
-export function getToken(): string {
-  return uni.getStorageSync(TOKEN_KEY) || ''
-}
-
-export function setToken(token: string): void {
-  uni.setStorageSync(TOKEN_KEY, token)
-}
-
-export function removeToken(): void {
-  uni.removeStorageSync(TOKEN_KEY)
-}
-
-export function hasToken(): boolean {
-  return !!getToken()
-}
 
 // ==================== User Info ====================
 
@@ -82,7 +63,6 @@ export function addHistoryId(id: string): void {
 // ==================== 清理 ====================
 
 export function clearAll(): void {
-  removeToken()
   removeUserInfo()
   // 保留历史学号
 }
@@ -91,7 +71,6 @@ export function clearAll(): void {
  * 清理所有数据（包括历史学号）
  */
 export function clearEverything(): void {
-  removeToken()
   removeUserInfo()
   uni.removeStorageSync(HISTORY_IDS_KEY)
 }

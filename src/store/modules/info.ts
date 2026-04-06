@@ -12,7 +12,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { infoApi } from '@/api/info-api'
-import { hasLocalToken } from '@/utils/token-manager'
+import { hasAuth } from '@/utils/cookie-manager'
 import type { CategoryTree, ChannelUnreadState } from '@/types/info'
 import type { WsMessage } from '@/utils/websocket'
 
@@ -83,7 +83,7 @@ export const useInfoStore = defineStore('info', () => {
      *   3. 上次认证失败 → 跳过（直到 resetInitState）
      */
     async function init() {
-        if (!hasLocalToken()) return
+        if (!hasAuth()) return
         if (_initing) return
         if (_authFailed) return
 

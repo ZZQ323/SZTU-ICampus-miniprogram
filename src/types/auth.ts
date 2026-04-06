@@ -1,36 +1,29 @@
 /**
  * 认证相关类型定义
- * 
+ *
  * 文件：src/types/auth.ts
  */
 
 // ==================== 认证阶段 ====================
 
-/** 认证阶段 */
+/** 认证阶段（简化版：无 token 相关阶段） */
 export type AuthPhase =
   | 'idle'            // 空闲状态
-  | 'checking-token'  // 检查 Token 中
-  | 'refreshing-token'// 刷新 Token 中
-  | 'checking-school' // 检查学校登录状态
+  | 'checking-session'// 检查学校登录状态
   | 'ready'           // 认证完成，就绪
   | 'need-login'      // 需要登录
   | 'error'           // 发生错误
 
 // ==================== 错误相关 ====================
 
-/** 认证错误码 */
+/** 认证错误码（简化版：移除 token 相关） */
 export type AuthErrorCode =
-  | 'NO_TOKEN'              // 无 Token
-  | 'TOKEN_EXPIRED'         // Token 过期
-  | 'TOKEN_INVALID'         // Token 无效
-  | 'TOKEN_INIT_FAILED'     // Token 初始化失败
-  | 'REFRESH_FAILED'        // 刷新失败
-  | 'CHECK_FAILED'          // 检查失败
   | 'NETWORK_ERROR'         // 网络错误
   | 'TIMEOUT'               // 超时
   | 'SERVER_ERROR'          // 服务器错误
   | 'SCHOOL_SESSION_EXPIRED'// 学校会话过期
   | 'SESSION_INVALID'       // 会话无效（需要重新初始化）
+  | 'CHECK_FAILED'          // 检查失败
   | 'UNKNOWN_ERROR'         // 未知错误
   | 'UNKNOWN'               // 未知错误（兼容）
 
@@ -48,7 +41,7 @@ export interface AuthError {
 /** 重试上下文 */
 export interface RetryContext {
   /** 重试的操作类型 */
-  action: 'check-token' | 'refresh-token' | 'check-school' | 'login'
+  action: 'check-session' | 'login'
   /** 重试次数 */
   retryCount: number
   /** 最大重试次数 */
@@ -68,6 +61,10 @@ export interface LoginRequestParams {
   loginType: LoginType
   smsCode?: string
   password?: string
+  /** 微信 wx.login() code，用于换取 openId */
+  wxCode?: string
+  /** 前端传来的预登录 cookies JSON */
+  cookiesJson?: string
 }
 
 /** 登录状态 VO */
@@ -80,18 +77,13 @@ export interface LoginStatusVo {
   avatarURL?: string
   loginTypes?: string[]
   /**
-   * ⭐ 会话是否无效（需要重新初始化）
-   * 
-   * 当遇到以下情况时为 true：
-   * - 错误页面（"当前界面遇到了一些问题"）
-   * - 会话异常
-   * - Cookie 已被服务器清除
+   * 会话是否无效（需要重新初始化）
    */
   sessionInvalid?: boolean
 }
 
 export interface UserInfo {
-  userId:string
+  userId: string
   realName?: string
   gender?: string
   schoolName?: string
@@ -101,16 +93,17 @@ export interface UserInfo {
 /** 登录结果 VO */
 export interface LoginResultsVo {
   logined: boolean
-  wxId?: string
   userId?: string
   realName?: string
   gender?: string
   schoolName?: string
   avatarURL?: string
   loginTypes?: string[]
-  /**
-   * ⭐ 会话是否无效（需要重新初始化）
-   */
+  /** 学校 cookies（明文 JSON）—— 前端需存储 */
+  cookiesJson?: string
+  /** openId（微信用户标识）—— 前端需存储 */
+  openId?: string
+  /** 会话是否无效（需要重新初始化） */
   sessionInvalid?: boolean
 }
 
