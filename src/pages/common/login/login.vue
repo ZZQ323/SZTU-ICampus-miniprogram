@@ -103,9 +103,8 @@ import { onLoad } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
 import { useUserStore } from '@/store/modules/user'
 import { useAuthStore } from '@/store/modules/auth'
-import { authApi } from '@/api/auth-apis'
 import { useInfoStore } from '@/store/modules/info'
-import {type LoginType} from "@/types/auth"
+import { type LoginType } from '@/types/auth'
 
 // ==================== Store ====================
 
@@ -246,7 +245,7 @@ async function handleSendSms() {
   sendingSms.value = true
 
   try {
-    await authApi.requestSms(userId.value.trim())
+    await userStore.requestSms(userId.value.trim())
 
     uni.showToast({ title: '验证码已发送', icon: 'success' })
 

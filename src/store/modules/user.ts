@@ -1,31 +1,26 @@
 /**
- * 用户状态管理（修复版 - 未登录时清除用户信息）
- * 
+ * 用户状态管理（Cookie 直通版）
+ *
  * 文件：src/store/modules/user.ts
- * 
- * 职责：
- * - 管理 Token 和用户信息
- * - 提供认证相关的 API 调用方法
- * 
- * ⭐ 修复：当检测到未登录时，立即清除 userInfo
- * 
- * 注意：API 返回的直接是业务数据，不需要 .data 访问
- *    例如：const res = await wxAuthApi.getToken(code)
- *          res.token  // 直接访问，res 的类型就是 TokenVo
+ *
+ * 变更：
+ * - 移除 JWT token 管理（initToken、refreshToken、checkTokenActive）
+ * - 使用 cookie-manager 管理 cookies + openId
+ * - loginSchool 流程：获取 wxCode → 带 cookies 登录 → 存储返回的 cookies + openId
  */
 
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { wxAuthApi, authApi } from '@/api/auth-apis'
+import { sessionApi, authApi } from '@/api/auth-apis'
+import { getUserInfo, setUserInfo, removeUserInfo } from '@/utils/storage'
 import {
-  getToken,
-  setToken,
-  removeToken,
-  getUserInfo,
-  setUserInfo,
-  removeUserInfo
-} from '@/utils/storage'
-import { clearToken } from '@/utils/token-manager'
+  getSchoolCookies,
+  setSchoolCookies,
+  getOpenId,
+  setOpenId,
+  clearAuth,
+  hasAuth,
+} from '@/utils/cookie-manager'
 
 import type {
   LoginType,
@@ -38,14 +33,14 @@ import type {
 export const useUserStore = defineStore('user', () => {
   // ==================== 状态 ====================
 
-  /** JWT Token */
-  const token = ref(getToken())
-
   /** 用户信息 */
   const userInfo = ref<UserInfo | null>(getUserInfo())
 
   /** 可用的登录方式 */
   const loginTypes = ref<string[]>([])
+
+  /** 预登录 cookies（initSession 返回，登录时使用） */
+  const preAuthCookies = ref('')
 
   /** 历史登录过的学号 */
   const lastUsedUserId = ref<string>('')
@@ -53,15 +48,14 @@ export const useUserStore = defineStore('user', () => {
 
   // ==================== 计算属性 ====================
 
-  /** 是否有 Token */
-  const hasToken = computed(() => !!token.value)
+  /** 是否有认证信息（openId + cookies） */
+  const hasAuthInfo = computed(() => hasAuth())
 
   /** 是否已登录学校 */
   const isSchoolLoggedIn = computed(() => !!userInfo.value?.userId)
 
   // ==================== 监听器：自动持久化 ====================
 
-  // 监听 userInfo 变化，自动同步到 Storage
   watch(userInfo, (newVal) => {
     if (newVal) {
       setUserInfo(newVal)
@@ -70,84 +64,19 @@ export const useUserStore = defineStore('user', () => {
     }
   }, { deep: true })
 
-  // ==================== Token 管理 ====================
-
-  /**
-   * 初始化 Token（首次获取）
-   * 
-   * 流程：wx.login() → 后端换取 JWT
-   */
-  async function initToken(): Promise<void> {
-    const loginResult = await uni.login()
-    if (!loginResult.code) {
-      throw new Error('获取微信 code 失败')
-    }
-
-    // ⭐ API 直接返回 TokenVo，不需要 .data
-    const result = await wxAuthApi.getToken(loginResult.code)
-    token.value = result.token
-    setToken(result.token)
-  }
-
-  /**
-   * 刷新 Token
-   * 
-   * @returns 是否刷新成功
-   */
-  async function refreshTokenIfNeeded(): Promise<boolean> {
-    try {
-      const loginResult = await uni.login()
-      if (!loginResult.code) {
-        console.error('[UserStore] 获取 wx code 失败')
-        return false
-      }
-
-      // ⭐ API 直接返回 TokenVo
-      const result = await wxAuthApi.refreshToken(loginResult.code)
-      token.value = result.token
-      setToken(result.token)
-      return true
-    } catch (e) {
-      console.error('[UserStore] 刷新 Token 失败', e)
-      return false
-    }
-  }
-
-
-  /**
-   * 检查 Token 是否有效
-   * 
-   * @returns true 表示有效
-   */
-  async function checkTokenActive(): Promise<boolean> {
-    try {
-      // ⭐ API 直接返回 boolean
-      const isActive = await wxAuthApi.active()
-      return isActive === true
-    } catch (e) {
-      return false
-    }
-  }
-
   // ==================== 会话管理 ====================
 
   /**
    * 检查学校登录状态（轻量级）
-   * 
-   * ⭐ 修复：当 logined=false 时，立即清除本地的 userInfo
-   * 
-   * 返回的状态会自动更新本地的 userInfo
+   *
+   * 当 logined=false 时，立即清除本地的 userInfo
    */
   async function checkSchoolSession(): Promise<LoginStatusVo> {
-    // ⭐ API 直接返回 LoginStatusVo
     const status = await authApi.getStatus()
 
-    // 更新本地状态
     loginTypes.value = status.loginTypes || []
 
-    // ⭐ 关键修复：根据 logined 状态决定是否保留用户信息
     if (status.logined && status.userId) {
-      // 已登录，同步用户信息
       userInfo.value = {
         userId: status.userId,
         realName: status.realName || '',
@@ -155,40 +84,36 @@ export const useUserStore = defineStore('user', () => {
         schoolName: status.schoolName,
         avatarURL: status.avatarURL,
       }
-      console.log('[UserStore] 已登录，更新用户信息:', status.userId)
     } else {
-      // ⭐ 未登录，立即清除用户信息
       if (userInfo.value !== null) {
         console.log('[UserStore] 未登录，清除用户信息')
         userInfo.value = null
       }
     }
 
-    // ⭐ 如果会话无效（错误页面），提示用户需要重新登录
     if (status.sessionInvalid) {
       console.warn('[UserStore] 会话无效，需要重新初始化')
-      // 可以在这里触发一个事件或设置一个标志
     }
 
     return status
   }
 
   /**
-   * 初始化会话（强制重建 Cookie）
-   * 
-   * ⭐ 修复：初始化前先清除本地用户信息
+   * 初始化会话（公开接口，获取预登录 cookies + loginTypes）
    */
   async function initSession(): Promise<LoginResultsVo> {
-    // ⭐ 初始化前先清除本地用户信息，避免显示过期数据
-    console.log('[UserStore] 初始化会话，清除旧的用户信息')
+    console.log('[UserStore] 初始化会话')
     userInfo.value = null
 
-    // API 直接返回 LoginResultsVo
     const result = await authApi.initSession()
 
     loginTypes.value = result.loginTypes || []
 
-    // 如果已登录，更新用户信息
+    // 保存预登录 cookies（登录时需要带上）
+    if (result.cookiesJson) {
+      preAuthCookies.value = result.cookiesJson
+    }
+
     if (result.logined && result.userId) {
       userInfo.value = {
         userId: result.userId,
@@ -197,9 +122,9 @@ export const useUserStore = defineStore('user', () => {
         schoolName: result.schoolName,
         avatarURL: result.avatarURL,
       }
-      console.log('[UserStore] 初始化后已登录:', result.userId)
-    } else {
-      console.log('[UserStore] 初始化后未登录')
+      // 已登录的情况下，保存 cookies 和 openId
+      if (result.cookiesJson) setSchoolCookies(result.cookiesJson)
+      if (result.openId) setOpenId(result.openId)
     }
 
     return result
@@ -207,49 +132,25 @@ export const useUserStore = defineStore('user', () => {
 
   /**
    * 完全重置会话
-   * 
-   * 流程：
-   * 1. 调用后端清除 Redis（TokenMeta + ProxySession）
-   * 2. 清除本地存储
-   * 3. 重新获取 Token
-   * 4. 重新初始化学校会话
-   * 
-   * @returns 是否成功
    */
   async function resetSession(): Promise<boolean> {
-    // ⭐ 立即清除本地用户信息
-    console.log('[UserStore] 重置会话，立即清除用户信息')
+    console.log('[UserStore] 重置会话')
     userInfo.value = null
 
     try {
-      // 1. 调用后端清除 Redis
-      await wxAuthApi.resetSession()
+      await sessionApi.resetSession()
       console.log('[UserStore] 后端会话已清除')
-
     } catch (e) {
-      console.warn('[UserStore] 清除后端会话失败（可能 token 已失效）', e)
-      // 继续执行，因为可能 token 本身就无效了
+      console.warn('[UserStore] 清除后端会话失败', e)
     }
 
-    // 2. 清除本地存储
     clearAll()
 
-    // 3. 重新获取 Token
-    try {
-      await initToken()
-      console.log('[UserStore] Token 已重新获取')
-    } catch (e) {
-      console.error('[UserStore] 重新获取 Token 失败', e)
-      return false
-    }
-
-    // 4. 重新初始化学校会话（获取 loginTypes）
+    // 重新初始化（获取 loginTypes）
     try {
       await initSession()
-      console.log('[UserStore] 学校会话已重新初始化')
     } catch (e) {
       console.warn('[UserStore] 初始化学校会话失败', e)
-      // 不影响整体流程
     }
 
     return true
@@ -259,10 +160,13 @@ export const useUserStore = defineStore('user', () => {
    * 刷新会话（仅刷新 SESSION_ID）
    */
   async function refreshSession(): Promise<LoginResultsVo> {
-    // ⭐ API 直接返回 LoginResultsVo
     const result = await authApi.refreshSession()
 
-    // ⭐ 同样需要根据结果更新用户信息
+    // 更新 cookies
+    if (result.cookiesJson) {
+      setSchoolCookies(result.cookiesJson)
+    }
+
     if (result.logined && result.userId) {
       userInfo.value = {
         userId: result.userId,
@@ -283,7 +187,6 @@ export const useUserStore = defineStore('user', () => {
    */
   async function fetchHistoryUserIds(): Promise<string[]> {
     try {
-      // ⭐ API 直接返回 string[]
       const ids = await authApi.getHistory()
       historyUserIds.value = ids || []
       return historyUserIds.value
@@ -299,19 +202,36 @@ export const useUserStore = defineStore('user', () => {
    * 请求短信验证码
    */
   async function requestSms(userId: string): Promise<void> {
-    await authApi.requestSms(userId)
+    await authApi.requestSms(userId, preAuthCookies.value || undefined)
   }
 
   /**
    * 登录学校系统
-   * 
-   * @returns 是否登录成功
+   *
+   * 流程：
+   * 1. wx.login() 获取 wxCode
+   * 2. 带 wxCode + preAuthCookies + 凭证 → 后端登录
+   * 3. 存储返回的 cookies + openId
    */
   async function loginSchool(params: LoginRequestParams): Promise<boolean> {
-    // ⭐ API 直接返回 LoginResultsVo
-    const result = await authApi.login(params)
+    // 1. 获取 wxCode
+    const loginResult = await uni.login()
+    if (!loginResult.code) {
+      throw new Error('获取微信 code 失败')
+    }
+
+    // 2. 登录
+    const result = await authApi.login({
+      ...params,
+      wxCode: loginResult.code,
+      cookiesJson: preAuthCookies.value || undefined,
+    })
 
     if (result.logined) {
+      // 3. 存储 cookies + openId
+      if (result.cookiesJson) setSchoolCookies(result.cookiesJson)
+      if (result.openId) setOpenId(result.openId)
+
       // 更新用户信息
       userInfo.value = {
         userId: result.userId || params.userId,
@@ -324,7 +244,6 @@ export const useUserStore = defineStore('user', () => {
       // 更新历史学号
       if (!historyUserIds.value.includes(params.userId)) {
         historyUserIds.value.unshift(params.userId)
-        // 最多保留 5 个
         if (historyUserIds.value.length > 5) {
           historyUserIds.value = historyUserIds.value.slice(0, 5)
         }
@@ -339,7 +258,7 @@ export const useUserStore = defineStore('user', () => {
    */
   async function logoutSchool(): Promise<void> {
     try {
-      await authApi.logout({})
+      await authApi.logout()
     } catch (e) {
       console.warn('[UserStore] 登出请求失败', e)
     }
@@ -347,19 +266,18 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /**
-   * 清除学校会话状态（不清除 Token）
+   * 清除学校会话状态（包括本地 cookies）
    */
   function clearSchoolSession(): void {
     userInfo.value = null
     loginTypes.value = []
+    clearAuth()
   }
 
   /**
    * 完全清除所有状态
    */
   function clearAll(): void {
-    token.value = ''
-    clearToken()  // ⭐ 用 TokenManager 的方法
     clearSchoolSession()
   }
 
@@ -368,7 +286,6 @@ export const useUserStore = defineStore('user', () => {
    */
   function setLastUsedUserId(userId: string) {
     lastUsedUserId.value = userId
-    // 添加到历史
     if (!historyUserIds.value.includes(userId)) {
       historyUserIds.value.unshift(userId)
       if (historyUserIds.value.length > 5) {
@@ -379,15 +296,11 @@ export const useUserStore = defineStore('user', () => {
     uni.setStorageSync('historyUserIds', historyUserIds.value)
   }
 
-  // 初始化时恢复
   function initUserIdHistory() {
     lastUsedUserId.value = uni.getStorageSync('lastUsedUserId') || ''
     historyUserIds.value = uni.getStorageSync('historyUserIds') || []
   }
 
-  /**
-   * 初始化时从本地存储恢复
-   */
   function initLastUsedUserId() {
     const stored = uni.getStorageSync('lastUsedUserId')
     if (stored) {
@@ -399,22 +312,17 @@ export const useUserStore = defineStore('user', () => {
 
   return {
     // 状态
-    token,
     userInfo,
     loginTypes,
+    preAuthCookies,
 
     historyUserIds,
     lastUsedUserId,
     setLastUsedUserId,
 
     // 计算属性
-    hasToken,
+    hasAuthInfo,
     isSchoolLoggedIn,
-
-    // Token 管理
-    initToken,
-    refreshTokenIfNeeded,
-    checkTokenActive,
 
     // 会话管理
     checkSchoolSession,

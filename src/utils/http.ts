@@ -1,25 +1,23 @@
 /**
- * HTTP 请求封装（三层分治版）
+ * HTTP 请求封装（Cookie 直通版）
  *
- * 文件：src/utils/http/index.ts
+ * 文件：src/utils/http.ts
  *
- * 职责（且仅此）：
- *   1. 请求时附加 token
- *   2. 401 时调 TokenManager 刷新 1 次，成功重试，失败 reject
- *   3. 其他错误原样 reject
+ * 职责：
+ *   1. 请求时附加 X-Open-Id + X-School-Cookies header
+ *   2. 响应中如果有更新的 cookies → 更新本地存储
+ *   3. 业务错误原样 reject
  *
- * 禁止：
- *   - reLaunch / navigateTo / switchTab
- *   - uni.showToast / uni.showModal
- *   - removeStorageSync（不清 token，那是 TokenManager 的事）
- *   - 自动 initSession（那是页面守卫的事）
+ * 不再有：
+ *   - JWT token 附加
+ *   - 401 队列管理和自动刷新
+ *   - 403 特殊处理
  */
 
 import axios from 'axios'
-import type { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
+import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { createUniAppAxiosAdapter } from '@uni-helper/axios-adapter'
-import { getToken, setToken } from '@/utils/storage'
-import { refreshToken as tmRefreshToken } from '@/utils/token-manager'
+import { getOpenId, getSchoolCookies, setSchoolCookies } from '@/utils/cookie-manager'
 
 // ==================== 配置 ====================
 
@@ -35,10 +33,11 @@ const SLOW_APIS = [
   '/acdm/v1/schedule',
 ]
 
-/** 公开接口：不附 token，401 不重试 */
+/** 公开接口：不附 cookies header */
 const PUBLIC_APIS = [
-  '/wx-auth/v1/get-token',
-  '/wx-auth/v1/refresh-token',
+  '/auth/v1/session/init',
+  '/auth/v1/login',
+  '/auth/v1/request/sms',
 ]
 
 // ==================== 后端响应格式 ====================
@@ -47,32 +46,6 @@ interface BackendResponse<T = any> {
   code: number
   message: string
   data: T
-}
-
-// ==================== 401 队列管理 ====================
-
-let _isRefreshing = false
-
-let _pendingRequests: Array<{
-  resolve: (value: any) => void
-  reject: (error: any) => void
-  config: InternalAxiosRequestConfig
-}> = []
-
-function _processPendingQueue(error?: any) {
-  _pendingRequests.forEach(({ resolve, reject, config }) => {
-    if (error) {
-      reject(error)
-    } else {
-      // 重新附上新 token
-      const newToken = getToken()
-      if (newToken && config.headers) {
-        config.headers['Authorization'] = `Bearer ${newToken}`
-      }
-      resolve(instance(config))
-    }
-  })
-  _pendingRequests = []
 }
 
 // ==================== Axios 实例 ====================
@@ -94,11 +67,16 @@ instance.interceptors.request.use(
       config.timeout = SLOW_TIMEOUT
     }
 
-    // 非公开接口附 token
+    // 非公开接口附加 cookies header
     if (!PUBLIC_APIS.some(api => url.includes(api))) {
-      const token = getToken()
-      if (token && config.headers) {
-        config.headers['Authorization'] = `Bearer ${token}`
+      const openId = getOpenId()
+      const cookies = getSchoolCookies()
+
+      if (openId && config.headers) {
+        config.headers['X-Open-Id'] = openId
+      }
+      if (cookies && config.headers) {
+        config.headers['X-School-Cookies'] = cookies
       }
     }
 
@@ -114,9 +92,11 @@ instance.interceptors.response.use(
   (response: AxiosResponse<BackendResponse>) => {
     const { data, headers } = response
 
-    // 如果后端通过 header 下发了新 token
-    const newToken = headers['x-new-token']
-    if (newToken) setToken(newToken)
+    // 如果后端通过 header 下发了更新的 cookies → 更新本地存储
+    const updatedCookies = headers['x-updated-cookies']
+    if (updatedCookies) {
+      setSchoolCookies(updatedCookies)
+    }
 
     // 业务错误码
     if (data.code !== undefined && data.code !== 200) {
@@ -129,62 +109,7 @@ instance.interceptors.response.use(
 
   // ===== 错误响应 =====
   async (error) => {
-    const { config, response } = error
-
-    // ==================== 401：调 TokenManager 刷新 ====================
-    if (response?.status === 401 && config && !config._retried) {
-      const url = config.url || ''
-
-      // 公开接口的 401 不处理
-      if (PUBLIC_APIS.some(api => url.includes(api))) {
-        return Promise.reject(_makeError(401, '认证失败', false))
-      }
-
-      // 如果已经在刷新中，排队等待
-      if (_isRefreshing) {
-        return new Promise((resolve, reject) => {
-          _pendingRequests.push({ resolve, reject, config })
-        })
-      }
-
-      // 标记：这个请求已经重试过了
-      _isRefreshing = true
-      config._retried = true
-
-      try {
-        // ⭐ 委托 TokenManager 刷新（带锁，全局只跑一次）
-        const ok = await tmRefreshToken()
-
-        if (ok) {
-          // 刷新成功，放行队列中的请求
-          _processPendingQueue()
-
-          // 重试当前请求
-          const newToken = getToken()
-          if (newToken && config.headers) {
-            config.headers['Authorization'] = `Bearer ${newToken}`
-          }
-          return instance(config)
-        }
-
-        // 刷新失败 → reject 所有等待中的请求
-        const err = _makeError(401, '登录已过期', false)
-        _processPendingQueue(err)
-        return Promise.reject(err)
-
-      } catch (e) {
-        const err = _makeError(401, '刷新登录状态失败', false, e)
-        _processPendingQueue(err)
-        return Promise.reject(err)
-      } finally {
-        _isRefreshing = false
-      }
-    }
-
-    // ==================== 403：直接 reject（页面守卫决定怎么办） ====================
-    if (response?.status === 403) {
-      return Promise.reject(_makeError(403, '学校会话已过期', false, error))
-    }
+    const { response } = error
 
     // ==================== 超时 ====================
     if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
@@ -211,7 +136,7 @@ function _makeError(code: number, message: string, retryable: boolean, raw?: any
 
 function _defaultMsg(status: number): string {
   const m: Record<number, string> = {
-    400: '请求参数错误', 401: '身份验证失败', 403: '学校会话已过期',
+    400: '请求参数错误', 401: '身份验证失败', 403: '会话已过期',
     404: '资源不存在', 429: '请求过于频繁', 500: '服务器错误',
     502: '网关错误', 503: '服务不可用', 504: '网关超时',
   }
@@ -234,6 +159,4 @@ export const request = {
 }
 
 /** 错误类型判断（页面 catch 里用） */
-export function isAuthError(e: any): boolean { return e?.code === 401 }
-export function isSessionError(e: any): boolean { return e?.code === 403 }
 export function isRetryable(e: any): boolean { return e?.retryable === true }

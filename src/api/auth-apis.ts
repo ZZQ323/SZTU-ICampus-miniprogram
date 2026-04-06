@@ -1,12 +1,12 @@
 /**
- * 认证相关 API（修复版 - 类型正确）
- * 
+ * 认证相关 API（Cookie 直通版）
+ *
  * 文件：src/api/auth-apis.ts
- * 
- * ⭐ 重要：由于 HTTP 拦截器已经解包了 { code, message, data }
- *    这里的泛型直接写业务数据类型即可
- * 
- * 例如：request.get<TokenVo>() 返回 Promise<TokenVo>
+ *
+ * 变更：
+ * - 删除 wxAuthApi（不再需要 JWT token 管理）
+ * - authApi.requestSms 需要带 cookiesJson
+ * - authApi.login 需要带 wxCode + cookiesJson
  */
 
 import { request } from '@/utils/http'
@@ -14,38 +14,16 @@ import type {
   LoginStatusVo,
   LoginResultsVo,
   LoginRequestParams,
-  TokenVo
 } from '@/types/auth'
 
-// ==================== Token 管理（/wx-auth） ====================
+// ==================== 会话管理（/session） ====================
 
-export const wxAuthApi = {
-  /**
-   * 检验 Token 是否有效
-   * @returns boolean
-   */
-  active: () =>
-    request.get<boolean>('/wx-auth/v1/active'),
-
-  /**
-   * 用 wx.login 的 code 换取 JWT
-   * @returns TokenVo { token: string }
-   */
-  getToken: (wxCode: string) =>
-    request.post<TokenVo>('/wx-auth/v1/get-token', { wxCode }),
-
-  /**
-   * 刷新过期 Token
-   * @returns TokenVo { token: string }
-   */
-  refreshToken: (wxCode: string) =>
-    request.post<TokenVo>('/wx-auth/v1/refresh-token', { wxCode }),
-
+export const sessionApi = {
   /**
    * 重置会话（清除后端 Redis 缓存）
    */
   resetSession: () =>
-    request.post<{ success: boolean; message: string }>('/wx-auth/v1/reset-session'),
+    request.post<{ success: boolean; message: string }>('/session/v1/reset'),
 }
 
 // ==================== 认证管理（/auth） ====================
@@ -55,30 +33,28 @@ export const authApi = {
 
   /**
    * 获取登录状态（轻量级，优先读缓存）
-   * @returns LoginStatusVo
    */
   getStatus: () =>
     request.get<LoginStatusVo>('/auth/v1/status'),
 
   /**
    * 获取历史登录过的学号列表
-   * @returns string[]
    */
   getHistory: () =>
     request.get<string[]>('/auth/v1/history'),
 
-  // ---------- 会话管理 ----------
+  // ---------- 会话管理（公开接口） ----------
 
   /**
-   * 初始化会话（强制重建 Cookie）
-   * @returns LoginResultsVo
+   * 初始化会话（公开接口，获取预登录 cookies + loginTypes）
+   * @returns LoginResultsVo 包含 cookiesJson 和 loginTypes
    */
   initSession: () =>
     request.post<LoginResultsVo>('/auth/v1/session/init'),
 
   /**
-   * 刷新会话（仅刷新 SESSION_ID）
-   * @returns LoginResultsVo
+   * 刷新会话（仅刷新 SESSION_ID，需认证）
+   * @returns LoginResultsVo 包含更新后的 cookiesJson
    */
   refreshSession: () =>
     request.post<LoginResultsVo>('/auth/v1/session/refresh'),
@@ -86,25 +62,26 @@ export const authApi = {
   // ---------- 登录/登出 ----------
 
   /**
-   * 请求发送短信验证码
-   * @returns void
+   * 请求发送短信验证码（公开接口）
+   * @param userId 学号
+   * @param cookiesJson 预登录 cookies
    */
-  requestSms: (userId: string) =>
-    request.post<void>('/auth/v1/request/sms', { userId }),
+  requestSms: (userId: string, cookiesJson?: string) =>
+    request.post<void>('/auth/v1/request/sms', { userId, cookiesJson }),
 
   /**
-   * 登录学校系统
-   * @returns LoginResultsVo
+   * 登录学校系统（公开接口）
+   * @param params 包含 wxCode + cookiesJson + 登录凭证
+   * @returns LoginResultsVo 包含登录后 cookiesJson + openId
    */
   login: (params: LoginRequestParams) =>
     request.post<LoginResultsVo>('/auth/v1/login', params),
 
   /**
    * 登出学校系统
-   * @returns LoginResultsVo
    */
-  logout: (params: Partial<LoginRequestParams>) =>
-    request.post<LoginResultsVo>('/auth/v1/logout', params),
+  logout: () =>
+    request.post<LoginResultsVo>('/auth/v1/logout'),
 }
 
 // ==================== 教务管理（/acdm） ====================
