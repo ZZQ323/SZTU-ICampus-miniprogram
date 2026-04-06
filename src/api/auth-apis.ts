@@ -72,7 +72,7 @@ export const authApi = {
   /**
    * 登录学校系统（公开接口）
    * @param params 包含 wxCode + cookiesJson + 登录凭证
-   * @returns LoginResultsVo 包含登录后 cookiesJson + openId
+   * @returns LoginResultsVo 包含登录后 cookiesJson + userId
    */
   login: (params: LoginRequestParams) =>
     request.post<LoginResultsVo>('/auth/v1/login', params),

@@ -4,7 +4,7 @@
  * 文件：src/utils/http.ts
  *
  * 职责：
- *   1. 请求时附加 X-Open-Id + X-School-Cookies header
+ *   1. 请求时附加 X-User-Id + X-School-Cookies header
  *   2. 响应中如果有更新的 cookies → 更新本地存储
  *   3. 业务错误原样 reject
  *
@@ -17,7 +17,7 @@
 import axios from 'axios'
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { createUniAppAxiosAdapter } from '@uni-helper/axios-adapter'
-import { getOpenId, getSchoolCookies, setSchoolCookies } from '@/utils/cookie-manager'
+import { getUserId, getSchoolCookies, setSchoolCookies } from '@/utils/cookie-manager'
 
 // ==================== 配置 ====================
 
@@ -69,11 +69,11 @@ instance.interceptors.request.use(
 
     // 非公开接口附加 cookies header
     if (!PUBLIC_APIS.some(api => url.includes(api))) {
-      const openId = getOpenId()
+      const userId = getUserId()
       const cookies = getSchoolCookies()
 
-      if (openId && config.headers) {
-        config.headers['X-Open-Id'] = openId
+      if (userId && config.headers) {
+        config.headers['X-User-Id'] = userId
       }
       if (cookies && config.headers) {
         config.headers['X-School-Cookies'] = cookies

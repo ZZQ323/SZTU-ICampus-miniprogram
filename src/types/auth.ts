@@ -61,8 +61,6 @@ export interface LoginRequestParams {
   loginType: LoginType
   smsCode?: string
   password?: string
-  /** 微信 wx.login() code，用于换取 openId */
-  wxCode?: string
   /** 前端传来的预登录 cookies JSON */
   cookiesJson?: string
 }
@@ -101,8 +99,6 @@ export interface LoginResultsVo {
   loginTypes?: string[]
   /** 学校 cookies（明文 JSON）—— 前端需存储 */
   cookiesJson?: string
-  /** openId（微信用户标识）—— 前端需存储 */
-  openId?: string
   /** 会话是否无效（需要重新初始化） */
   sessionInvalid?: boolean
 }

@@ -3,14 +3,14 @@
  *
  * 文件：src/store/modules/ws.ts
  *
- * 变更：token → openId
+ * 变更：token → userId（学号）
  */
 
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useUserStore } from './user'
 import { useInfoStore } from './info'
-import { getOpenId } from '@/utils/cookie-manager'
+import { getUserId } from '@/utils/cookie-manager'
 import { WsClient } from '@/utils/websocket'
 import type { WsConnectionState, WsMessage } from '@/utils/websocket'
 
@@ -33,10 +33,10 @@ export const useWsStore = defineStore('ws', () => {
     // ==================== 方法 ====================
 
     function connect() {
-        const openId = getOpenId()
+        const userId = getUserId()
 
-        if (!openId) {
-            console.log('[WS Store] 无 openId，不连接')
+        if (!userId) {
+            console.log('[WS Store] 无 userId，不连接')
             return
         }
 
@@ -54,7 +54,7 @@ export const useWsStore = defineStore('ws', () => {
 
         client = new WsClient({
             baseUrl,
-            openId,
+            userId,
             topics: ['announcement', 'schedule', 'calendar'],
             onMessage: handleMessage,
             onStateChange: (state) => {
