@@ -68,15 +68,38 @@ export function useAuthGuard() {
         const hasLocalAuth = hasAuth()
 
         if (!hasLocalAuth) {
-            // 无认证信息
-            _isReady.value = true
-            _lastCheckTime = Date.now()
+            // 无认证信息 → 先初始化会话获取 cookies（所有校园服务都需要）
+            try {
+                const result = await userStore.initSession()
 
-            if (requireSchoolLogin) {
-                goLogin()
-                return { success: false, logined: false, error: '需要登录学校账号' }
+                if (result.logined) {
+                    // initSession 发现已登录（之前的会话还有效）
+                    _isReady.value = true
+                    _lastCheckTime = Date.now()
+                    return { success: true, logined: true, loginTypes: result.loginTypes }
+                }
+
+                // 未登录，但 cookies 已获取并存储
+                _isReady.value = true
+                _lastCheckTime = Date.now()
+
+                if (requireSchoolLogin) {
+                    goLogin(result.loginTypes)
+                    return { success: false, logined: false, loginTypes: result.loginTypes, error: '需要登录学校账号' }
+                }
+                return { success: true, logined: false, loginTypes: result.loginTypes }
+
+            } catch (e: any) {
+                console.warn('[AuthGuard] initSession 失败:', e?.message)
+                _isReady.value = true
+                _lastCheckTime = Date.now()
+
+                if (requireSchoolLogin) {
+                    goLogin()
+                    return { success: false, logined: false, error: '初始化失败' }
+                }
+                return { success: true, logined: false }
             }
-            return { success: true, logined: false }
         }
 
         // 有认证信息，检查学校登录状态

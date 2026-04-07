@@ -14,6 +14,7 @@ import { sessionApi, authApi } from '@/api/auth-apis'
 import { getUserInfo, setUserInfo, removeUserInfo } from '@/utils/storage'
 import {
   setUserId,
+  setSchoolCookies,
   clearAuth,
   hasAuth,
 } from '@/utils/cookie-manager'
@@ -103,6 +104,11 @@ export const useUserStore = defineStore('user', () => {
     loginTypes.value = result.loginTypes || []
 
     // cookies 通过 response header → http.ts 拦截器 → cookie-manager 自动存储
+    // 兜底：如果 header 没被读到（uni-app 限制），从 body 手动存
+    if (result.cookiesJson && !hasAuth()) {
+      console.log('[UserStore] 从 body 兜底存储 cookies')
+      setSchoolCookies(result.cookiesJson)
+    }
 
     if (result.logined && result.userId) {
       userInfo.value = {
@@ -201,7 +207,10 @@ export const useUserStore = defineStore('user', () => {
     const result = await authApi.login(params)
 
     if (result.logined) {
-      // cookies 已通过 response header 自动存储
+      // cookies 通过 response header 自动存储 + body 兜底
+      if (result.cookiesJson) {
+        setSchoolCookies(result.cookiesJson)
+      }
       if (result.userId) setUserId(result.userId)
 
       // 更新用户信息
