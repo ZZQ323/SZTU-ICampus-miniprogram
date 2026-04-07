@@ -6,7 +6,7 @@
  * 变更：
  * - 删除 wxAuthApi（不再需要 JWT token 管理）
  * - authApi.requestSms 需要带 cookiesJson
- * - authApi.login 需要带 wxCode + cookiesJson
+ * - authApi.login 需要带 cookiesJson
  */
 
 import { request } from '@/utils/http'
@@ -71,7 +71,7 @@ export const authApi = {
 
   /**
    * 登录学校系统（公开接口）
-   * @param params 包含 wxCode + cookiesJson + 登录凭证
+   * @param params 包含 cookiesJson + 登录凭证
    * @returns LoginResultsVo 包含登录后 cookiesJson + userId
    */
   login: (params: LoginRequestParams) =>

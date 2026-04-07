@@ -102,15 +102,13 @@ import { useAuthStore } from '@/store/modules/auth'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 
 const authStore = useAuthStore()
-const { retry } = useAuthGuard()
+const { forceCheck } = useAuthGuard()
 
 // ==================== 遮罩相关 ====================
 
 // 阶段配置
 const phases = [
-    { key: 'checking-token', label: '验证身份' },
-    { key: 'refreshing-token', label: '刷新状态' },
-    { key: 'checking-school', label: '检查服务' }
+    { key: 'checking-session', label: '检查服务' }
 ]
 
 // 当前阶段索引
@@ -137,7 +135,7 @@ const errorTitle = computed(() => authStore.getErrorTitle())
 // 确认按钮文字
 const confirmText = computed(() => {
     const code = authStore.error?.code
-    if (code === 'TOKEN_EXPIRED' || code === 'TOKEN_INVALID') {
+    if (code === 'SCHOOL_SESSION_EXPIRED' || code === 'SESSION_INVALID') {
         return '重新登录'
     }
     return '确定'
@@ -150,9 +148,8 @@ const iconName = computed(() => {
         case 'NETWORK_ERROR':
         case 'TIMEOUT':
             return 'wifi-off'
-        case 'TOKEN_EXPIRED':
-        case 'TOKEN_INVALID':
-        case 'REFRESH_FAILED':
+        case 'SCHOOL_SESSION_EXPIRED':
+        case 'SESSION_INVALID':
             return 'lock-on'
         case 'SERVER_ERROR':
             return 'server'
@@ -168,9 +165,8 @@ const iconClass = computed(() => {
         case 'NETWORK_ERROR':
         case 'TIMEOUT':
             return 'icon-warning'
-        case 'TOKEN_EXPIRED':
-        case 'TOKEN_INVALID':
-        case 'REFRESH_FAILED':
+        case 'SCHOOL_SESSION_EXPIRED':
+        case 'SESSION_INVALID':
             return 'icon-auth'
         case 'SERVER_ERROR':
             return 'icon-error'
@@ -183,7 +179,7 @@ const iconClass = computed(() => {
 async function handleRetry() {
     retrying.value = true
     try {
-        await retry()
+        await forceCheck()
     } finally {
         retrying.value = false
     }
@@ -199,17 +195,8 @@ function handleCancel() {
 function handleConfirm() {
     const code = authStore.error?.code
 
-    // ⭐ Token 相关错误：原地重试获取新 Token
-    if (code === 'TOKEN_EXPIRED' || code === 'TOKEN_INVALID' || code === 'REFRESH_FAILED' || code === 'NO_TOKEN') {
-        authStore.clearError()
-        // 原地重试，而不是跳转登录页
-        // Token 是通过 wx.login 获取的，与学校登录无关
-        retry()
-        return
-    }
-
-    // ⭐ 会话过期：需要重新登录学校账号
-    if (code === 'SCHOOL_SESSION_EXPIRED') {
+    // 会话过期/无效：跳转登录页
+    if (code === 'SCHOOL_SESSION_EXPIRED' || code === 'SESSION_INVALID') {
         authStore.clearError()
         authStore.setPhase('idle')
         uni.navigateTo({ url: '/pages/common/login/login' })
