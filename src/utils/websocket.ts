@@ -3,7 +3,7 @@
  *
  * 文件：src/utils/websocket.ts
  *
- * 变更：token → openId（连接参数）
+ * 变更：token → userId（连接参数）
  */
 
 type MessageCallback = (message: WsMessage) => void
@@ -22,8 +22,8 @@ export interface WsMessage<T = any> {
 interface WsOptions {
     /** 后端基础 URL（如 ws://192.168.1.100:8080 或 wss://xxx） */
     baseUrl: string
-    /** openId（用户标识） */
-    openId: string
+    /** userId（用户标识） */
+    userId: string
     /** 订阅的 topic 列表 */
     topics?: string[]
     /** 消息回调 */
@@ -50,7 +50,7 @@ export class WsClient {
     constructor(opts: WsOptions) {
         this.options = {
             baseUrl: opts.baseUrl,
-            openId: opts.openId,
+            userId: opts.userId,
             topics: opts.topics || ['announcement'],
             onMessage: opts.onMessage || (() => { }),
             onStateChange: opts.onStateChange || (() => { }),
@@ -70,7 +70,7 @@ export class WsClient {
         this.setState(this.reconnectAttempts > 0 ? 'reconnecting' : 'connecting')
 
         const topics = this.options.topics.join(',')
-        const url = `${this.options.baseUrl}/ws?openId=${encodeURIComponent(this.options.openId)}&topics=${encodeURIComponent(topics)}`
+        const url = `${this.options.baseUrl}/ws?userId=${encodeURIComponent(this.options.userId)}&topics=${encodeURIComponent(topics)}`
 
         console.log('[WS] 连接中...', { attempt: this.reconnectAttempts, topics })
 
@@ -132,9 +132,9 @@ export class WsClient {
         this.reconnectAttempts = 0
     }
 
-    /** 用新 openId 重连 */
-    reconnectWithNewOpenId(newOpenId: string) {
-        this.options.openId = newOpenId
+    /** 用新 userId 重连 */
+    reconnectWithNewUserId(newUserId: string) {
+        this.options.userId = newUserId
         this.reconnectAttempts = 0
         this.disconnect()
         this.manualClose = false

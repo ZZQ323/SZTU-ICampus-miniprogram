@@ -5,8 +5,8 @@
  *
  * 变更：
  * - 移除 JWT token 管理（initToken、refreshToken、checkTokenActive）
- * - 使用 cookie-manager 管理 cookies + openId
- * - loginSchool 流程：获取 wxCode → 带 cookies 登录 → 存储返回的 cookies + openId
+ * - 使用 cookie-manager 管理 cookies + userId
+ * - loginSchool 流程：带 cookies 登录 → 存储返回的 cookies
  */
 
 import { defineStore } from 'pinia'
@@ -14,10 +14,8 @@ import { ref, computed, watch } from 'vue'
 import { sessionApi, authApi } from '@/api/auth-apis'
 import { getUserInfo, setUserInfo, removeUserInfo } from '@/utils/storage'
 import {
-  getSchoolCookies,
   setSchoolCookies,
-  getOpenId,
-  setOpenId,
+  setUserId,
   clearAuth,
   hasAuth,
 } from '@/utils/cookie-manager'
@@ -48,7 +46,7 @@ export const useUserStore = defineStore('user', () => {
 
   // ==================== 计算属性 ====================
 
-  /** 是否有认证信息（openId + cookies） */
+  /** 是否有认证信息（cookies 存在） */
   const hasAuthInfo = computed(() => hasAuth())
 
   /** 是否已登录学校 */
@@ -122,9 +120,9 @@ export const useUserStore = defineStore('user', () => {
         schoolName: result.schoolName,
         avatarURL: result.avatarURL,
       }
-      // 已登录的情况下，保存 cookies 和 openId
+      // 已登录的情况下，保存 cookies 和 userId
       if (result.cookiesJson) setSchoolCookies(result.cookiesJson)
-      if (result.openId) setOpenId(result.openId)
+      if (result.userId) setUserId(result.userId)
     }
 
     return result
@@ -209,28 +207,19 @@ export const useUserStore = defineStore('user', () => {
    * 登录学校系统
    *
    * 流程：
-   * 1. wx.login() 获取 wxCode
-   * 2. 带 wxCode + preAuthCookies + 凭证 → 后端登录
-   * 3. 存储返回的 cookies + openId
+   * 1. 带 preAuthCookies + 凭证 → 后端登录
+   * 2. 存储返回的 cookies + userId
    */
   async function loginSchool(params: LoginRequestParams): Promise<boolean> {
-    // 1. 获取 wxCode
-    const loginResult = await uni.login()
-    if (!loginResult.code) {
-      throw new Error('获取微信 code 失败')
-    }
-
-    // 2. 登录
     const result = await authApi.login({
       ...params,
-      wxCode: loginResult.code,
       cookiesJson: preAuthCookies.value || undefined,
     })
 
     if (result.logined) {
-      // 3. 存储 cookies + openId
+      // 存储 cookies + userId
       if (result.cookiesJson) setSchoolCookies(result.cookiesJson)
-      if (result.openId) setOpenId(result.openId)
+      if (result.userId) setUserId(result.userId)
 
       // 更新用户信息
       userInfo.value = {

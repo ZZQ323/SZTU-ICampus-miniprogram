@@ -5,8 +5,7 @@
  *
  * 职责：
  *   1. 管理学校 cookies（明文 JSON）的本地存储
- *   2. 管理 openId 的本地存储
- *   3. 提供 header 附加方法
+ *   2. 管理 userId（学号）的本地存储
  *
  * 设计原则：
  *   - 不加密，明文存储（浏览器上 cookie 本身就是明文可见的）
@@ -15,7 +14,7 @@
  */
 
 const COOKIES_KEY = 'icampus_school_cookies'
-const OPEN_ID_KEY = 'icampus_open_id'
+const USER_ID_KEY = 'icampus_user_id'
 
 // ==================== School Cookies ====================
 
@@ -35,34 +34,30 @@ export function hasSchoolCookies(): boolean {
   return !!getSchoolCookies()
 }
 
-// ==================== Open ID ====================
+// ==================== User ID（学号） ====================
 
-export function getOpenId(): string {
-  return uni.getStorageSync(OPEN_ID_KEY) || ''
+export function getUserId(): string {
+  return uni.getStorageSync(USER_ID_KEY) || ''
 }
 
-export function setOpenId(openId: string): void {
-  uni.setStorageSync(OPEN_ID_KEY, openId)
+export function setUserId(userId: string): void {
+  uni.setStorageSync(USER_ID_KEY, userId)
 }
 
-export function removeOpenId(): void {
-  uni.removeStorageSync(OPEN_ID_KEY)
-}
-
-export function hasOpenId(): boolean {
-  return !!getOpenId()
+export function removeUserId(): void {
+  uni.removeStorageSync(USER_ID_KEY)
 }
 
 // ==================== 清理 ====================
 
 export function clearAuth(): void {
   removeSchoolCookies()
-  removeOpenId()
+  removeUserId()
 }
 
 // ==================== 状态检查 ====================
 
-/** 是否有完整的认证信息（已登录过学校） */
+/** 是否有认证信息（cookies 存在即可尝试请求） */
 export function hasAuth(): boolean {
-  return hasOpenId() && hasSchoolCookies()
+  return hasSchoolCookies()
 }

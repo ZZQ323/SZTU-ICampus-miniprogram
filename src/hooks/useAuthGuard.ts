@@ -5,7 +5,7 @@
  *
  * 变更：
  * - 移除 ensureToken()（不再有 JWT）
- * - 检查 hasAuth()（本地是否有 cookies + openId）
+ * - 检查 hasAuth()（本地是否有 cookies）
  * - 有 → checkSchoolSession
  * - 无 → 跳转登录页
  */
