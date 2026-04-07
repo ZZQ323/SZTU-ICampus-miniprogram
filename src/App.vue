@@ -1,6 +1,5 @@
 <!--
   App.vue（Cookie 直通版）
-
   职责：
   1. 启动时检查本地 cookies → 初始化 info store
   2. 切回前台时确保 WS 连接

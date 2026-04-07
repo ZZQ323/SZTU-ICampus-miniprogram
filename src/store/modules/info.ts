@@ -76,8 +76,6 @@ export const useInfoStore = defineStore('info', () => {
 
     /**
      * 初始化（拉取最新 ID）
-     *
-     * ⭐ 三道防护：
      *   1. 正在初始化 → 跳过
      *   2. 上次认证失败 → 跳过（直到 resetInitState）
      */
