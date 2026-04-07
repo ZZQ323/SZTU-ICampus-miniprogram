@@ -74,7 +74,8 @@ instance.interceptors.response.use(
     const { data, headers } = response
 
     // 后端通过 header 下发更新的 cookies → 更新本地存储
-    const setCookies = headers['x-set-cookies'] || headers['x-updated-cookies']
+    // uni-app adapter 可能保留原始大小写，需要 case-insensitive 查找
+    const setCookies = _getHeader(headers, 'x-set-cookies')
     if (setCookies) {
       setSchoolCookies(setCookies)
     }
@@ -110,6 +111,19 @@ instance.interceptors.response.use(
 )
 
 // ==================== 工具函数 ====================
+
+/** Case-insensitive header 读取（兼容 uni-app adapter 保留原始大小写） */
+function _getHeader(headers: any, name: string): string | undefined {
+  if (!headers) return undefined
+  // 标准 axios（小写）
+  if (headers[name]) return headers[name]
+  // uni-app adapter 可能保留原始大小写
+  const lowerName = name.toLowerCase()
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === lowerName) return headers[key]
+  }
+  return undefined
+}
 
 function _makeError(code: number, message: string, retryable: boolean, raw?: any) {
   return { code, message, retryable, timestamp: Date.now(), raw }
