@@ -1,17 +1,8 @@
 /**
- * HTTP 请求封装（Cookie 直通版）
+ * HTTP 请求封装（Cookie-in-Header 版）
  *
- * 文件：src/utils/http.ts
- *
- * 职责：
- *   1. 请求时附加 X-User-Id + X-School-Cookies header
- *   2. 响应中如果有更新的 cookies → 更新本地存储
- *   3. 业务错误原样 reject
- *
- * 不再有：
- *   - JWT token 附加
- *   - 401 队列管理和自动刷新
- *   - 403 特殊处理
+ * 所有请求自动附加 X-School-Cookies + X-User-Id header（像浏览器一样）。
+ * 响应中的 X-Set-Cookies header → 自动更新本地 cookie 存储。
  */
 
 import axios from 'axios'
@@ -31,13 +22,6 @@ const SLOW_APIS = [
   '/auth/v1/login',
   '/auth/v1/status',
   '/acdm/v1/schedule',
-]
-
-/** 公开接口：不附 cookies header */
-const PUBLIC_APIS = [
-  '/auth/v1/session/init',
-  '/auth/v1/login',
-  '/auth/v1/request/sms',
 ]
 
 // ==================== 后端响应格式 ====================
@@ -67,17 +51,14 @@ instance.interceptors.request.use(
       config.timeout = SLOW_TIMEOUT
     }
 
-    // 非公开接口附加 cookies header
-    if (!PUBLIC_APIS.some(api => url.includes(api))) {
-      const userId = getUserId()
-      const cookies = getSchoolCookies()
-
-      if (userId && config.headers) {
-        config.headers['X-User-Id'] = userId
-      }
-      if (cookies && config.headers) {
-        config.headers['X-School-Cookies'] = cookies
-      }
+    // 所有请求都附加 cookies header（像浏览器一样）
+    const userId = getUserId()
+    const cookies = getSchoolCookies()
+    if (userId && config.headers) {
+      config.headers['X-User-Id'] = userId
+    }
+    if (cookies && config.headers) {
+      config.headers['X-School-Cookies'] = cookies
     }
 
     return config
@@ -92,10 +73,10 @@ instance.interceptors.response.use(
   (response: AxiosResponse<BackendResponse>) => {
     const { data, headers } = response
 
-    // 如果后端通过 header 下发了更新的 cookies → 更新本地存储
-    const updatedCookies = headers['x-updated-cookies']
-    if (updatedCookies) {
-      setSchoolCookies(updatedCookies)
+    // 后端通过 header 下发更新的 cookies → 更新本地存储
+    const setCookies = headers['x-set-cookies'] || headers['x-updated-cookies']
+    if (setCookies) {
+      setSchoolCookies(setCookies)
     }
 
     // 业务错误码
