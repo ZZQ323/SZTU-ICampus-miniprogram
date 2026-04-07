@@ -83,7 +83,13 @@ async function handleRefreshSession() {
     await userStore.refreshSession()
     uni.showToast({ title: '会话已刷新', icon: 'success' })
   } catch (e: any) {
-    uni.showToast({ title: e.message || '刷新失败', icon: 'none' })
+    if (e?.code === 401 || e?.code === 400) {
+      userStore.clearSchoolSession()
+      uni.showToast({ title: '会话已过期，请重新登录', icon: 'none' })
+      setTimeout(() => uni.navigateTo({ url: '/pages/common/login/login' }), 1000)
+    } else {
+      uni.showToast({ title: e.message || '刷新失败', icon: 'none' })
+    }
   } finally {
     uni.hideLoading()
   }

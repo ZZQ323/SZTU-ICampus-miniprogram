@@ -1,12 +1,9 @@
 /**
- * 认证相关 API（Cookie 直通版）
+ * 认证相关 API（Cookie-in-Header 版）
  *
- * 文件：src/api/auth-apis.ts
- *
- * 变更：
- * - 删除 wxAuthApi（不再需要 JWT token 管理）
- * - authApi.requestSms 需要带 cookiesJson
- * - authApi.login 需要带 cookiesJson
+ * Cookies 通过 http.ts 拦截器自动附加到 X-School-Cookies header，
+ * 后端通过 X-Set-Cookies response header 返回更新后的 cookies。
+ * 不再手动传递 cookiesJson 参数。
  */
 
 import { request } from '@/utils/http'
@@ -63,16 +60,14 @@ export const authApi = {
 
   /**
    * 请求发送短信验证码（公开接口）
-   * @param userId 学号
-   * @param cookiesJson 预登录 cookies
+   * cookies 通过 header 自动附加
    */
-  requestSms: (userId: string, cookiesJson?: string) =>
-    request.post<void>('/auth/v1/request/sms', { userId, cookiesJson }),
+  requestSms: (userId: string) =>
+    request.post<void>('/auth/v1/request/sms', { userId }),
 
   /**
    * 登录学校系统（公开接口）
-   * @param params 包含 cookiesJson + 登录凭证
-   * @returns LoginResultsVo 包含登录后 cookiesJson + userId
+   * cookies 通过 header 自动附加和接收
    */
   login: (params: LoginRequestParams) =>
     request.post<LoginResultsVo>('/auth/v1/login', params),

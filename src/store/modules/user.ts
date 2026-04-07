@@ -1,12 +1,11 @@
 /**
- * 用户状态管理（Cookie 直通版）
+ * 用户状态管理（Cookie-in-Header 版）
  *
- * 文件：src/store/modules/user.ts
+ * Cookies 通过 http.ts 拦截器自动管理：
+ * - 请求：从 cookie-manager 读取 → 附加到 X-School-Cookies header
+ * - 响应：从 X-Set-Cookies header 读取 → 存入 cookie-manager
  *
- * 变更：
- * - 移除 JWT token 管理（initToken、refreshToken、checkTokenActive）
- * - 使用 cookie-manager 管理 cookies + userId
- * - loginSchool 流程：带 cookies 登录 → 存储返回的 cookies
+ * 不再手动传递 cookiesJson 参数。
  */
 
 import { defineStore } from 'pinia'
@@ -14,7 +13,6 @@ import { ref, computed, watch } from 'vue'
 import { sessionApi, authApi } from '@/api/auth-apis'
 import { getUserInfo, setUserInfo, removeUserInfo } from '@/utils/storage'
 import {
-  setSchoolCookies,
   setUserId,
   clearAuth,
   hasAuth,
@@ -36,9 +34,6 @@ export const useUserStore = defineStore('user', () => {
 
   /** 可用的登录方式 */
   const loginTypes = ref<string[]>([])
-
-  /** 预登录 cookies（initSession 返回，登录时使用） */
-  const preAuthCookies = ref('')
 
   /** 历史登录过的学号 */
   const lastUsedUserId = ref<string>('')
@@ -107,10 +102,7 @@ export const useUserStore = defineStore('user', () => {
 
     loginTypes.value = result.loginTypes || []
 
-    // 保存预登录 cookies（登录时需要带上）
-    if (result.cookiesJson) {
-      preAuthCookies.value = result.cookiesJson
-    }
+    // cookies 通过 response header → http.ts 拦截器 → cookie-manager 自动存储
 
     if (result.logined && result.userId) {
       userInfo.value = {
@@ -120,8 +112,7 @@ export const useUserStore = defineStore('user', () => {
         schoolName: result.schoolName,
         avatarURL: result.avatarURL,
       }
-      // 已登录的情况下，保存 cookies 和 userId
-      if (result.cookiesJson) setSchoolCookies(result.cookiesJson)
+      // 已登录的情况下，保存 userId（cookies 已通过 header 自动存储）
       if (result.userId) setUserId(result.userId)
     }
 
@@ -160,10 +151,7 @@ export const useUserStore = defineStore('user', () => {
   async function refreshSession(): Promise<LoginResultsVo> {
     const result = await authApi.refreshSession()
 
-    // 更新 cookies
-    if (result.cookiesJson) {
-      setSchoolCookies(result.cookiesJson)
-    }
+    // cookies 已通过 response header 自动更新
 
     if (result.logined && result.userId) {
       userInfo.value = {
@@ -198,27 +186,22 @@ export const useUserStore = defineStore('user', () => {
 
   /**
    * 请求短信验证码
+   * cookies 通过 header 自动附加和接收
    */
   async function requestSms(userId: string): Promise<void> {
-    await authApi.requestSms(userId, preAuthCookies.value || undefined)
+    await authApi.requestSms(userId)
   }
 
   /**
    * 登录学校系统
    *
-   * 流程：
-   * 1. 带 preAuthCookies + 凭证 → 后端登录
-   * 2. 存储返回的 cookies + userId
+   * cookies 通过 header 自动附加（前端 → 后端）和接收（后端 → 前端）
    */
   async function loginSchool(params: LoginRequestParams): Promise<boolean> {
-    const result = await authApi.login({
-      ...params,
-      cookiesJson: preAuthCookies.value || undefined,
-    })
+    const result = await authApi.login(params)
 
     if (result.logined) {
-      // 存储 cookies + userId
-      if (result.cookiesJson) setSchoolCookies(result.cookiesJson)
+      // cookies 已通过 response header 自动存储
       if (result.userId) setUserId(result.userId)
 
       // 更新用户信息
@@ -303,7 +286,6 @@ export const useUserStore = defineStore('user', () => {
     // 状态
     userInfo,
     loginTypes,
-    preAuthCookies,
 
     historyUserIds,
     lastUsedUserId,

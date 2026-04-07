@@ -61,8 +61,6 @@ export interface LoginRequestParams {
   loginType: LoginType
   smsCode?: string
   password?: string
-  /** 前端传来的预登录 cookies JSON */
-  cookiesJson?: string
 }
 
 /** 登录状态 VO */
