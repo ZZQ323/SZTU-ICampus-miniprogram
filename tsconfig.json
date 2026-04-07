@@ -12,6 +12,7 @@
     "skipLibCheck": true,
 
     // ========== 路径别名（让 @/ 指向 src/）==========
+    "baseUrl": "." ,
     "paths": {
       "@/*": ["src/*"]
     },
