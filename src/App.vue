@@ -26,9 +26,18 @@ const infoStore = useInfoStore()
 onLaunch(async () => {
   console.log('[App] 应用启动')
 
-  // 有本地 cookies → 初始化信息流
+  // 有本地 cookies → 先验证 session，再加载数据
   if (hasAuth()) {
-    infoStore.init()
+    try {
+      const status = await userStore.checkSchoolSession()
+      if (status.logined) {
+        infoStore.init()
+      }
+      // 未登录：不加载数据，等用户操作
+    } catch (e) {
+      console.warn('[App] 启动验证失败', e)
+      // 网络错误：保留离线状态，不清除
+    }
   }
 })
 
