@@ -87,6 +87,11 @@
           <text v-if="activeTab === 'sms'">验证码将发送到您绑定的手机号</text>
           <text v-else>请使用统一身份认证密码登录</text>
         </view>
+
+        <!-- 清除缓存（手动兜底） -->
+        <view class="clear-cache" @tap="handleClearCache">
+          <text>遇到问题？清除缓存重试</text>
+        </view>
       </view>
     </view>
   </PageLayout>
@@ -303,13 +308,37 @@ async function handleLogin() {
     }
 
   } catch (e: any) {
-    uni.showToast({
-      title: e?.message || '登录失败',
-      icon: 'error'
-    })
+    const msg = e?.message || '登录失败'
+    const isSessionExpired = msg.includes('会话已失效') || msg.includes('会话无效') || e?.code === 401
+
+    if (isSessionExpired) {
+      // 会话过期 → reLaunch 回首页，首页 ensure() 会刷新状态
+      uni.showToast({ title: '会话过期，正在刷新...', icon: 'none' })
+      setTimeout(() => {
+        uni.reLaunch({ url: '/pages/home/home' })
+      }, 800)
+    } else {
+      uni.showToast({ title: msg, icon: 'error' })
+    }
   } finally {
     logging.value = false
     authStore.setShowMask(false)
+  }
+}
+
+/** 清除缓存（手动兜底） */
+async function handleClearCache() {
+  uni.showLoading({ title: '清除中...' })
+  try {
+    await userStore.resetSession()
+    loginTypes.value = userStore.loginTypes?.length ? userStore.loginTypes : ['SMS']
+    uni.showToast({ title: '已清除，请重新登录', icon: 'success' })
+  } catch {
+    userStore.clearSchoolSession()
+    loginTypes.value = ['SMS']
+    uni.showToast({ title: '已清除', icon: 'success' })
+  } finally {
+    uni.hideLoading()
   }
 }
 </script>
@@ -409,6 +438,14 @@ async function handleLogin() {
 .tips {
   margin-top: 32rpx;
   text-align: center;
+  font-size: 24rpx;
+  color: #999;
+}
+
+.clear-cache {
+  text-align: center;
+  margin-top: 40rpx;
+  padding: 20rpx;
   font-size: 24rpx;
   color: #999;
 }
