@@ -92,12 +92,18 @@ export const infoApi = {
         request.get<Record<string, number>>('/info/v1/unread'),
 
     /**
-     * 获取最新 ID
+     * 获取最新 ID（单频道）
      */
     getLatestId: (channelId?: string) =>
         request.get<{ channelId: string; latestId: string }>('/info/v1/latest', {
             params: { channelId: channelId || 'announcement' }
         }),
+
+    /**
+     * 批量获取所有频道的最新 ID（init 时一次拉取）
+     */
+    getLatestAll: () =>
+        request.get<Record<string, string>>('/info/v1/latest-all'),
 
     /**
      * 标记已读
