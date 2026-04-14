@@ -173,7 +173,7 @@ watch(isLoggedIn, (val) => {
 
           <!-- 右侧按钮 -->
           <view v-if="isLoggedIn" class="profile-action" @tap="handleLogout">
-            <t-icon name="poweroff" size="36rpx" color="rgba(255,255,255,0.8)" />
+            <t-icon name="poweroff" size="72rpx" color="rgba(255,255,255,0.8)" />
           </view>
           <view v-else class="profile-action login-action" @tap="goLogin">
             <text>登录</text>
