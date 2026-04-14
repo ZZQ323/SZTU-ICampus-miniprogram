@@ -16,11 +16,35 @@ export interface Channel {
     name: string
     description?: string
     icon: string
-    /** 梯队：1=默认订阅, 2=用户订阅, 3=低频可选 */
-    tier?: number
+    /** 来源组织分类：fixed/department/support/league/college */
+    sourceOrg?: string
+    /** 该频道包含的内容类型（从源自动推导） */
+    contentTypes?: string[]
     sort?: number
     categories?: Category[]
 }
+
+// ==================== 分类维度常量 ====================
+
+/** 按来源分类（SideBar 左侧） */
+export const SOURCE_ORG_LIST = [
+    { value: '', label: '全部' },
+    { value: 'department', label: '职能部门' },
+    { value: 'support', label: '教辅科研' },
+    { value: 'league', label: '群团招就' },
+    { value: 'college', label: '学院' },
+] as const
+
+/** 按内容分类（SideBar 左侧） */
+export const CONTENT_TYPE_LIST = [
+    { value: '', label: '全部' },
+    { value: 'notice', label: '通知公告' },
+    { value: 'news', label: '新闻动态' },
+    { value: 'academic', label: '学术科研' },
+    { value: 'employment', label: '招生就业' },
+    { value: 'campus', label: '校园活动' },
+    { value: 'party', label: '党建工作' },
+] as const
 
 export interface Category {
     id: string

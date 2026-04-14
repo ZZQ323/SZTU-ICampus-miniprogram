@@ -32,6 +32,12 @@
       }
     },
     {
+      "path": "pages/notice/subscribe",
+      "style": {
+        "navigationBarTitleText": "管理订阅"
+      }
+    },
+    {
       "path": "pages/schedule/schedule",
       "style": {
         "navigationBarTitleText": "课表查询"
