@@ -99,9 +99,13 @@
 
 <script setup lang="ts">
 /**
- * 登录页面（改进版）
- * 
- * 等待 loginTypes 到达后才显示登录表单
+ * 登录页面（改进版 - Cookie 保鲜）
+ *
+ * 核心原则：loginTypes 获取 和 cookies 准备 是两件事。
+ * - loginTypes 可以从 URL / userStore 缓存快速获取（控制 UI 显示）
+ * - cookies 必须保证新鲜（控制登录能力）
+ *   有 cookie → refreshSession（刷新）
+ *   没 cookie → initSession（初始化）
  */
 import { ref, computed, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
@@ -109,6 +113,7 @@ import PageLayout from '@/components/PageLayout.vue'
 import { useUserStore } from '@/store/modules/user'
 import { useAuthStore } from '@/store/modules/auth'
 import { useInfoStore } from '@/store/modules/info'
+import { hasAuth } from '@/utils/cookie-manager'
 import { type LoginType } from '@/types/auth'
 
 // ==================== Store ====================
@@ -174,48 +179,84 @@ onLoad(async (options) => {
   authStore.setCheckingMessage('正在初始化...')
 
   try {
-    // 1. 尝试从 URL 参数获取 loginTypes
+    // ==================== 第一步：快速获取 loginTypes（控制 UI） ====================
+    // loginTypes 可以从缓存获取，让 UI 尽快展示
+
     if (options?.loginTypes) {
       loginTypes.value = options.loginTypes.split(',')
       console.log('[Login] 从 URL 获取 loginTypes:', loginTypes.value)
     }
 
-    // 2. 如果 URL 没有，尝试从 userStore 获取
     if (loginTypes.value.length === 0 && userStore.loginTypes?.length > 0) {
       loginTypes.value = userStore.loginTypes
       console.log('[Login] 从 userStore 获取 loginTypes:', loginTypes.value)
     }
 
-    // 3. 如果还是没有，调用 initSession 获取
-    if (loginTypes.value.length === 0) {
-      console.log('[Login] 调用 initSession 获取 loginTypes...')
+    // ==================== 第二步：确保 cookies 新鲜（控制登录能力） ====================
+    // 无论 loginTypes 是否已获取，cookies 必须是新鲜的
+    // 原则：有 cookie → refreshSession，没 cookie → initSession
+
+    if (hasAuth()) {
+      // 有 cookie → 刷新会话，顺便拿到 loginTypes
+      console.log('[Login] 有本地 cookies，尝试 refreshSession...')
+      authStore.setCheckingMessage('正在刷新会话...')
+
+      try {
+        const result = await userStore.refreshSession()
+
+        // refreshSession 成功 → cookies 已刷新
+        if (result.loginTypes?.length) {
+          loginTypes.value = result.loginTypes
+        }
+
+        // 如果 refresh 发现已登录 → 无需停留在登录页
+        if (result.logined) {
+          console.log('[Login] refreshSession 发现已登录，返回上一页')
+          uni.navigateBack()
+          return
+        }
+      } catch (e: any) {
+        // refreshSession 失败（会话真的过期了）→ fallback 到 initSession
+        console.warn('[Login] refreshSession 失败，fallback 到 initSession:', e?.message)
+        authStore.setCheckingMessage('正在获取登录信息...')
+
+        const result = await userStore.initSession()
+        if (result.loginTypes?.length) {
+          loginTypes.value = result.loginTypes
+        }
+      }
+    } else {
+      // 没 cookie → 初始化会话
+      console.log('[Login] 无本地 cookies，调用 initSession...')
       authStore.setCheckingMessage('正在获取登录信息...')
 
       const result = await userStore.initSession()
-
-      if (result.loginTypes && result.loginTypes.length > 0) {
+      if (result.loginTypes?.length) {
         loginTypes.value = result.loginTypes
-        console.log('[Login] 从 initSession 获取 loginTypes:', loginTypes.value)
-      } else {
-        // 默认支持 SMS
-        loginTypes.value = ['SMS']
       }
     }
 
-    // 4. 设置默认 Tab
+    // ==================== 第三步：设置 UI ====================
+
+    // 兜底：如果还是没拿到 loginTypes，默认 SMS
+    if (loginTypes.value.length === 0) {
+      loginTypes.value = ['SMS']
+    }
+
+    // 设置默认 Tab
     if (supportsPassword.value && !supportsSms.value) {
       activeTab.value = 'password'
     } else {
       activeTab.value = 'sms'
     }
 
-    // 5. 尝试获取上次使用的学号
+    // 尝试获取上次使用的学号
     const lastUserId = userStore.lastUsedUserId
     if (lastUserId) {
       userId.value = lastUserId
     }
 
-    // 6. 就绪
+    // 就绪
     isReady.value = true
 
   } catch (e) {
