@@ -29,12 +29,9 @@ const { ensure, isReady } = useAuthGuard()
 
 // ==================== 频道配置 ====================
 
-/** 默认频道（始终显示，sourceOrg=fixed） */
+/** 固定频道（始终显示，sourceOrg=fixed，不可退订） */
 const DEFAULT_TABS: ChannelTab[] = [
-  { id: 'announcement', name: '公告', hasCategories: true },
-  { id: 'academic', name: '教务', hasCategories: false },
-  { id: 'campus-life', name: '校园', hasCategories: false },
-  { id: 'news', name: '新闻', hasCategories: false },
+  { id: 'announcement', name: '公文通', hasCategories: true },
 ]
 
 const STORAGE_KEY = 'icampus_subscribed_channels'

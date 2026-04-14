@@ -29,6 +29,7 @@ export interface Channel {
 /** 按来源分类（SideBar 左侧） */
 export const SOURCE_ORG_LIST = [
     { value: '', label: '全部' },
+    { value: 'official', label: '学校官网' },
     { value: 'department', label: '职能部门' },
     { value: 'support', label: '教辅科研' },
     { value: 'league', label: '群团招就' },

@@ -34,8 +34,8 @@ const MAX_READ_IDS = 200
 export const useInfoStore = defineStore('info', () => {
     // ==================== 状态 ====================
 
-    /** 默认频道列表（第一梯队 + 已启用的频道） */
-    const DEFAULT_CHANNELS = ['announcement', 'academic', 'campus-life', 'news']
+    /** 固定频道（公文通始终追踪未读状态） */
+    const DEFAULT_CHANNELS = ['announcement']
 
     const channelStates = ref<Record<string, ChannelUnreadState>>(
         Object.fromEntries(DEFAULT_CHANNELS.map(id => [id, createChannelState(id)]))
