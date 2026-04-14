@@ -14,7 +14,11 @@
 export interface Channel {
     id: string
     name: string
+    description?: string
     icon: string
+    /** 梯队：1=默认订阅, 2=用户订阅, 3=低频可选 */
+    tier?: number
+    sort?: number
     categories?: Category[]
 }
 
@@ -31,6 +35,13 @@ export interface CategoryTree {
 
 export interface ChannelWithUnread extends Channel {
     unreadCount: number
+}
+
+/** 频道 Tab 配置（用于 notice.vue 渲染） */
+export interface ChannelTab {
+    id: string
+    name: string
+    hasCategories: boolean
 }
 
 // ==================== 列表项 ====================

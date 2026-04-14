@@ -1,14 +1,15 @@
 <!--
-  信息流页面（频道切换版）
-  
+  信息流页面（动态频道 + 订阅管理版）
+
   文件：src/pages/notice/notice.vue
-  
+
   ⭐ 改动：
-  1. 顶部新增频道 Tab（公告/教务/校园/新闻）
-  2. channelId 从 Tab 选择传入，不再写死 'announcement'
-  3. 分类 pills 仅在公告频道显示（其他频道暂无子分类）
-  4. 搜索、详情跳转、标记已读均使用当前 channelId
-  5. 外链文章点击时复制链接而非跳转详情
+  1. Tab 列表从 DEFAULT_TABS + 用户订阅动态生成
+  2. 最后一个 Tab 是 "+" 按钮，点击弹出订阅管理弹窗
+  3. channelId 从 Tab 选择传入
+  4. 分类 pills 仅在公告频道显示
+  5. 搜索、详情跳转、标记已读均使用当前 channelId
+  6. 外链文章点击时复制链接而非跳转详情
 -->
 
 <script setup lang="ts">
@@ -20,8 +21,9 @@ import { useUserStore } from '@/store/modules/user'
 import { useInfoStore } from '@/store/modules/info'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 import { infoApi } from '@/api/info-api'
-import type { InfoItemMeta } from '@/types/info'
+import type { InfoItemMeta, Channel, ChannelTab } from '@/types/info'
 import { CATEGORY_LIST } from '@/types/info'
+import { extractBoolean } from '@/utils/tdesign'
 
 const userStore = useUserStore()
 const infoStore = useInfoStore()
@@ -29,12 +31,87 @@ const { ensure, isReady } = useAuthGuard()
 
 // ==================== 频道配置 ====================
 
-const CHANNEL_LIST = [
+/** 第一梯队：始终显示的默认 Tab */
+const DEFAULT_TABS: ChannelTab[] = [
   { id: 'announcement', name: '公告', hasCategories: true },
   { id: 'academic', name: '教务', hasCategories: false },
   { id: 'campus-life', name: '校园', hasCategories: false },
   { id: 'news', name: '新闻', hasCategories: false },
 ]
+
+const STORAGE_KEY = 'icampus_subscribed_channels'
+
+// ==================== 订阅管理 ====================
+
+/** 用户额外订阅的频道 ID 列表 */
+const subscribedIds = ref<string[]>(loadSubscribedIds())
+/** 后端返回的可订阅频道列表（tier=2,3） */
+const availableChannels = ref<Channel[]>([])
+/** 订阅弹窗可见性 */
+const showSubscribePopup = ref(false)
+
+function loadSubscribedIds(): string[] {
+  try {
+    const raw = uni.getStorageSync(STORAGE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function saveSubscribedIds() {
+  uni.setStorageSync(STORAGE_KEY, JSON.stringify(subscribedIds.value))
+}
+
+/** 当前显示的 Tab 列表（默认 + 已订阅） */
+const displayTabs = computed<ChannelTab[]>(() => {
+  const extra = subscribedIds.value
+    .map(id => availableChannels.value.find(ch => ch.id === id))
+    .filter((ch): ch is Channel => !!ch)
+    .map(ch => ({ id: ch.id, name: ch.name, hasCategories: false } as ChannelTab))
+  return [...DEFAULT_TABS, ...extra]
+})
+
+/** 打开订阅管理弹窗 */
+async function openSubscribePopup() {
+  showSubscribePopup.value = true
+  if (availableChannels.value.length === 0) {
+    await fetchAvailableChannels()
+  }
+}
+
+/** 拉取后端频道列表 */
+async function fetchAvailableChannels() {
+  try {
+    const channels = await infoApi.getChannels()
+    // 只展示 tier=2,3 的频道
+    availableChannels.value = (channels || []).filter(
+      (ch: any) => ch.tier && ch.tier >= 2
+    )
+  } catch (e) {
+    console.error('[Notice] 获取可订阅频道失败', e)
+  }
+}
+
+/** 切换频道订阅 */
+function toggleSubscribe(channelId: string) {
+  const idx = subscribedIds.value.indexOf(channelId)
+  if (idx >= 0) {
+    subscribedIds.value.splice(idx, 1)
+  } else {
+    subscribedIds.value.push(channelId)
+  }
+  saveSubscribedIds()
+}
+
+function isSubscribed(channelId: string): boolean {
+  return subscribedIds.value.includes(channelId)
+}
+
+/** 按 tier 分组展示 */
+const groupedChannels = computed(() => {
+  const tier2 = availableChannels.value.filter(ch => (ch as any).tier === 2)
+  const tier3 = availableChannels.value.filter(ch => (ch as any).tier === 3)
+  return { tier2, tier3 }
+})
 
 // ==================== 状态 ====================
 
@@ -54,7 +131,7 @@ const isSearchMode = ref(false)
 const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 
 const showCategories = computed(() => {
-  const ch = CHANNEL_LIST.find(c => c.id === activeChannel.value)
+  const ch = displayTabs.value.find(c => c.id === activeChannel.value)
   return ch?.hasCategories ?? false
 })
 
@@ -229,13 +306,21 @@ onPullDownRefresh(() => {
   <PageLayout>
     <view v-if="isReady" class="notice-page">
 
-      <!-- 频道 Tab -->
-      <view class="channel-tabs">
-        <view v-for="ch in CHANNEL_LIST" :key="ch.id" :class="['channel-tab', { active: activeChannel === ch.id }]"
-          @tap="handleChannelChange(ch.id)">
-          {{ ch.name }}
+      <!-- 频道 Tab（可横向滚动） -->
+      <scroll-view scroll-x class="channel-tabs-scroll" :show-scrollbar="false">
+        <view class="channel-tabs">
+          <view v-for="ch in displayTabs" :key="ch.id"
+            :class="['channel-tab', { active: activeChannel === ch.id }]"
+            @tap="handleChannelChange(ch.id)">
+            {{ ch.name }}
+            <view v-if="infoStore.getUnreadCount(ch.id) > 0" class="unread-dot" />
+          </view>
+          <!-- "+" 按钮：管理订阅 -->
+          <view class="channel-tab add-tab" @tap="openSubscribePopup">
+            <text class="add-icon">+</text>
+          </view>
         </view>
-      </view>
+      </scroll-view>
 
       <!-- 搜索框 -->
       <view class="search-header">
@@ -299,6 +384,48 @@ onPullDownRefresh(() => {
         <t-empty v-if="!loading && list.length === 0" :description="isSearchMode ? '未找到相关内容' : '暂无内容'" />
       </view>
     </view>
+
+    <!-- 订阅管理弹窗 -->
+    <t-popup :visible="showSubscribePopup" placement="bottom" @visible-change="(e: any) => showSubscribePopup = extractBoolean(e)">
+      <view class="subscribe-popup">
+        <view class="subscribe-header">
+          <text class="subscribe-title">订阅频道</text>
+          <view class="subscribe-close" @tap="showSubscribePopup = false">
+            <t-icon name="close" size="40rpx" />
+          </view>
+        </view>
+
+        <!-- 学院 & 部门频道 -->
+        <scroll-view scroll-y class="subscribe-body">
+          <template v-if="groupedChannels.tier2.length > 0">
+            <view class="subscribe-group-title">学院 / 部门</view>
+            <view class="subscribe-grid">
+              <view v-for="ch in groupedChannels.tier2" :key="ch.id"
+                :class="['subscribe-chip', { subscribed: isSubscribed(ch.id) }]"
+                @tap="toggleSubscribe(ch.id)">
+                <text>{{ ch.name }}</text>
+              </view>
+            </view>
+          </template>
+
+          <template v-if="groupedChannels.tier3.length > 0">
+            <view class="subscribe-group-title">职能部门</view>
+            <view class="subscribe-grid">
+              <view v-for="ch in groupedChannels.tier3" :key="ch.id"
+                :class="['subscribe-chip', { subscribed: isSubscribed(ch.id) }]"
+                @tap="toggleSubscribe(ch.id)">
+                <text>{{ ch.name }}</text>
+              </view>
+            </view>
+          </template>
+
+          <view v-if="availableChannels.length === 0" class="subscribe-empty">
+            <t-loading theme="circular" size="40rpx" />
+            <text>加载中...</text>
+          </view>
+        </scroll-view>
+      </view>
+    </t-popup>
   </PageLayout>
 </template>
 
@@ -308,20 +435,27 @@ onPullDownRefresh(() => {
   background: #f5f5f5;
 }
 
-.channel-tabs {
-  display: flex;
+.channel-tabs-scroll {
   background: #fff;
   border-bottom: 1rpx solid #eee;
+  white-space: nowrap;
+}
+
+.channel-tabs {
+  display: inline-flex;
+  min-width: 100%;
 }
 
 .channel-tab {
-  flex: 1;
-  text-align: center;
-  padding: 24rpx 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24rpx 32rpx;
   font-size: 28rpx;
   color: #666;
   position: relative;
   transition: color 0.2s;
+  flex-shrink: 0;
 
   &.active {
     color: #0052d9;
@@ -339,6 +473,101 @@ onPullDownRefresh(() => {
       border-radius: 2rpx;
     }
   }
+}
+
+.add-tab {
+  color: #999;
+  padding: 24rpx 28rpx;
+}
+
+.add-icon {
+  font-size: 36rpx;
+  font-weight: 300;
+}
+
+.unread-dot {
+  position: absolute;
+  top: 16rpx;
+  right: 12rpx;
+  width: 12rpx;
+  height: 12rpx;
+  background: #fa5151;
+  border-radius: 50%;
+}
+
+/* 订阅弹窗 */
+.subscribe-popup {
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.subscribe-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 32rpx;
+  border-bottom: 1rpx solid #eee;
+}
+
+.subscribe-title {
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.subscribe-close {
+  padding: 8rpx;
+}
+
+.subscribe-body {
+  padding: 24rpx 32rpx;
+  max-height: 55vh;
+}
+
+.subscribe-group-title {
+  font-size: 26rpx;
+  color: #999;
+  margin-bottom: 16rpx;
+  margin-top: 16rpx;
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+.subscribe-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.subscribe-chip {
+  padding: 14rpx 28rpx;
+  font-size: 26rpx;
+  color: #333;
+  background: #f5f5f5;
+  border-radius: 32rpx;
+  border: 2rpx solid transparent;
+  transition: all 0.2s;
+
+  &.subscribed {
+    color: #0052d9;
+    background: #e6f0ff;
+    border-color: #0052d9;
+  }
+}
+
+.subscribe-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding: 60rpx 0;
+  color: #999;
+  font-size: 26rpx;
 }
 
 .search-header {
