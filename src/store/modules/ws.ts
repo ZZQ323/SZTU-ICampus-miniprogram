@@ -40,8 +40,9 @@ export const useWsStore = defineStore('ws', () => {
             return
         }
 
-        if (client && connectionState.value === 'connected') {
-            console.log('[WS Store] 已连接')
+        // 防止竞态：connecting / reconnecting / connected 状态都不再新建连接
+        if (client && connectionState.value !== 'disconnected') {
+            console.log('[WS Store] 已在连接中，跳过:', connectionState.value)
             return
         }
 

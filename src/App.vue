@@ -44,8 +44,8 @@ onLaunch(async () => {
 onShow(() => {
   console.log('[App] 进入前台')
 
-  // 已登录则确保 WS 连接
-  if (userStore.isSchoolLoggedIn) {
+  // WS 重连由 ws.ts watch 自动管理，onShow 只处理后台恢复（断线重连）
+  if (userStore.isSchoolLoggedIn && !wsStore.isConnected && !wsStore.isConnecting) {
     wsStore.connect()
   }
 })
