@@ -3,10 +3,16 @@
  *
  * 文件：src/store/modules/info.ts
  *
+ * 三层分治模型：
+ *   serverLatestId: 服务器最新 ID（API / WS 推送）
+ *   lastReadId:     已读位置（本地持久化）
+ *   readIds:        单条已读集合（本地持久化，上限 200）
+ *
  * ⭐ 修改点：
- *   1. init() 检查 hasLocalToken 再请求（防 401 风暴）
- *   2. 加锁 + 失败标记（防并发 + 防重试）
- *   3. 不再自己管 token（那是 TokenManager 的事）
+ *   1. channelStates 包含所有实际使用的频道（announcement, academic, campus-life, news）
+ *   2. init() 拉取所有频道的 latestId
+ *   3. isItemRead() 调用 ensureChannelState() 保证 state 始终存在
+ *   4. handleWsMessage 扩展到所有频道
  */
 
 import { defineStore } from 'pinia'
@@ -28,12 +34,12 @@ const MAX_READ_IDS = 200
 export const useInfoStore = defineStore('info', () => {
     // ==================== 状态 ====================
 
-    const channelStates = ref<Record<string, ChannelUnreadState>>({
-        announcement: createChannelState('announcement'),
-        news: createChannelState('news'),
-        activity: createChannelState('activity'),
-        job: createChannelState('job'),
-    })
+    /** 默认频道列表（第一梯队 + 已启用的频道） */
+    const DEFAULT_CHANNELS = ['announcement', 'academic', 'campus-life', 'news']
+
+    const channelStates = ref<Record<string, ChannelUnreadState>>(
+        Object.fromEntries(DEFAULT_CHANNELS.map(id => [id, createChannelState(id)]))
+    )
 
     const categoryTree = ref<CategoryTree | null>(null)
     const wsConnected = ref(false)
@@ -86,9 +92,14 @@ export const useInfoStore = defineStore('info', () => {
 
         _initing = true
         try {
-            const result = await infoApi.getLatestId('announcement')
-            if (result?.latestId) {
-                updateServerLatestId('announcement', result.latestId)
+            // 一次拉取所有频道的 latestId（批量接口）
+            const allLatest = await infoApi.getLatestAll()
+            if (allLatest) {
+                for (const [channelId, latestId] of Object.entries(allLatest)) {
+                    if (latestId && latestId !== '0') {
+                        updateServerLatestId(channelId, latestId)
+                    }
+                }
             }
             _authFailed = false
         } catch (e: any) {
@@ -156,8 +167,8 @@ export const useInfoStore = defineStore('info', () => {
     }
 
     function isItemRead(channelId: string, id: string): boolean {
+        ensureChannelState(channelId)
         const state = channelStates.value[channelId]
-        if (!state) return false
         if ((Number(id) || 0) <= (Number(state.lastReadId) || 0)) return true
         return state.readIds.has(id)
     }
@@ -167,11 +178,20 @@ export const useInfoStore = defineStore('info', () => {
     }
 
     function handleWsMessage(message: WsMessage) {
+        // 通用格式：message.data 包含 { channelId, latestId, ... }
+        const channelId = message.data?.channelId
+        const latestId = message.data?.latestId
+
         switch (message.type) {
             case 'NEW_ANNOUNCEMENTS':
             case 'ANNOUNCEMENT_STATUS':
             case 'ANNOUNCEMENT_DATA':
-                if (message.data?.latestId) updateServerLatestId('announcement', message.data.latestId)
+                // 兼容旧格式（无 channelId 字段，默认 announcement）
+                if (latestId) updateServerLatestId(channelId || 'announcement', latestId)
+                break
+            case 'NEW_CONTENT':
+                // 新的通用推送格式（所有频道统一）
+                if (channelId && latestId) updateServerLatestId(channelId, latestId)
                 break
         }
     }
