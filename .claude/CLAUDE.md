@@ -34,10 +34,13 @@ TDesign 小程序组件的 `v-model` 在某些环境下不工作。**统一使�
 ### 2. 不使用微信 openId
 全程只用学校自己签发的 cookie，不调用 `wx.login()` 获取 openId。
 
-### 3. refresh 优先于 init
-大多数"会话过期"只需 `/auth/v1/session/refresh`（像按 F5），不需要清空 cookie 重新 `/auth/v1/session/init`。
+### 3. 会话恢复：有 cookie 就 refresh，没 cookie 才 init
+Cookie 在前端持久化，是否登录只有学校后端说了算。有 cookie（哪怕可能过期）→ 先 refreshSession；没 cookie → 才 initSession。
 
-### 4. 后端不做持久化
+### 4. loginTypes 获取和 cookies 准备是两件事
+loginTypes（登录方式列表）可以从 URL 参数、Pinia 缓存快速获取。但 cookies 必须独立保证新鲜——登录页 onLoad 必须始终刷新或初始化 cookies，不能因为 loginTypes 已获取就跳过。SMS 登录因为 getSms() 创建新 session 碰巧不受影响，但密码登录会因过期 cookies 失败。
+
+### 5. 后端不做持久化
 后端只用 Redis 缓存，没有 MySQL。前端不要假设后端有持久化数据。
 
 ## 项目结构
