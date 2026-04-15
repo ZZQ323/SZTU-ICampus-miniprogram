@@ -100,12 +100,14 @@ const isReadState = computed(() => {
     return infoStore.isItemRead(channelId, props.item.id)
 })
 
-/** ⭐ 标签文字：优先 source（数据源名称），其次 categoryName */
+/** ⭐ 标签文字：组织名称·分类名称（如 "科研部·通知公告"） */
 const tagText = computed(() => {
-    // source 来自 sourceConfig.getName()，如"教学动态"、"校园新闻"、"文娱活动"
+    const orgName = props.item.sourceOrgName
+    const catName = props.item.categoryName || props.item.source
+    if (orgName && catName) return `${orgName}·${catName}`
+    if (orgName) return orgName
+    if (catName) return catName
     if (props.item.source) return props.item.source
-    // categoryName 作为 fallback
-    if (props.item.categoryName) return props.item.categoryName
     return ''
 })
 
