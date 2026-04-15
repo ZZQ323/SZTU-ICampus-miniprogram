@@ -11,41 +11,70 @@
 
 // ==================== 频道与分类 ====================
 
+export interface SourceInfo {
+    id: string
+    name: string
+    contentType?: string
+    subContentType?: string
+}
+
 export interface Channel {
     id: string
     name: string
     description?: string
     icon: string
-    /** 来源组织分类：fixed/department/support/league/college */
+    /** 来源组织分类：fixed/official/department/support/league/college */
     sourceOrg?: string
     /** 该频道包含的内容类型（从源自动推导） */
     contentTypes?: string[]
     sort?: number
     categories?: Category[]
+    /** 该频道下的数据源列表（订阅管理用） */
+    sources?: SourceInfo[]
 }
 
 // ==================== 分类维度常量 ====================
 
-/** 按来源分类（SideBar 左侧） */
-export const SOURCE_ORG_LIST = [
+/** 信息来源树（SourcePicker 左侧） */
+export const SOURCE_ORG_TREE = [
     { value: '', label: '全部' },
-    { value: 'official', label: '学校官网' },
+    { value: 'subscribed', label: '已订阅' },
+    { value: 'fixed', label: '公文通' },
+    { value: 'official', label: '学校' },
     { value: 'department', label: '职能部门' },
     { value: 'support', label: '教辅科研' },
     { value: 'league', label: '群团招就' },
     { value: 'college', label: '学院' },
 ] as const
 
-/** 按内容分类（SideBar 左侧） */
-export const CONTENT_TYPE_LIST = [
+/** 第一层 Tab（内容大类） */
+export const TAB_LAYER1 = [
     { value: '', label: '全部' },
-    { value: 'notice', label: '通知公告' },
     { value: 'news', label: '新闻动态' },
-    { value: 'academic', label: '学术科研' },
-    { value: 'employment', label: '招生就业' },
-    { value: 'campus', label: '校园活动' },
-    { value: 'party', label: '党建工作' },
+    { value: 'notice', label: '通知公告' },
 ] as const
+
+/** 第二层 Tab —— 新闻动态细分 */
+export const TAB_LAYER2_NEWS = [
+    { value: '', label: '全部' },
+    { value: 'general-news', label: '新闻动态' },
+    { value: 'party', label: '党建工作' },
+    { value: 'cooperation', label: '合作交流' },
+    { value: 'academic', label: '科研学术' },
+    { value: 'student', label: '学生工作' },
+] as const
+
+/** 第二层 Tab —— 通知公告细分 */
+export const TAB_LAYER2_NOTICE = [
+    { value: '', label: '全部' },
+    { value: 'general-notice', label: '通知公告' },
+    { value: 'admission', label: '招生信息' },
+    { value: 'employment', label: '就业信息' },
+] as const
+
+/** 保留旧常量兼容 */
+export const SOURCE_ORG_LIST = SOURCE_ORG_TREE
+export const CONTENT_TYPE_LIST = TAB_LAYER1
 
 export interface Category {
     id: string
@@ -76,8 +105,19 @@ export interface InfoItemMeta {
     url: string
     title: string
     channelId?: string
-    author?: string
+    /** 数据源 ID（如 kyb-tzgg） */
+    sourceId?: string
+    /** 数据源名称（如 "科研部通知公告"） */
     source?: string
+    /** 内容大类 */
+    contentType?: string
+    /** 内容细分类 */
+    subContentType?: string
+    /** 来源组织分类 */
+    sourceOrg?: string
+    /** 来源组织名称（如 "科研部"） */
+    sourceOrgName?: string
+    author?: string
     crawledAt?: string
     extra?: string
     categoryName?: string
@@ -90,7 +130,6 @@ export interface InfoItemMeta {
     detailUrl?: string
     originalUrl?: string
     department?: string
-    
 }
 
 export interface InfoListResult {
@@ -166,6 +205,15 @@ export interface Navigation {
 export interface InfoListParams {
     channelId?: string
     categoryCode?: string
+    page?: number
+    pageSize?: number
+}
+
+export interface FeedParams {
+    sourceOrg?: string
+    channelId?: string
+    contentType?: string
+    subContentType?: string
     page?: number
     pageSize?: number
 }
