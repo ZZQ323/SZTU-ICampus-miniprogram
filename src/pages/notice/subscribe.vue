@@ -1,61 +1,69 @@
 <!--
-  订阅管理页面
+  订阅管理页面（source 级别）
 
   文件：src/pages/notice/subscribe.vue
 
-  双维度浏览：
-  - 按来源（职能部门/教辅科研/群团招就/学院）
-  - 按内容（通知公告/新闻动态/学术科研/招生就业/校园活动/党建工作）
-  左侧 SideBar + 右侧频道列表 + 订阅切换
+  左侧：来源分类树（同 SourcePicker 结构）
+  右侧：每个 source 有订阅开关
+  订阅粒度到单个数据源（如 "中德学院·通知公告"）
 -->
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { infoApi } from '@/api/info-api'
-import type { Channel } from '@/types/info'
-import { SOURCE_ORG_LIST, CONTENT_TYPE_LIST } from '@/types/info'
-import { extractString } from '@/utils/tdesign'
+import type { Channel, SourceInfo } from '@/types/info'
+import { SOURCE_ORG_TREE } from '@/types/info'
 
-// ==================== 常量 ====================
-
-const STORAGE_KEY = 'icampus_subscribed_channels'
+const STORAGE_KEY = 'icampus_subscribed_sources'
 
 // ==================== 状态 ====================
 
-/** 维度模式：source=按来源, content=按内容 */
-const dimension = ref<'source' | 'content'>('source')
-/** SideBar 当前选中分类 */
-const activeCategory = ref('')
-/** 所有可订阅频道（sourceOrg !== 'fixed'） */
 const channels = ref<Channel[]>([])
-/** 用户已订阅的频道 ID */
-const subscribedIds = ref<string[]>(loadSubscribedIds())
-/** 加载中 */
+const subscribedSourceIds = ref<string[]>(loadSubscribedIds())
 const loading = ref(false)
+const expandedOrg = ref('')
+const activeOrg = ref('')
 
 // ==================== 计算属性 ====================
 
-/** 当前 SideBar 的分类列表 */
-const sidebarItems = computed(() =>
-  dimension.value === 'source' ? SOURCE_ORG_LIST : CONTENT_TYPE_LIST
-)
-
-/** 按当前维度和分类过滤后的频道 */
-const filteredChannels = computed(() => {
-  const cat = activeCategory.value
-  if (!cat) return channels.value  // 全部
-
-  if (dimension.value === 'source') {
-    return channels.value.filter(ch => ch.sourceOrg === cat)
-  } else {
-    return channels.value.filter(ch =>
-      ch.contentTypes && ch.contentTypes.includes(cat)
-    )
+/** 按 sourceOrg 分组的频道（排除 fixed） */
+const orgGroups = computed(() => {
+  const groups: Record<string, Channel[]> = {}
+  for (const ch of channels.value) {
+    const org = ch.sourceOrg || 'unknown'
+    if (org === 'fixed') continue
+    if (!groups[org]) groups[org] = []
+    groups[org].push(ch)
   }
+  return groups
 })
 
-/** 已订阅数量 */
-const subscribedCount = computed(() => subscribedIds.value.length)
+/** 当前选中分类下的所有 source（扁平列表） */
+const displaySources = computed<Array<{ source: SourceInfo; channelName: string }>>(() => {
+  const result: Array<{ source: SourceInfo; channelName: string }> = []
+
+  const channelsToShow = activeOrg.value
+    ? (orgGroups.value[activeOrg.value] || [])
+    : channels.value.filter(ch => ch.sourceOrg !== 'fixed')
+
+  for (const ch of channelsToShow) {
+    if (ch.sources) {
+      for (const src of ch.sources) {
+        result.push({ source: src, channelName: ch.name })
+      }
+    }
+  }
+  return result
+})
+
+const subscribedCount = computed(() => subscribedSourceIds.value.length)
+
+// 可展开的分类列表（排除 全部/已订阅/公文通）
+const subscribableOrgs = computed(() =>
+  SOURCE_ORG_TREE.filter(item =>
+    item.value && item.value !== 'subscribed' && item.value !== 'fixed'
+  )
+)
 
 // ==================== 方法 ====================
 
@@ -67,30 +75,30 @@ function loadSubscribedIds(): string[] {
 }
 
 function saveSubscribedIds() {
-  uni.setStorageSync(STORAGE_KEY, JSON.stringify(subscribedIds.value))
+  uni.setStorageSync(STORAGE_KEY, JSON.stringify(subscribedSourceIds.value))
 }
 
-function toggleSubscribe(channelId: string) {
-  const idx = subscribedIds.value.indexOf(channelId)
+function toggleSubscribe(sourceId: string) {
+  const idx = subscribedSourceIds.value.indexOf(sourceId)
   if (idx >= 0) {
-    subscribedIds.value.splice(idx, 1)
+    subscribedSourceIds.value.splice(idx, 1)
   } else {
-    subscribedIds.value.push(channelId)
+    subscribedSourceIds.value.push(sourceId)
   }
   saveSubscribedIds()
 }
 
-function isSubscribed(channelId: string): boolean {
-  return subscribedIds.value.includes(channelId)
+function isSubscribed(sourceId: string): boolean {
+  return subscribedSourceIds.value.includes(sourceId)
 }
 
-function switchDimension(dim: 'source' | 'content') {
-  dimension.value = dim
-  activeCategory.value = ''  // 重置分类
+function selectOrg(orgValue: string) {
+  activeOrg.value = orgValue
 }
 
-function handleSideBarChange(e: any) {
-  activeCategory.value = extractString(e)
+/** source 的显示名称（频道名·source名） */
+function getSourceLabel(channelName: string, source: SourceInfo): string {
+  return `${channelName}·${source.name}`
 }
 
 // ==================== 生命周期 ====================
@@ -98,12 +106,10 @@ function handleSideBarChange(e: any) {
 onMounted(async () => {
   loading.value = true
   try {
-    const allChannels = await infoApi.getChannels()
-    channels.value = (allChannels || []).filter(
-      (ch: any) => ch.sourceOrg && ch.sourceOrg !== 'fixed'
-    )
+    const result = await infoApi.getChannels()
+    channels.value = (result || []).filter((ch: any) => ch.sourceOrg !== 'fixed')
   } catch (e) {
-    console.error('[Subscribe] 获取频道列表失败', e)
+    console.error('[Subscribe] 获取频道失败', e)
   } finally {
     loading.value = false
   }
@@ -113,65 +119,56 @@ onMounted(async () => {
 <template>
   <view class="subscribe-page">
 
-    <!-- 顶部信息 -->
     <view class="header-info">
-      <text class="subscribed-count">已订阅 {{ subscribedCount }} 个频道</text>
+      <text class="subscribed-count">已订阅 {{ subscribedCount }} 个数据源</text>
     </view>
 
-    <!-- 维度切换 Tab -->
-    <view class="dimension-tabs">
-      <view
-        :class="['dim-tab', { active: dimension === 'source' }]"
-        @tap="switchDimension('source')"
-      >按来源</view>
-      <view
-        :class="['dim-tab', { active: dimension === 'content' }]"
-        @tap="switchDimension('content')"
-      >按内容</view>
-    </view>
-
-    <!-- SideBar + 频道列表 -->
+    <!-- 主布局：左侧分类 + 右侧 source 列表 -->
     <view class="main-layout">
-      <!-- 左侧 SideBar -->
+
+      <!-- 左侧分类 -->
       <scroll-view scroll-y class="sidebar">
         <view
-          v-for="item in sidebarItems"
+          :class="['sidebar-item', { active: activeOrg === '' }]"
+          @tap="selectOrg('')"
+        >
+          <text>全部</text>
+        </view>
+        <view
+          v-for="item in subscribableOrgs"
           :key="item.value"
-          :class="['sidebar-item', { active: activeCategory === item.value }]"
-          @tap="activeCategory = item.value"
+          :class="['sidebar-item', { active: activeOrg === item.value }]"
+          @tap="selectOrg(item.value)"
         >
           <text>{{ item.label }}</text>
         </view>
       </scroll-view>
 
-      <!-- 右侧频道列表 -->
-      <scroll-view scroll-y class="channel-list">
+      <!-- 右侧 source 列表 -->
+      <scroll-view scroll-y class="source-list">
         <view v-if="loading" class="loading-state">
           <t-loading theme="circular" size="60rpx" />
           <text>加载中...</text>
         </view>
 
-        <view v-else-if="filteredChannels.length === 0" class="empty-state">
-          <text>暂无频道</text>
+        <view v-else-if="displaySources.length === 0" class="empty-state">
+          <text>暂无数据源</text>
         </view>
 
         <view
-          v-for="ch in filteredChannels"
-          :key="ch.id"
-          :class="['channel-item', { subscribed: isSubscribed(ch.id) }]"
-          @tap="toggleSubscribe(ch.id)"
+          v-for="item in displaySources"
+          :key="item.source.id"
+          :class="['source-item', { subscribed: isSubscribed(item.source.id) }]"
+          @tap="toggleSubscribe(item.source.id)"
         >
-          <view class="channel-info">
-            <text class="channel-name">{{ ch.name }}</text>
-            <text v-if="ch.description" class="channel-desc">{{ ch.description }}</text>
+          <view class="source-info">
+            <text class="source-name">{{ getSourceLabel(item.channelName, item.source) }}</text>
           </view>
-          <view class="subscribe-toggle">
-            <t-icon
-              :name="isSubscribed(ch.id) ? 'check-circle-filled' : 'add-circle'"
-              :size="'44rpx'"
-              :color="isSubscribed(ch.id) ? '#0052d9' : '#ccc'"
-            />
-          </view>
+          <t-icon
+            :name="isSubscribed(item.source.id) ? 'check-circle-filled' : 'add-circle'"
+            :size="'44rpx'"
+            :color="isSubscribed(item.source.id) ? '#0052d9' : '#ccc'"
+          />
         </view>
       </scroll-view>
     </view>
@@ -197,48 +194,12 @@ onMounted(async () => {
   color: #999;
 }
 
-/* 维度切换 */
-.dimension-tabs {
-  display: flex;
-  background: #fff;
-  border-bottom: 1rpx solid #eee;
-}
-
-.dim-tab {
-  flex: 1;
-  text-align: center;
-  padding: 24rpx 0;
-  font-size: 28rpx;
-  color: #666;
-  position: relative;
-  transition: color 0.2s;
-
-  &.active {
-    color: #0052d9;
-    font-weight: 600;
-
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 64rpx;
-      height: 4rpx;
-      background: #0052d9;
-      border-radius: 2rpx;
-    }
-  }
-}
-
-/* 主布局：左右分栏 */
 .main-layout {
   flex: 1;
   display: flex;
   overflow: hidden;
 }
 
-/* 左侧 SideBar */
 .sidebar {
   width: 200rpx;
   background: #f0f0f0;
@@ -250,7 +211,6 @@ onMounted(async () => {
   font-size: 26rpx;
   color: #333;
   border-left: 6rpx solid transparent;
-  transition: all 0.2s;
 
   &.active {
     background: #fff;
@@ -260,49 +220,30 @@ onMounted(async () => {
   }
 }
 
-/* 右侧频道列表 */
-.channel-list {
+.source-list {
   flex: 1;
   background: #fff;
 }
 
-.channel-item {
+.source-item {
   display: flex;
   align-items: center;
-  padding: 28rpx 24rpx;
+  padding: 24rpx;
   border-bottom: 1rpx solid #f5f5f5;
-  transition: background 0.2s;
 
   &.subscribed {
     background: #f8faff;
   }
 }
 
-.channel-info {
+.source-info {
   flex: 1;
   min-width: 0;
 }
 
-.channel-name {
-  display: block;
-  font-size: 28rpx;
+.source-name {
+  font-size: 26rpx;
   color: #333;
-  font-weight: 500;
-}
-
-.channel-desc {
-  display: block;
-  font-size: 22rpx;
-  color: #999;
-  margin-top: 6rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.subscribe-toggle {
-  flex-shrink: 0;
-  padding-left: 16rpx;
 }
 
 .loading-state, .empty-state {

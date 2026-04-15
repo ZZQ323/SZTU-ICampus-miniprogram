@@ -1,14 +1,14 @@
 <!--
-  信息流页面（动态频道 + 独立订阅页版）
+  信息流页面（三维筛选版）
 
   文件：src/pages/notice/notice.vue
 
-  ⭐ 改动：
-  1. Tab 列表从 DEFAULT_TABS + 用户订阅动态生成
-  2. "+" 按钮跳转到独立的订阅管理页面 (subscribe.vue)
-  3. channelId 从 Tab 选择传入
-  4. 分类 pills 仅在公告频道显示
-  5. 搜索、详情跳转、标记已读均使用当前 channelId
+  布局：
+  1. 信息来源选择器（左上角下拉）
+  2. 双层 Tab（大类 + 细分类）
+  3. 搜索框
+  4. 文章列表（带来源标注）
+  5. 右上角订阅编辑按钮（navigationBar）
 -->
 
 <script setup lang="ts">
@@ -16,80 +16,41 @@ import { ref, computed } from 'vue'
 import { onShow, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
 import InfoListItem from '@/components/info/InfoListItem.vue'
+import SourcePicker from '@/components/info/SourcePicker.vue'
 import { useUserStore } from '@/store/modules/user'
 import { useInfoStore } from '@/store/modules/info'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 import { infoApi } from '@/api/info-api'
-import type { InfoItemMeta, Channel, ChannelTab } from '@/types/info'
-import { CATEGORY_LIST } from '@/types/info'
+import type { InfoItemMeta, Channel } from '@/types/info'
+import { TAB_LAYER1, TAB_LAYER2_NEWS, TAB_LAYER2_NOTICE, CATEGORY_LIST } from '@/types/info'
 
 const userStore = useUserStore()
 const infoStore = useInfoStore()
 const { ensure, isReady } = useAuthGuard()
 
-// ==================== 频道配置 ====================
+// ==================== 筛选状态 ====================
 
-/** 固定频道（始终显示，sourceOrg=fixed，不可退订） */
-const DEFAULT_TABS: ChannelTab[] = [
-  { id: 'announcement', name: '公文通', hasCategories: true },
-]
-
-const STORAGE_KEY = 'icampus_subscribed_channels'
-
-// ==================== 订阅状态 ====================
-
-/** 用户额外订阅的频道 ID 列表 */
-const subscribedIds = ref<string[]>(loadSubscribedIds())
-/** 后端频道列表缓存（用于将 id 映射为 name） */
-const channelCache = ref<Channel[]>([])
-
-function loadSubscribedIds(): string[] {
-  try {
-    const raw = uni.getStorageSync(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch { return [] }
-}
-
-/** 当前显示的 Tab 列表（默认 + 已订阅） */
-const displayTabs = computed<ChannelTab[]>(() => {
-  const extra = subscribedIds.value
-    .map(id => channelCache.value.find(ch => ch.id === id))
-    .filter((ch): ch is Channel => !!ch)
-    .map(ch => ({ id: ch.id, name: ch.name, hasCategories: false } as ChannelTab))
-  return [...DEFAULT_TABS, ...extra]
+/** 信息来源选择 */
+const sourceFilter = ref<{ sourceOrg?: string; channelId?: string; label: string }>({
+  label: '全部来源'
 })
+const showSourcePicker = ref(false)
 
-/** 跳转到订阅管理页 */
-function openSubscribePage() {
-  uni.navigateTo({ url: '/pages/notice/subscribe' })
-}
+/** 第一层 Tab */
+const activeLayer1 = ref('')
+/** 第二层 Tab */
+const activeLayer2 = ref('')
 
-/** 刷新订阅状态（从 subscribe 页面返回时） */
-function refreshSubscriptions() {
-  subscribedIds.value = loadSubscribedIds()
-}
+/** 频道列表缓存 */
+const channels = ref<Channel[]>([])
 
-/** 拉取频道列表用于 Tab 名称映射 */
-async function fetchChannelNames() {
-  if (channelCache.value.length > 0) return
-  try {
-    const channels = await infoApi.getChannels()
-    channelCache.value = (channels || []).filter(
-      (ch: any) => ch.sourceOrg && ch.sourceOrg !== 'fixed'
-    )
-  } catch { /* ignore */ }
-}
-
-// ==================== 状态 ====================
+// ==================== 列表状态 ====================
 
 const loading = ref(false)
 const refreshing = ref(false)
 const list = ref<InfoItemMeta[]>([])
 const page = ref(1)
 const hasMore = ref(true)
-const latestId = ref('0')
-const activeChannel = ref('announcement')
-const activeCategory = ref('')
 const searchKeyword = ref('')
 const isSearchMode = ref(false)
 
@@ -97,95 +58,95 @@ const isSearchMode = ref(false)
 
 const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 
-const showCategories = computed(() => {
-  const ch = displayTabs.value.find(c => c.id === activeChannel.value)
-  return ch?.hasCategories ?? false
+/** 是否选中了公文通 */
+const isAnnouncement = computed(() => sourceFilter.value.channelId === 'announcement')
+
+/** 第二层 Tab 列表（随第一层变化） */
+const layer2Tabs = computed(() => {
+  if (activeLayer1.value === 'news') return TAB_LAYER2_NEWS
+  if (activeLayer1.value === 'notice') return TAB_LAYER2_NOTICE
+  return []
 })
 
-// ==================== Mock 数据 ====================
+/** 是否显示第二层 Tab */
+const showLayer2 = computed(() => activeLayer1.value !== '' && !isAnnouncement.value)
 
-const mockData: InfoItemMeta[] = [
-  {
-    id: '50731', url: '', title: '关于2025年春季学期教学安排的通知',
-    categoryCode: '1018', categoryName: '教务', department: '教务处',
-    publishDate: '2025-01-15', channelId: 'announcement',
-  },
-  {
-    id: '50730', url: '', title: '关于春节假期值班安排的通知',
-    categoryCode: '1020', categoryName: '行政', department: '党政办公室',
-    publishDate: '2025-01-14', channelId: 'announcement',
-  },
-]
+/** 是否显示公文通分类 pills */
+const showGwtCategories = computed(() => isAnnouncement.value)
 
 // ==================== 方法 ====================
 
 async function fetchList(reset = false) {
-  if (!isLoggedIn.value) {
-    list.value = filterByCategory(mockData)
-    return
-  }
-
   if (reset) {
     page.value = 1
     hasMore.value = true
     isSearchMode.value = false
   }
-
   if (!hasMore.value && !reset) return
   loading.value = true
 
   try {
-    const result = await infoApi.getList({
-      channelId: activeChannel.value,
-      categoryCode: activeCategory.value || undefined,
-      page: page.value,
-      pageSize: 20
-    })
+    let result: any
 
-    const items = (result.items || []).map(item => ({
-      ...item,
-      channelId: activeChannel.value,
-    }))
+    if (isAnnouncement.value) {
+      // 公文通走原有的 list API（需要登录）
+      result = await infoApi.getList({
+        channelId: 'announcement',
+        categoryCode: activeLayer2.value || undefined,
+        page: page.value,
+        pageSize: 20
+      })
+    } else {
+      // 其他来源走全局 feed API
+      result = await infoApi.getFeed({
+        sourceOrg: sourceFilter.value.sourceOrg || undefined,
+        channelId: sourceFilter.value.channelId || undefined,
+        contentType: activeLayer1.value || undefined,
+        subContentType: activeLayer2.value || undefined,
+        page: page.value,
+        pageSize: 20
+      })
+    }
 
+    const items = result.items || []
     if (reset) {
       list.value = items
     } else {
       list.value = [...list.value, ...items]
     }
-
-    latestId.value = result.latestId || '0'
     hasMore.value = result.hasMore
 
-    if (result.latestId) {
-      infoStore.updateServerLatestId(activeChannel.value, result.latestId)
-    }
   } catch (e) {
     console.error('[Notice] 获取列表失败', e)
-    uni.showToast({ title: '加载失败', icon: 'error' })
+    if (reset) list.value = []
   } finally {
     loading.value = false
     refreshing.value = false
   }
 }
 
-function filterByCategory(data: InfoItemMeta[]): InfoItemMeta[] {
-  if (!activeCategory.value) return data
-  return data.filter(item => item.categoryCode === activeCategory.value)
+function handleSourceSelect(payload: { sourceOrg?: string; channelId?: string; label: string }) {
+  sourceFilter.value = payload
+  // 切换来源时重置 Tab
+  activeLayer1.value = ''
+  activeLayer2.value = ''
+  fetchList(true)
 }
 
-function handleChannelChange(channelId: string) {
-  if (activeChannel.value === channelId) return
-  activeChannel.value = channelId
-  activeCategory.value = ''
-  searchKeyword.value = ''
-  isSearchMode.value = false
+function handleLayer1Change(value: string) {
+  activeLayer1.value = value
+  activeLayer2.value = '' // 重置第二层
+  fetchList(true)
+}
+
+function handleLayer2Change(value: string) {
+  activeLayer2.value = value
   fetchList(true)
 }
 
 function handleCategoryChange(categoryCode: string) {
-  activeCategory.value = categoryCode
-  searchKeyword.value = ''
-  isSearchMode.value = false
+  // 公文通分类
+  activeLayer2.value = categoryCode
   fetchList(true)
 }
 
@@ -196,25 +157,16 @@ function onSearchInputChanged(context: { value: string }) {
 async function handleSearch() {
   const keyword = searchKeyword.value.trim()
   if (!keyword) return
-  if (!isLoggedIn.value) {
-    list.value = mockData.filter(item => item.title.includes(keyword))
-    isSearchMode.value = true
-    return
-  }
-
   loading.value = true
   isSearchMode.value = true
   hasMore.value = false
 
   try {
-    const result = await infoApi.search(keyword, activeChannel.value, 50)
-    list.value = result.map(item => ({
-      ...item,
-      channelId: activeChannel.value,
-    }))
+    const channelId = sourceFilter.value.channelId || undefined
+    const result = await infoApi.search(keyword, channelId, 50)
+    list.value = result || []
   } catch (e) {
     console.error('[Notice] 搜索失败', e)
-    uni.showToast({ title: '搜索失败', icon: 'error' })
   } finally {
     loading.value = false
   }
@@ -227,7 +179,6 @@ function handleClearSearch() {
 }
 
 function handleItemClick(item: InfoItemMeta) {
-  // 外链文章：复制链接
   if (item.extra && item.extra.includes('"external"')) {
     uni.setClipboardData({
       data: item.url,
@@ -236,10 +187,14 @@ function handleItemClick(item: InfoItemMeta) {
     return
   }
 
-  // 站内文章：跳转详情页
+  const channelId = item.channelId || 'announcement'
   uni.navigateTo({
-    url: `/pages/notice/detail?id=${item.id}&channelId=${item.channelId || activeChannel.value}&category=${item.categoryCode || ''}`
+    url: `/pages/notice/detail?id=${item.id}&channelId=${channelId}&category=${item.categoryCode || ''}`
   })
+}
+
+function openSubscribePage() {
+  uni.navigateTo({ url: '/pages/notice/subscribe' })
 }
 
 async function handleRefresh() {
@@ -249,16 +204,21 @@ async function handleRefresh() {
   await fetchList(true)
 }
 
+/** 加载频道列表（用于 SourcePicker） */
+async function loadChannels() {
+  if (channels.value.length > 0) return
+  try {
+    const result = await infoApi.getChannels()
+    channels.value = result || []
+  } catch { /* ignore */ }
+}
+
 // ==================== 生命周期 ====================
 
 onShow(async () => {
   await ensure({ requireSchoolLogin: false })
-  // 刷新订阅状态（可能从 subscribe 页面返回）
-  refreshSubscriptions()
-  // 拉取频道名称（用于 Tab 映射）
-  if (subscribedIds.value.length > 0) fetchChannelNames()
   if (!isSearchMode.value) fetchList(true)
-  if (isLoggedIn.value) infoStore.markChannelRead(activeChannel.value)
+  loadChannels()
 })
 
 onReachBottom(() => {
@@ -277,27 +237,52 @@ onPullDownRefresh(() => {
   <PageLayout>
     <view v-if="isReady" class="notice-page">
 
-      <!-- 频道 Tab（可横向滚动） -->
-      <scroll-view scroll-x class="channel-tabs-scroll" :show-scrollbar="false">
-        <view class="channel-tabs">
-          <view v-for="ch in displayTabs" :key="ch.id"
-            :class="['channel-tab', { active: activeChannel === ch.id }]"
-            @tap="handleChannelChange(ch.id)">
-            {{ ch.name }}
-            <view v-if="infoStore.getUnreadCount(ch.id) > 0" class="unread-dot" />
-          </view>
-          <!-- "+" 按钮：跳转订阅管理页 -->
-          <view class="channel-tab add-tab" @tap="openSubscribePage">
-            <text class="add-icon">+</text>
-          </view>
+      <!-- 信息来源选择器 -->
+      <view class="source-selector" @tap="showSourcePicker = true">
+        <t-icon name="view-list" size="32rpx" color="#0052d9" />
+        <text class="source-label">{{ sourceFilter.label }}</text>
+        <t-icon name="chevron-down" size="28rpx" color="#999" />
+      </view>
+
+      <!-- 第一层 Tab：内容大类 -->
+      <view v-if="!isAnnouncement" class="tab-bar">
+        <view
+          v-for="tab in TAB_LAYER1"
+          :key="tab.value"
+          :class="['tab-item', { active: activeLayer1 === tab.value }]"
+          @tap="handleLayer1Change(tab.value)"
+        >{{ tab.label }}</view>
+      </view>
+
+      <!-- 第二层 Tab：细分类（随大类变化） -->
+      <scroll-view v-if="showLayer2" scroll-x class="tab-bar-scroll" :show-scrollbar="false">
+        <view class="tab-bar sub">
+          <view
+            v-for="tab in layer2Tabs"
+            :key="tab.value"
+            :class="['tab-item sub', { active: activeLayer2 === tab.value }]"
+            @tap="handleLayer2Change(tab.value)"
+          >{{ tab.label }}</view>
+        </view>
+      </scroll-view>
+
+      <!-- 公文通分类 pills -->
+      <scroll-view v-if="showGwtCategories" scroll-x class="category-scroll" :show-scrollbar="false">
+        <view class="category-list">
+          <view
+            v-for="cat in CATEGORY_LIST"
+            :key="cat.code"
+            :class="['category-item', { active: activeLayer2 === cat.code }]"
+            @click="handleCategoryChange(cat.code)"
+          >{{ cat.name }}</view>
         </view>
       </scroll-view>
 
       <!-- 搜索框 -->
       <view class="search-header">
         <view class="search-box">
-          <t-input :value="searchKeyword" placeholder="搜索标题..." clearable @change="onSearchInputChanged"
-            @confirm="handleSearch" @clear="handleClearSearch">
+          <t-input :value="searchKeyword" placeholder="搜索标题..." clearable
+            @change="onSearchInputChanged" @confirm="handleSearch" @clear="handleClearSearch">
             <template #prefix-icon>
               <t-icon name="search" size="40rpx" />
             </template>
@@ -308,16 +293,6 @@ onPullDownRefresh(() => {
         </t-button>
       </view>
 
-      <!-- 分类标签（仅公告频道） -->
-      <scroll-view v-if="showCategories" scroll-x class="category-scroll" :show-scrollbar="false">
-        <view class="category-list">
-          <view v-for="cat in CATEGORY_LIST" :key="cat.code"
-            :class="['category-item', { active: activeCategory === cat.code }]" @click="handleCategoryChange(cat.code)">
-            {{ cat.name }}
-          </view>
-        </view>
-      </scroll-view>
-
       <!-- 搜索模式提示 -->
       <view v-if="isSearchMode" class="search-mode-tip">
         <text>搜索结果：{{ list.length }} 条</text>
@@ -327,10 +302,10 @@ onPullDownRefresh(() => {
         </view>
       </view>
 
-      <!-- 未登录提示 -->
-      <view v-if="!isLoggedIn" class="login-tip">
+      <!-- 未登录提示（仅公文通需要） -->
+      <view v-if="isAnnouncement && !isLoggedIn" class="login-tip">
         <t-icon name="info-circle" size="32rpx" />
-        <text>登录后可查看最新内容</text>
+        <text>登录后可查看公文通内容</text>
       </view>
 
       <!-- 加载状态 -->
@@ -341,7 +316,12 @@ onPullDownRefresh(() => {
 
       <!-- 列表 -->
       <view v-else class="list">
-        <InfoListItem v-for="item in list" :key="item.id" :item="item" @tap="handleItemClick(item)" />
+        <InfoListItem
+          v-for="item in list"
+          :key="(item.channelId || '') + ':' + item.id"
+          :item="item"
+          @tap="handleItemClick(item)"
+        />
 
         <view v-if="loading && list.length > 0" class="load-more">
           <t-loading theme="circular" size="40rpx" />
@@ -356,6 +336,13 @@ onPullDownRefresh(() => {
       </view>
     </view>
 
+    <!-- 信息来源弹窗 -->
+    <SourcePicker
+      :visible="showSourcePicker"
+      :channels="channels"
+      @select="handleSourceSelect"
+      @close="showSourcePicker = false"
+    />
   </PageLayout>
 </template>
 
@@ -365,27 +352,55 @@ onPullDownRefresh(() => {
   background: #f5f5f5;
 }
 
-.channel-tabs-scroll {
+/* 信息来源选择器 */
+.source-selector {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 20rpx 32rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #eee;
+}
+
+.source-label {
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #0052d9;
+}
+
+/* Tab 栏 */
+.tab-bar {
+  display: flex;
+  background: #fff;
+  border-bottom: 1rpx solid #eee;
+
+  &.sub {
+    display: inline-flex;
+    min-width: 100%;
+    border-bottom: none;
+  }
+}
+
+.tab-bar-scroll {
   background: #fff;
   border-bottom: 1rpx solid #eee;
   white-space: nowrap;
 }
 
-.channel-tabs {
-  display: inline-flex;
-  min-width: 100%;
-}
-
-.channel-tab {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24rpx 32rpx;
+.tab-item {
+  flex: 1;
+  text-align: center;
+  padding: 24rpx 0;
   font-size: 28rpx;
   color: #666;
   position: relative;
   transition: color 0.2s;
-  flex-shrink: 0;
+
+  &.sub {
+    flex: none;
+    padding: 20rpx 28rpx;
+    font-size: 26rpx;
+  }
 
   &.active {
     color: #0052d9;
@@ -405,47 +420,7 @@ onPullDownRefresh(() => {
   }
 }
 
-.add-tab {
-  color: #999;
-  padding: 24rpx 28rpx;
-}
-
-.add-icon {
-  font-size: 36rpx;
-  font-weight: 300;
-}
-
-.unread-dot {
-  position: absolute;
-  top: 16rpx;
-  right: 12rpx;
-  width: 12rpx;
-  height: 12rpx;
-  background: #fa5151;
-  border-radius: 50%;
-}
-
-
-.search-header {
-  display: flex;
-  align-items: center;
-  padding: 20rpx 24rpx;
-  background: #fff;
-  gap: 16rpx;
-}
-
-.search-box {
-  flex: 1;
-}
-
-.search-btn {
-  padding: 16rpx 24rpx;
-  background: #0052d9;
-  color: #fff;
-  border-radius: 8rpx;
-  font-size: 26rpx;
-}
-
+/* 公文通分类 */
 .category-scroll {
   background: #fff;
   border-bottom: 1rpx solid #eee;
@@ -471,6 +446,27 @@ onPullDownRefresh(() => {
     color: #fff;
     background: #0052d9;
   }
+}
+
+/* 搜索 */
+.search-header {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 24rpx;
+  background: #fff;
+  gap: 16rpx;
+}
+
+.search-box {
+  flex: 1;
+}
+
+.search-btn {
+  padding: 16rpx 24rpx;
+  background: #0052d9;
+  color: #fff;
+  border-radius: 8rpx;
+  font-size: 26rpx;
 }
 
 .search-mode-tip {

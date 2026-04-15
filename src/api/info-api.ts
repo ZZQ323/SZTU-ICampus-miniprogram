@@ -16,6 +16,7 @@ import type {
     InfoItemMeta,
     InfoContent,
     InfoListParams,
+    FeedParams,
     MarkReadParams,
 } from '@/types/info'
 
@@ -45,7 +46,22 @@ export const infoApi = {
     // ==================== 内容列表 ====================
 
     /**
-     * 获取信息列表
+     * 全局 Feed 查询（跨频道聚合，三维筛选）
+     */
+    getFeed: (params: FeedParams) =>
+        request.get<InfoListResult>('/info/v1/feed', {
+            params: {
+                sourceOrg: params.sourceOrg || undefined,
+                channelId: params.channelId || undefined,
+                contentType: params.contentType || undefined,
+                subContentType: params.subContentType || undefined,
+                page: params.page || 1,
+                pageSize: params.pageSize || 20,
+            }
+        }),
+
+    /**
+     * 获取信息列表（按频道，公文通用）
      */
     getList: (params: InfoListParams) =>
         request.get<InfoListResult>('/info/v1/list', {
