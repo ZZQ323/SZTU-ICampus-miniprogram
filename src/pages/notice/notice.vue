@@ -354,7 +354,7 @@ onPullDownRefresh(() => {
     />
 
     <!-- 回到顶部 -->
-    <t-back-top />
+    <t-back-top :fixed="true" text="顶部" />
   </PageLayout>
 </template>
 
