@@ -30,19 +30,20 @@
         </view>
       </view>
 
-      <!-- 学期输入面板 -->
-      <view v-if="showSemesterInput" class="input-panel">
-        <view class="input-row">
-          <text class="input-label">学期</text>
-          <t-input :value="semesterInput" placeholder="如 2025-2026-2"
-            @change="(e: any) => semesterInput = extractString(e)" />
-        </view>
-        <t-button theme="primary" size="small" block @click="handleQuery">查询</t-button>
+      <!-- 学期选择面板（自动生成学期列表） -->
+      <view v-if="showSemesterInput" class="semester-panel">
+        <scroll-view scroll-y class="semester-scroll">
+          <view v-for="sem in semesterList" :key="sem"
+            :class="['semester-item', { active: currentSemester === sem }]"
+            @tap="handleSemesterChange(sem)">
+            {{ sem }}
+          </view>
+        </scroll-view>
       </view>
 
-      <!-- 周次快速选择 -->
+      <!-- 周次快速选择（根据学期类型限制数量） -->
       <view v-if="showWeekPicker" class="week-picker">
-        <view v-for="w in 25" :key="w"
+        <view v-for="w in maxWeeks" :key="w"
           :class="['week-item', { active: currentWeek === w }]"
           @tap="handleWeekChange(w)">
           {{ w }}
@@ -147,18 +148,41 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 import { useSchedule, type CourseInfo } from '@/hooks/useSchedule'
-import { extractString, extractBoolean } from '@/utils/tdesign'
+import { extractBoolean } from '@/utils/tdesign'
 
 const { ensure } = useAuthGuard()
 const {
     courses, currentWeek, currentSemester, loading, error,
     weekDays, fetchSchedule, getCourseColor, isToday,
 } = useSchedule()
+
+// ==================== 学期自动生成 ====================
+
+/** 生成学期列表：从当前年份倒推到 2017 */
+const semesterList = computed(() => {
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const list: string[] = []
+    for (let year = currentYear; year >= 2017; year--) {
+        list.push(`${year}-${year + 1}-3`)
+        list.push(`${year}-${year + 1}-2`)
+        list.push(`${year}-${year + 1}-1`)
+    }
+    return list
+})
+
+/** 周次上限：第3学期（暑期）最多10周，普通学期22周 */
+const maxWeeks = computed(() => {
+    if (currentSemester.value && currentSemester.value.endsWith('-3')) {
+        return 10
+    }
+    return 22
+})
 
 // ==================== 课表行配置（对应后端 CrouseParser 的 rowIndex） ====================
 
@@ -191,7 +215,6 @@ const showSemesterInput = ref(false)
 const showWeekPicker = ref(false)
 const showDetail = ref(false)
 const selectedCourse = ref<CourseInfo | null>(null)
-const semesterInput = ref('')
 const scrollLeft = ref(0)
 
 // ==================== 课程查找 ====================
@@ -220,11 +243,11 @@ async function handleRefresh() {
     await fetchSchedule()
 }
 
-async function handleQuery() {
-    const semester = semesterInput.value || undefined
-    if (semester) currentSemester.value = semester
+async function handleSemesterChange(semester: string) {
+    currentSemester.value = semester
+    currentWeek.value = 1 // 切换学期时重置为第1周
     showSemesterInput.value = false
-    await fetchSchedule(undefined, semester)
+    await fetchSchedule('1', semester)
 }
 
 async function handleWeekChange(week: number) {
@@ -278,26 +301,33 @@ onShow(async () => {
     color: #666;
 }
 
-// ==================== 输入面板 ====================
+// ==================== 学期选择面板 ====================
 
-.input-panel {
-    padding: 16rpx 20rpx;
+.semester-panel {
     background: #fff;
     border-bottom: 1rpx solid #eee;
 }
 
-.input-row {
-    display: flex;
-    align-items: center;
-    gap: 12rpx;
-    margin-bottom: 12rpx;
+.semester-scroll {
+    max-height: 500rpx;
+    padding: 8rpx 0;
 }
 
-.input-label {
-    font-size: 24rpx;
-    color: #666;
-    width: 60rpx;
-    flex-shrink: 0;
+.semester-item {
+    padding: 20rpx 32rpx;
+    font-size: 28rpx;
+    color: #333;
+    border-bottom: 1rpx solid #f5f5f5;
+
+    &.active {
+        color: #1565c0;
+        font-weight: 600;
+        background: #e3f2fd;
+    }
+
+    &:active {
+        background: #f0f0f0;
+    }
 }
 
 // ==================== 周次选择 ====================

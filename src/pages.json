@@ -44,6 +44,12 @@
       }
     },
     {
+      "path": "pages/common/webview/webview",
+      "style": {
+        "navigationBarTitleText": ""
+      }
+    },
+    {
       "path": "pages/calendar/calendar",
       "style": {
         "navigationBarTitleText": "活动日历"
