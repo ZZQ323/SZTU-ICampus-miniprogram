@@ -293,7 +293,7 @@ onLoad((options) => {
             </view>
 
             <!-- 回到顶部 -->
-            <t-back-top />
+            <t-back-top :fixed="true" text="顶部" />
 
             <!-- ⭐ 底部固定栏：导航 + 分享（不再被内容挤压） -->
             <view class="bottom-bar">
