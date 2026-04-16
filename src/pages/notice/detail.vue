@@ -290,8 +290,11 @@ onLoad((options) => {
                         <t-icon name="download" size="36rpx" class="download-icon" />
                     </view>
                 </view>
+            </view>
 
-                <!-- 上一篇/下一篇（基于缓存列表） -->
+            <!-- ⭐ 底部固定栏：导航 + 分享（不再被内容挤压） -->
+            <view class="bottom-bar">
+                <!-- 上一篇/下一篇 -->
                 <view v-if="navList.length > 0" class="navigation">
                     <view :class="['nav-item', 'nav-prev', { disabled: !prevItem }]"
                         @click="navigateTo(prevItem)">
@@ -313,13 +316,13 @@ onLoad((options) => {
                         <t-icon name="chevron-right" size="32rpx" />
                     </view>
                 </view>
-            </view>
 
-            <!-- 底部操作栏 -->
-            <view class="footer">
-                <view class="footer-btn" @click="handleShare">
-                    <t-icon name="share" size="44rpx" />
-                    <text>分享</text>
+                <!-- 分享 -->
+                <view class="footer-actions">
+                    <view class="footer-btn" @click="handleShare">
+                        <t-icon name="share" size="40rpx" />
+                        <text>分享</text>
+                    </view>
                 </view>
             </view>
         </view>
@@ -330,7 +333,7 @@ onLoad((options) => {
 .detail-page {
     min-height: 100vh;
     background: #fff;
-    padding-bottom: 120rpx;
+    padding-bottom: 280rpx; // 留出底部固定栏空间（导航 + 分享）
 }
 
 .loading-wrap {
@@ -438,21 +441,31 @@ onLoad((options) => {
     color: #0052d9;
 }
 
-// 上一篇/下一篇
+// ⭐ 底部固定栏（导航 + 分享合并，不会被长内容遮挡）
+.bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border-top: 1rpx solid #eee;
+    padding-bottom: env(safe-area-inset-bottom);
+    z-index: 10;
+}
+
 .navigation {
     display: flex;
     align-items: stretch;
-    padding: 32rpx 0;
-    border-top: 1rpx solid #eee;
-    min-height: 100rpx;
+    padding: 16rpx 24rpx;
+    border-bottom: 1rpx solid #f0f0f0;
 }
 
 .nav-item {
     flex: 1;
     display: flex;
     align-items: center;
-    gap: 12rpx;
-    padding: 16rpx;
+    gap: 8rpx;
+    padding: 8rpx;
     min-width: 0;
 
     &.disabled {
@@ -474,14 +487,14 @@ onLoad((options) => {
 
 .nav-label {
     display: block;
-    font-size: 22rpx;
+    font-size: 20rpx;
     color: #999;
-    margin-bottom: 8rpx;
+    margin-bottom: 4rpx;
 }
 
 .nav-title {
     display: block;
-    font-size: 24rpx;
+    font-size: 22rpx;
     color: #333;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -490,30 +503,22 @@ onLoad((options) => {
 
 .nav-empty {
     display: block;
-    font-size: 24rpx;
+    font-size: 22rpx;
     color: #ccc;
 }
 
-// 底部操作栏
-.footer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+.footer-actions {
     display: flex;
     justify-content: center;
-    padding: 20rpx 32rpx;
-    padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
-    background: #fff;
-    border-top: 1rpx solid #eee;
+    padding: 12rpx 0;
 }
 
 .footer-btn {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 4rpx;
-    padding: 12rpx 32rpx;
+    gap: 8rpx;
+    padding: 8rpx 32rpx;
     color: #666;
     font-size: 22rpx;
 }
