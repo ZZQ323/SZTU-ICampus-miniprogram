@@ -187,6 +187,15 @@ function handleItemClick(item: InfoItemMeta) {
     return
   }
 
+  // ⭐ 缓存当前列表到 storage，供 detail.vue 实现上一篇/下一篇导航
+  const navList = list.value.map(i => ({
+    id: i.id,
+    title: i.title,
+    channelId: i.channelId || 'announcement',
+    categoryCode: i.categoryCode || '',
+  }))
+  uni.setStorageSync('detail_nav_list', JSON.stringify(navList))
+
   const channelId = item.channelId || 'announcement'
   uni.navigateTo({
     url: `/pages/notice/detail?id=${item.id}&channelId=${channelId}&category=${item.categoryCode || ''}`

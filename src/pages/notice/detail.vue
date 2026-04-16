@@ -1,10 +1,15 @@
 <script setup lang="ts">
 /**
  * 公告详情页
- * 
+ *
  * 文件：src/pages/notice/detail.vue
+ *
+ * ⭐ 改动：
+ * 1. rich-text 排版：前端 HTML 预处理注入 inline style（小程序不支持 :deep 穿透）
+ * 2. 上下篇：基于 notice.vue 缓存的列表导航，不依赖后端 prev/next 解析
+ * 3. 公文通需要登录才能查看
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
 import { useUserStore } from '@/store/modules/user'
@@ -27,38 +32,117 @@ const loading = ref(true)
 const content = ref<InfoContent | null>(null)
 const error = ref('')
 
+// ==================== 列表导航（上一篇/下一篇） ====================
+
+interface NavItem { id: string; title: string; channelId: string; categoryCode: string }
+const navList = ref<NavItem[]>([])
+
+const currentIndex = computed(() => navList.value.findIndex(i => i.id === id.value))
+const prevItem = computed(() => currentIndex.value > 0 ? navList.value[currentIndex.value - 1] : null)
+const nextItem = computed(() =>
+    currentIndex.value >= 0 && currentIndex.value < navList.value.length - 1
+        ? navList.value[currentIndex.value + 1] : null
+)
+
 // ==================== 计算属性 ====================
 
 const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 
-// ==================== Mock 数据 ====================
+/** 是否是公文通频道（需要登录） */
+const isAnnouncement = computed(() => channelId.value === 'announcement')
 
-const mockContent: InfoContent = {
-    id: '50731',
-    title: '关于2025年春季学期教学安排的通知',
-    author: '教务处',
-    publishTime: '2025年01月15日 10:30',
-    content: `
-    <p>各学院、各部门：</p>
-    <p>根据学校工作安排，现将2025年春季学期教学工作有关事项通知如下：</p>
-    <p><strong>一、开学时间</strong></p>
-    <p>2025年春季学期定于2月17日（农历正月十九，星期一）正式上课。</p>
-    <p><strong>二、学生返校</strong></p>
-    <p>学生于2月15日-16日返校报到注册。</p>
-    <p><strong>三、教学准备</strong></p>
-    <p>请各学院做好开学前的教学准备工作，确保教学工作顺利进行。</p>
-    <p>特此通知。</p>
-    <p style="text-align: right;">教务处</p>
-    <p style="text-align: right;">2025年1月15日</p>
-  `,
-    attachments: [
-        { name: '2025年春季学期校历.pdf', url: '#' },
-        { name: '教学工作安排表.xlsx', url: '#' }
-    ],
-    prevId: '50730',
-    prevTitle: '关于春节假期值班安排的通知',
-    nextId: '50732',
-    nextTitle: '关于举办学术讲座的通知'
+/** 经过标准化处理的正文 HTML（注入 inline style 供 rich-text 渲染） */
+const normalizedContent = computed(() => {
+    if (!content.value?.content) return ''
+    return normalizeHtml(content.value.content)
+})
+
+// ==================== HTML 预处理（小程序 rich-text 专用） ====================
+
+/**
+ * 标准化 HTML：为 rich-text 组件注入 inline style
+ *
+ * 小程序的 rich-text 不支持外部 CSS 穿透（:deep 无效），
+ * 不同来源的公文自带不同的 font-size/line-height，
+ * 这里统一注入标准排版样式，确保所有来源的文章显示一致。
+ */
+function normalizeHtml(html: string): string {
+    if (!html) return ''
+
+    const pStyle = 'margin:0 0 16px 0;font-size:15px;line-height:1.8;color:#333;word-break:break-all;'
+    const imgStyle = 'max-width:100%;height:auto;display:block;margin:8px 0;'
+    const h1Style = 'font-size:20px;font-weight:bold;color:#333;margin:20px 0 12px 0;line-height:1.4;'
+    const h2Style = 'font-size:18px;font-weight:bold;color:#333;margin:16px 0 10px 0;line-height:1.4;'
+    const h3Style = 'font-size:16px;font-weight:bold;color:#333;margin:14px 0 8px 0;line-height:1.4;'
+    const tableStyle = 'width:100%;border-collapse:collapse;margin:12px 0;font-size:14px;'
+    const tdStyle = 'border:1px solid #ddd;padding:8px;font-size:14px;line-height:1.6;word-break:break-all;'
+    const spanBaseStyle = 'font-size:15px;line-height:1.8;'
+
+    let result = html
+
+    // 图片：移除固定宽高，注入响应式样式
+    result = result.replace(/<img([^>]*?)>/gi, (match, attrs) => {
+        let cleaned = attrs
+            .replace(/\s*width\s*=\s*["'][^"']*["']/gi, '')
+            .replace(/\s*height\s*=\s*["'][^"']*["']/gi, '')
+        if (/style\s*=\s*["']/i.test(cleaned)) {
+            cleaned = cleaned.replace(
+                /style\s*=\s*["']([^"']*)["']/i,
+                (_: string, s: string) => {
+                    const c = s.replace(/width\s*:[^;]*(;|$)/gi, '').replace(/height\s*:[^;]*(;|$)/gi, '')
+                    return `style="${c};${imgStyle}"`
+                }
+            )
+        } else {
+            cleaned += ` style="${imgStyle}"`
+        }
+        return `<img${cleaned}>`
+    })
+
+    // p 标签：统一字体和间距
+    result = result.replace(/<p([^>]*?)>/gi, (match, attrs) => {
+        if (/style\s*=\s*["']/i.test(attrs)) {
+            return match.replace(
+                /style\s*=\s*["']([^"']*)["']/i,
+                (_: string, s: string) => `style="${s};font-size:15px;line-height:1.8;color:#333;"`
+            )
+        }
+        return `<p${attrs} style="${pStyle}">`
+    })
+
+    // span 标签：覆盖来源自带的 font-size（统一为 15px）
+    result = result.replace(/<span([^>]*?)>/gi, (match, attrs) => {
+        if (/style\s*=\s*["']/i.test(attrs)) {
+            return match.replace(
+                /style\s*=\s*["']([^"']*)["']/i,
+                (_: string, s: string) => {
+                    const cleaned = s
+                        .replace(/font-size\s*:[^;]*(;|$)/gi, '')
+                        .replace(/font-family\s*:[^;]*(;|$)/gi, '')
+                    return `style="${cleaned};${spanBaseStyle}"`
+                }
+            )
+        }
+        return match
+    })
+
+    // 标题标签
+    result = result.replace(/<h1([^>]*?)>/gi, (_, attrs) => `<h1${attrs} style="${h1Style}">`)
+    result = result.replace(/<h2([^>]*?)>/gi, (_, attrs) => `<h2${attrs} style="${h2Style}">`)
+    result = result.replace(/<h3([^>]*?)>/gi, (_, attrs) => `<h3${attrs} style="${h3Style}">`)
+
+    // 表格
+    result = result.replace(/<table([^>]*?)>/gi, (_, attrs) => `<table${attrs} style="${tableStyle}">`)
+    result = result.replace(/<td([^>]*?)>/gi, (_, attrs) => {
+        if (/style\s*=\s*["']/i.test(attrs)) return `<td${attrs}>`
+        return `<td${attrs} style="${tdStyle}">`
+    })
+    result = result.replace(/<th([^>]*?)>/gi, (_, attrs) => {
+        if (/style\s*=\s*["']/i.test(attrs)) return `<th${attrs}>`
+        return `<th${attrs} style="${tdStyle}font-weight:bold;background:#f5f5f5;">`
+    })
+
+    return result
 }
 
 // ==================== 方法 ====================
@@ -70,9 +154,9 @@ async function fetchDetail() {
         return
     }
 
-    // 未登录显示 mock 数据
-    if (!isLoggedIn.value) {
-        content.value = { ...mockContent, id: id.value }
+    // 公文通需要登录
+    if (isAnnouncement.value && !isLoggedIn.value) {
+        error.value = '公文通内容需要登录后查看'
         loading.value = false
         return
     }
@@ -94,11 +178,11 @@ async function fetchDetail() {
     }
 }
 
-/** 跳转上一篇/下一篇 */
-function navigateTo(targetId: string | undefined, targetCategory?: string) {
-    if (!targetId) return
+/** 跳转上一篇/下一篇（基于缓存列表） */
+function navigateTo(item: NavItem | null) {
+    if (!item) return
     uni.redirectTo({
-        url: `/pages/notice/detail?id=${targetId}&channelId=${channelId.value}&category=${targetCategory || category.value}`
+        url: `/pages/notice/detail?id=${item.id}&channelId=${item.channelId}&category=${item.categoryCode}`
     })
 }
 
@@ -118,9 +202,7 @@ function downloadAttachment(url: string, name: string) {
                 uni.openDocument({
                     filePath: res.tempFilePath,
                     showMenu: true,
-                    success: () => {
-                        uni.hideLoading()
-                    },
+                    success: () => uni.hideLoading(),
                     fail: () => {
                         uni.hideLoading()
                         uni.showToast({ title: '打开失败', icon: 'error' })
@@ -138,9 +220,7 @@ function downloadAttachment(url: string, name: string) {
     })
 }
 
-/** 分享 */
 function handleShare() {
-    // 小程序可以使用 onShareAppMessage
     uni.showToast({ title: '请点击右上角分享', icon: 'none' })
 }
 
@@ -149,7 +229,14 @@ function handleShare() {
 onLoad((options) => {
     if (options?.id) id.value = options.id
     if (options?.category) category.value = options.category
-    if (options?.channelId) channelId.value = options.channelId  // ⭐ 新增
+    if (options?.channelId) channelId.value = options.channelId
+
+    // 读取列表缓存（上一篇/下一篇导航用）
+    try {
+        const cached = uni.getStorageSync('detail_nav_list')
+        if (cached) navList.value = JSON.parse(cached)
+    } catch { /* ignore */ }
+
     fetchDetail()
 })
 </script>
@@ -167,29 +254,27 @@ onLoad((options) => {
             <view v-else-if="error" class="error-wrap">
                 <t-icon name="close-circle" size="120rpx" color="#fa5151" />
                 <text class="error-text">{{ error }}</text>
-                <t-button theme="primary" size="small" @click="fetchDetail">重试</t-button>
+                <t-button v-if="isAnnouncement && !isLoggedIn" theme="primary" size="small"
+                    @click="() => uni.navigateTo({ url: '/pages/common/login/login' })">
+                    去登录
+                </t-button>
+                <t-button v-else theme="primary" size="small" @click="fetchDetail">重试</t-button>
             </view>
 
             <!-- 内容 -->
             <view v-else-if="content" class="content-wrap">
-                <!-- 未登录提示 -->
-                <view v-if="!isLoggedIn" class="login-tip">
-                    <t-icon name="info-circle" size="32rpx" />
-                    <text>登录后可查看完整内容和下载附件</text>
-                </view>
-
                 <!-- 标题区域 -->
                 <view class="header">
-                    <view class="title">{{ content.title }}</view>
+                    <view v-if="content.title" class="title">{{ content.title }}</view>
                     <view class="meta">
-                        <text class="author">{{ content.author }}</text>
-                        <text class="time">{{ content.publishTime }}</text>
+                        <text v-if="content.author" class="author">{{ content.author }}</text>
+                        <text v-if="content.publishTime" class="time">{{ content.publishTime }}</text>
                     </view>
                 </view>
 
-                <!-- 正文内容 -->
+                <!-- 正文内容（使用预处理后的 HTML） -->
                 <view class="article">
-                    <rich-text :nodes="content.content" />
+                    <rich-text :nodes="normalizedContent" />
                 </view>
 
                 <!-- 附件 -->
@@ -206,20 +291,24 @@ onLoad((options) => {
                     </view>
                 </view>
 
-                <!-- 上一篇/下一篇 -->
-                <view class="navigation">
-                    <view :class="['nav-item', { disabled: !content.prevId }]" @click="navigateTo(content.prevId)">
+                <!-- 上一篇/下一篇（基于缓存列表） -->
+                <view v-if="navList.length > 0" class="navigation">
+                    <view :class="['nav-item', 'nav-prev', { disabled: !prevItem }]"
+                        @click="navigateTo(prevItem)">
                         <t-icon name="chevron-left" size="32rpx" />
                         <view class="nav-content">
                             <text class="nav-label">上一篇</text>
-                            <text class="nav-title">{{ content.prevTitle || '没有了' }}</text>
+                            <text v-if="prevItem" class="nav-title">{{ prevItem.title }}</text>
+                            <text v-else class="nav-empty">没有了</text>
                         </view>
                     </view>
                     <view class="nav-divider" />
-                    <view :class="['nav-item', { disabled: !content.nextId }]" @click="navigateTo(content.nextId)">
+                    <view :class="['nav-item', 'nav-next', { disabled: !nextItem }]"
+                        @click="navigateTo(nextItem)">
                         <view class="nav-content" style="text-align: right;">
                             <text class="nav-label">下一篇</text>
-                            <text class="nav-title">{{ content.nextTitle || '没有了' }}</text>
+                            <text v-if="nextItem" class="nav-title">{{ nextItem.title }}</text>
+                            <text v-else class="nav-empty">没有了</text>
                         </view>
                         <t-icon name="chevron-right" size="32rpx" />
                     </view>
@@ -241,10 +330,9 @@ onLoad((options) => {
 .detail-page {
     min-height: 100vh;
     background: #fff;
-    padding-bottom: 120rpx; // 留出底部操作栏空间
+    padding-bottom: 120rpx;
 }
 
-// 加载状态
 .loading-wrap {
     display: flex;
     flex-direction: column;
@@ -259,7 +347,6 @@ onLoad((options) => {
     font-size: 26rpx;
 }
 
-// 错误状态
 .error-wrap {
     display: flex;
     flex-direction: column;
@@ -272,21 +359,10 @@ onLoad((options) => {
 .error-text {
     color: #666;
     font-size: 28rpx;
+    text-align: center;
+    padding: 0 48rpx;
 }
 
-// 未登录提示
-.login-tip {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8rpx;
-    padding: 16rpx;
-    background: #fff3e0;
-    color: #f57c00;
-    font-size: 24rpx;
-}
-
-// 内容区域
 .content-wrap {
     padding: 0 32rpx;
 }
@@ -298,10 +374,10 @@ onLoad((options) => {
 }
 
 .title {
-    font-size: 36rpx;
+    font-size: 38rpx;
     font-weight: 600;
     color: #333;
-    line-height: 1.5;
+    line-height: 1.4;
     margin-bottom: 24rpx;
 }
 
@@ -317,32 +393,10 @@ onLoad((options) => {
     color: #0052d9;
 }
 
-// 正文
+// 正文容器（排版由 normalizeHtml 的 inline style 控制）
 .article {
     padding: 32rpx 0;
-    font-size: 30rpx;
-    line-height: 1.8;
-    color: #333;
-
-    :deep(p) {
-        margin-bottom: 24rpx;
-    }
-
-    :deep(img) {
-        max-width: 100%;
-        height: auto;
-    }
-
-    :deep(table) {
-        width: 100%;
-        border-collapse: collapse;
-
-        td,
-        th {
-            border: 1rpx solid #ddd;
-            padding: 12rpx;
-        }
-    }
+    overflow: hidden;
 }
 
 // 附件
@@ -390,6 +444,7 @@ onLoad((options) => {
     align-items: stretch;
     padding: 32rpx 0;
     border-top: 1rpx solid #eee;
+    min-height: 100rpx;
 }
 
 .nav-item {
@@ -398,9 +453,10 @@ onLoad((options) => {
     align-items: center;
     gap: 12rpx;
     padding: 16rpx;
+    min-width: 0;
 
     &.disabled {
-        opacity: 0.5;
+        opacity: 0.4;
         pointer-events: none;
     }
 }
@@ -408,6 +464,7 @@ onLoad((options) => {
 .nav-divider {
     width: 1rpx;
     background: #eee;
+    flex-shrink: 0;
 }
 
 .nav-content {
@@ -424,11 +481,17 @@ onLoad((options) => {
 
 .nav-title {
     display: block;
-    font-size: 26rpx;
+    font-size: 24rpx;
     color: #333;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.nav-empty {
+    display: block;
+    font-size: 24rpx;
+    color: #ccc;
 }
 
 // 底部操作栏
