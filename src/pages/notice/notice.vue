@@ -180,10 +180,21 @@ function handleClearSearch() {
 
 function handleItemClick(item: InfoItemMeta) {
   if (item.extra && item.extra.includes('"external"')) {
-    uni.setClipboardData({
-      data: item.url,
-      success: () => uni.showToast({ title: '链接已复制', icon: 'success' })
-    })
+    // 提取外链 URL（去掉 EXTERNAL: 前缀）
+    const externalUrl = item.url?.replace(/^EXTERNAL:/, '') || ''
+
+    if (externalUrl.includes('mp.weixin.qq.com')) {
+      // 微信公众号文章 → 小程序内 web-view 打开
+      uni.navigateTo({
+        url: `/pages/common/webview/webview?url=${encodeURIComponent(externalUrl)}`
+      })
+    } else {
+      // 其他外链 → 复制链接
+      uni.setClipboardData({
+        data: externalUrl,
+        success: () => uni.showToast({ title: '链接已复制', icon: 'success' })
+      })
+    }
     return
   }
 
