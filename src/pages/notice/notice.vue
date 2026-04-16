@@ -352,6 +352,9 @@ onPullDownRefresh(() => {
       @select="handleSourceSelect"
       @close="showSourcePicker = false"
     />
+
+    <!-- 回到顶部 -->
+    <t-back-top />
   </PageLayout>
 </template>
 

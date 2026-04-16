@@ -292,6 +292,9 @@ onLoad((options) => {
                 </view>
             </view>
 
+            <!-- 回到顶部 -->
+            <t-back-top />
+
             <!-- ⭐ 底部固定栏：导航 + 分享（不再被内容挤压） -->
             <view class="bottom-bar">
                 <!-- 上一篇/下一篇 -->
