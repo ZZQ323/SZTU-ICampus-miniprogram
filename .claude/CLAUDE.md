@@ -41,7 +41,32 @@ Cookie 在前端持久化，是否登录只有学校后端说了算。有 cookie
 loginTypes（登录方式列表）可以从 URL 参数、Pinia 缓存快速获取。但 cookies 必须独立保证新鲜——登录页 onLoad 必须始终刷新或初始化 cookies，不能因为 loginTypes 已获取就跳过。SMS 登录因为 getSms() 创建新 session 碰巧不受影响，但密码登录会因过期 cookies 失败。
 
 ### 5. 后端不做持久化
-后端只用 Redis 缓存，没有 MySQL。前端不要假设后端有持久化数据。
+后端只用 Redis 缓存，没有 MySQL。前端不要假设后端有持久化数据。Redis 暂存文章摘要方便搜索，全量搜索太吃力。
+
+### 6. 批判性思考
+用户提出的想法和设计，都需要用 Plan 模式去质疑和审视。一个人说的总是会有纰漏，AI 应当做批判性分析。
+
+## 学校服务的本质
+
+学校服务按 Cookie 需求分三类：
+- **无需 Cookie**：学院部门公开信息，直接访问
+- **需要网关 Cookie**：公文通，登录 WebVPN 网关后获取
+- **需要教务系统 Cookie**：课表等，需处理教务系统的重定向授权链
+
+处理重定向就是被授权 —— 获得什么 cookie，就能用什么功能。
+
+## 会话刷新的设计考虑
+
+"刷新会话"按钮存在的原因：
+1. **学校网页加载慢**：返回了登录成功状态但没返回个人信息 —— 学校网站的问题。核心逻辑在 `refreshSession` 里解析个人信息的部分
+2. **用户反复登录**：快速操作导致"会话过期"，手动刷新就能看到信息
+3. **多设备切换**：挂机后回来"会话过期"
+
+以上所有场景在浏览器里就是"点刷新"，在小程序里就是请求 `/auth/v1/session/refresh`，不需要清空 cookie 重新 init。
+
+## 轮询与推送
+
+项目采用 **轮询学校网页 → 爬取 → WSS 推送** 的方式，全程不使用微信小程序的 openId。后端用自研 SmartHttp 代替 Playwright 解决并发问题。
 
 ## 项目结构
 
@@ -66,18 +91,31 @@ src/
 │   ├── websocket.ts      # WsClient（uni.connectSocket）
 │   ├── tdesign.ts        # TDesign 事件提取工具
 │   ├── storage.ts        # 本地存储（用户信息）
-│   └── navigate.ts       # 路由导航
+│   ├── navigate.ts       # 路由导航
+│   └── date.ts           # 日期格式化
 ├── components/
-│   ├── PageLayout.vue    # 页面外壳（遮罩+错误弹窗）
-│   └── FloatingNotification.vue
+│   ├── PageLayout.vue    # 页面外壳（认证遮罩+错误弹窗）
+│   ├── FloatingNotification.vue
+│   ├── BadgeDot.vue
+│   ├── common/NewMessageToast.vue
+│   └── info/
+│       ├── InfoListItem.vue   # 文章列表项
+│       └── SourcePicker.vue   # 信息源选择器
 ├── pages/
-│   ├── home/home.vue
-│   ├── schedule/schedule.vue     # 强制登录
-│   ├── notice/notice.vue         # 信息流（多频道）
-│   ├── notice/detail.vue         # 文章详情
-│   ├── calendar/calendar.vue
-│   └── common/login/login.vue    # SMS + 密码登录
+│   ├── home/home.vue                    # 首页（不要求登录）
+│   ├── schedule/schedule.vue            # 课表（强制登录）
+│   ├── notice/notice.vue                # 信息流（多频道三维筛选）
+│   ├── notice/detail.vue                # 文章详情
+│   ├── notice/subscribe.vue             # 频道订阅管理
+│   ├── calendar/calendar.vue            # 活动日历
+│   └── common/login/login.vue           # SMS + 密码登录
 └── types/                # TypeScript 类型
+    ├── auth.ts
+    ├── info.ts
+    ├── schedule.ts
+    ├── notice.ts
+    ├── calendar.ts
+    └── ws-types.ts
 ```
 
 ## 认证流程
@@ -87,6 +125,20 @@ src/
 3. 登录：`initSession()` → `requestSms()` → `loginSchool()` → 自动存 cookies
 4. 刷新：`refreshSession()` —— 不清 cookie，只续期
 5. 重置：`resetSession()` —— 清除一切，重新 init
+
+## 三层分治未读管理（info store）
+
+```
+Layer 1: serverLatestId  - 服务器最新 ID（API / WS 推送）
+Layer 2: lastReadId      - 已读位置（本地持久化）
+Layer 3: readIds Set     - 单条已读集合（本地持久化，上限 200）
+
+unreadCount = max(0, min(serverLatestId - lastReadId, 99))
+```
+
+频道状态持久化到 `uni.storage`，存储 key：
+- `info_last_read_{channelId}` - 已读位置
+- `info_read_ids_{channelId}` - 已读 ID 集合
 
 ## HTTP 配置
 
@@ -98,7 +150,30 @@ src/
 
 - 登录后自动连接，登出后断开
 - 指数退避重连（3s, 6s, 12s...），最多 5 次
-- 消息类型：`NEW_ANNOUNCEMENTS`, `ANNOUNCEMENT_DATA`, `AUTH_REQUIRED` 等
+- 消息类型：`NEW_ANNOUNCEMENTS`, `ANNOUNCEMENT_DATA`, `AUTH_REQUIRED`, `NEW_CONTENT`, `COOKIE_UPDATE` 等
+- 连接参数：`ws://host/ws?userId=XXX&topics=announcement,schedule,calendar`
+
+## 信息流三维筛选（notice.vue）
+
+1. **信息源**（dropdown）：按 sourceOrg 分组（固定频道、学校官网、职能部门、学院...）
+2. **分类**（pill 标签）：公文通下分教务/科研/行政/学工/校园
+3. **搜索**：全局关键词搜索
+
+## 页面路由
+
+```
+TabBar:
+  /pages/home/home          - 首页
+  /pages/schedule/schedule  - 课表
+  /pages/notice/notice      - 信息流
+
+子页面:
+  /pages/notice/detail      - 文章详情
+  /pages/notice/subscribe   - 订阅管理
+  /pages/common/login/login - 登录
+  /pages/calendar/calendar  - 活动日历
+  /pages/common/error/error - 错误页
+```
 
 ## 技术栈
 
