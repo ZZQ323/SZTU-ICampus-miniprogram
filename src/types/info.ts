@@ -42,8 +42,8 @@ export const SOURCE_ORG_TREE = [
     { value: 'fixed', label: '公文通' },
     { value: 'official', label: '学校' },
     { value: 'department', label: '职能部门' },
-    { value: 'support', label: '教辅科研' },
-    { value: 'league', label: '群团招就' },
+    { value: 'support', label: '教辅科研单位' },
+    { value: 'league', label: '群团组织' },
     { value: 'college', label: '学院' },
 ] as const
 
