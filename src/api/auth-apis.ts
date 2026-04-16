@@ -83,14 +83,18 @@ export const authApi = {
 
 export const academicApi = {
   /**
-   * 刷新教务 Cookie
+   * 初始化教务系统 Cookie（通过重定向链获取教务 cookie）
+   * 必须在获取课表前调用一次
    */
-  refreshCookies: () =>
-    request.post<void>('/acdm/v1/refresh/cookies'),
+  initAcademic: () =>
+    request.get<LoginResultsVo>('/acdm/v1/refresh/cookies'),
 
   /**
    * 获取课表
+   * @param week 周次（如 "1"）
+   * @param semester 学期（如 "2025-2026-2"）
+   * 不传参数则默认当前学期
    */
-  getSchedule: (params?: { week?: number; semester?: string }) =>
-    request.post<any>('/acdm/v1/schedule', { params }),
+  getSchedule: (params?: { week?: string; semester?: string }) =>
+    request.post<any>('/acdm/v1/schedule', params || {}),
 }
