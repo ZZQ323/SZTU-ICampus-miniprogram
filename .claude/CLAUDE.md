@@ -183,3 +183,32 @@ TabBar:
 - Axios + @uni-helper/axios-adapter
 - TDesign UniApp 0.5.9
 - Vite 5.4
+
+## 开发经验（前端专用）
+
+### 小程序 rich-text 排版
+
+小程序 `<rich-text>` 组件不支持 Vue scoped CSS 的 `:deep()` 穿透。所有样式必须以 inline style 注入到 HTML 标签中。前端通过 `normalizeHtml()` 函数在渲染前预处理：
+- `<p>`: 统一 font-size:15px, line-height:1.8
+- `<img>`: 移除固定 width/height, 注入 max-width:100%
+- `<span>`: 移除来源自带的 font-size/font-family
+- `<h1/h2/h3>`: 分级标题 20/18/16px
+- `<table/td>`: 边框和 padding
+
+**规则：显示问题从前端调，后端只管数据。**
+
+### 外链处理
+
+- `mp.weixin.qq.com` → 通过 `web-view` 页面在小程序内打开
+- 其他外链 → 复制链接到剪贴板
+- 后端标记外链：`ArticleUrlResolver.isExternalLink()` 给 URL 加 `EXTERNAL:` 前缀
+- 前端检测：`item.extra` 包含 `"external"` 则为外链
+
+### 上下篇导航
+
+不依赖后端的 `prevId/nextId` 解析（不同 CMS 的 HTML 结构各异）。前端在 `notice.vue` 点击文章时，将当前列表缓存到 `uni.storage`，`detail.vue` 从缓存中按位置切换。
+
+### 课表学期生成
+
+学期 ID 格式：`{year}-{year+1}-{1|2|3}`（如 `2025-2026-2`）。从当前年份倒推到 2017。第 3 学期（暑期）周次限制为 1-10 周，普通学期 1-22 周。
+- Vite 5.4
