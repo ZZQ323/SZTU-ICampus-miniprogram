@@ -74,7 +74,7 @@ export const useInfoStore = defineStore('info', () => {
     watch(channelStates, (newVal) => {
         for (const [channelId, state] of Object.entries(newVal)) {
             saveToStorage(STORAGE_LAST_READ(channelId), state.lastReadId)
-            saveToStorage(STORAGE_READ_IDS(channelId), Array.from(state.readIds))
+            saveToStorage(STORAGE_READ_IDS(channelId), Object.keys(state.readIds))
         }
     }, { deep: true })
 
@@ -156,21 +156,26 @@ export const useInfoStore = defineStore('info', () => {
     function markItemRead(channelId: string, id: string) {
         ensureChannelState(channelId)
         const state = channelStates.value[channelId]
-        state.readIds.add(id)
-        const idNum = Number(id) || 0
+        const key = String(id)
+        state.readIds[key] = true
+        const idNum = Number(key) || 0
         const lastReadNum = Number(state.lastReadId) || 0
-        if (idNum > lastReadNum) state.lastReadId = id
-        if (state.readIds.size > MAX_READ_IDS) {
-            const arr = Array.from(state.readIds).sort((a, b) => Number(b) - Number(a)).slice(0, MAX_READ_IDS)
-            state.readIds = new Set(arr)
+        if (idNum > lastReadNum) state.lastReadId = key
+        const keys = Object.keys(state.readIds)
+        if (keys.length > MAX_READ_IDS) {
+            const kept = keys.sort((a, b) => Number(b) - Number(a)).slice(0, MAX_READ_IDS)
+            const next: Record<string, true> = {}
+            for (const k of kept) next[k] = true
+            state.readIds = next
         }
     }
 
     function isItemRead(channelId: string, id: string): boolean {
         ensureChannelState(channelId)
         const state = channelStates.value[channelId]
-        if ((Number(id) || 0) <= (Number(state.lastReadId) || 0)) return true
-        return state.readIds.has(id)
+        const key = String(id)
+        if ((Number(key) || 0) <= (Number(state.lastReadId) || 0)) return true
+        return state.readIds[key] === true
     }
 
     function getUnreadCount(channelId: string): number {
@@ -220,10 +225,13 @@ export const useInfoStore = defineStore('info', () => {
     }
 
     function createChannelState(channelId: string): ChannelUnreadState {
+        const storedIds = loadFromStorage<string[]>(STORAGE_READ_IDS(channelId), [])
+        const readIds: Record<string, true> = {}
+        for (const id of storedIds) readIds[String(id)] = true
         return {
             serverLatestId: '0',
             lastReadId: loadFromStorage(STORAGE_LAST_READ(channelId), '0'),
-            readIds: new Set(loadFromStorage(STORAGE_READ_IDS(channelId), [])),
+            readIds,
         }
     }
 
