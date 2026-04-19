@@ -161,31 +161,50 @@ function handleTap() {
     margin-bottom: 20rpx;
     box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
     position: relative;
-    transition: all 0.2s;
+    transition: background-color 0.2s, opacity 0.2s;
 
     &:active {
         background-color: #f5f5f5;
     }
 
+    /* 已读态：整体颜色深浅拉开与未读的对比 */
     &.is-read {
+        background-color: #f7f8fa;
+        box-shadow: none;
+
         .item-title {
             color: #999;
+            font-weight: 400;
         }
-
+        .source-tag {
+            opacity: 0.55;
+        }
+        .external-badge {
+            opacity: 0.6;
+        }
+        .item-date,
+        .item-source {
+            color: #bbb;
+        }
+        .attach-icon,
+        .arrow-icon {
+            color: #ddd;
+        }
         .unread-indicator {
             display: none;
         }
     }
 }
 
+/* 未读指示器：加粗一点 + 蓝色更鲜明 */
 .unread-indicator {
     position: absolute;
     left: 0;
-    top: 0;
-    bottom: 0;
-    width: 6rpx;
+    top: 12rpx;
+    bottom: 12rpx;
+    width: 8rpx;
     background-color: #0052d9;
-    border-radius: 3rpx 0 0 3rpx;
+    border-radius: 4rpx;
 }
 
 .item-content {
@@ -234,7 +253,8 @@ function handleTap() {
 
 .item-title {
     font-size: 30rpx;
-    color: #333;
+    color: #181818;         /* 未读标题更深 */
+    font-weight: 600;        /* 未读加粗 */
     line-height: 1.5;
     margin-bottom: 12rpx;
     display: -webkit-box;
