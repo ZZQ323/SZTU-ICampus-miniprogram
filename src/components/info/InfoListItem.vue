@@ -97,7 +97,11 @@ const isReadState = computed(() => {
     if (props.isRead !== undefined) return props.isRead
     if (props.useStore === false) return false
     const channelId = props.item.channelId || 'announcement'
-    return infoStore.isItemRead(channelId, props.item.id)
+    // 显式读取 channelStates 建立依赖，确保 markItemRead 后 computed 重算
+    const chState = infoStore.channelStates[channelId]
+    void chState?.lastReadId
+    void chState?.readIds
+    return infoStore.isItemRead(channelId, String(props.item.id))
 })
 
 /** ⭐ 标签文字：组织名称·分类名称（如 "科研部·通知公告"） */

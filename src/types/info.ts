@@ -228,7 +228,8 @@ export interface MarkReadParams {
 export interface ChannelUnreadState {
     serverLatestId: string
     lastReadId: string
-    readIds: Set<string>
+    /** 单条已读 ID 映射（用普通对象，避免 Set 在小程序渲染层不追踪的问题） */
+    readIds: Record<string, true>
 }
 
 // ==================== 分类列表（兼容现有代码） ====================
