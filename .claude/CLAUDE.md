@@ -285,11 +285,35 @@ if (props.useStore === false) return false
 - 空态块 "登录后可查看课表" + 灰底 pill 按钮让用户自己决定点不点
 - `onShow` 里判 `isLoggedIn` 才 fetch
 
-### 活动识别后端联动（Step A 已就绪）
+### 活动日历（已完成，Step A+B1+B2+B3）
 
-后端 `/admin/activity/scan-recent` 已能跑，返回 JSON 含规则 + LLM 双判。前端 B1/B2 规划：
-- B1（后端）：活动索引 Service + `/activity/v1/list`
-- B2（前端）：重构 `calendar/calendar.vue`，手机原生日历那种月历 + 下方活动列表
-- B3（前端）：活动详情页的"报告错误"按钮 → 论文"人机协同"节
+后端通过 `/admin/activity/scan-recent` 手动触发抽取，LLM 判定 + Redis 索引。前端 `calendar/calendar.vue` 全新实现。
 
-**过拟合警告**：后端规则词库已基于标注数据迭代到 F1=0.92，在未见过的文章上可能下降。毕设需要单独标 50 条"test set"验证。
+**文件组织**：
+- `src/api/activity-apis.ts` —— 4 个查询 + 1 个 report
+- `src/types/activity.ts` —— ActivityItem / ActivityStats / ReportReason
+- `src/pages/calendar/calendar.vue` —— 月历 UI（非 stub）
+- `src/pages/home/home.vue` —— 四宫格入口（信息流/课表/校历/活动日历）
+
+**月历 UI 要点**：
+- 手画 6×7 网格（不用 t-calendar，灵活性差）
+- 每个日期 cell 下方显示活动类型小标签（最多 2 个 + "+N" 溢出）
+- 今日蓝底圆点、选中日蓝底背景
+- 下方分两部分：**选中日活动列表** + **底部 tab（即将到来 / 时间待定）**
+- 数据策略：mount 时一次性拉 `getUpcoming(100, includePast=true)`，月历/选中日/即将到来**共用同一份内存数据**；pending 懒加载
+
+**B3 报告错误 UI**：
+- 每张活动卡右上角 `⋯` 图标（`t-icon name="more"`）
+- `@tap.stop="onReport"` 阻止冒泡到卡片的 onOpenArticle
+- `uni.showActionSheet` 弹 5 个原因（not_activity / wrong_time / wrong_title / wrong_location / other）
+- 成功 toast "感谢反馈"
+
+**论文素材**（后端 CLAUDE.md 里有完整版）：本系统在 announcement+job 预告类频道 F1=0.95，前端月历 + 用户反馈形成识别 → 反馈 → 迭代闭环。
+
+### 活动日历的"频道差异化策略"
+
+（前端层需要理解这个设计）
+
+后端默认只扫 `announcement` + `job` 两个频道，不扫 news / campus-life 等。原因：实验证实后两者 100% 是事后报道，活动已经发生。日历 UI 应强调**即将到来**，事后报道不进来是对的。
+
+Home 页"活动日历"按钮进入时，用户直接看到的是月历，点日期看具体活动。**不需要前端再做频道筛选**，后端已经锁定了数据来源。
