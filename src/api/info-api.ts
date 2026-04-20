@@ -55,6 +55,7 @@ export const infoApi = {
                 channelId: params.channelId || undefined,
                 contentType: params.contentType || undefined,
                 subContentType: params.subContentType || undefined,
+                sourceIds: params.sourceIds || undefined,
                 page: params.page || 1,
                 pageSize: params.pageSize || 20,
             }
