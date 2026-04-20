@@ -11,6 +11,7 @@
   "dependencies": {
     "@uni-helper/axios-adapter": "^1.5.3",
     "axios": "^1.14.0",
+    "mp-html": "^2.5.2",
     "pinia": "^2.3.1",
     "pinia-plugin-persistedstate": "^4.7.1",
     "tdesign-uniapp": "^0.5.9",

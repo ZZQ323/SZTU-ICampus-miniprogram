@@ -219,14 +219,17 @@ TabBar:
 
 ## 开发经验（前端专用）
 
-### 小程序 rich-text 排版
+### 详情页 HTML 渲染：用 mp-html，不用原生 rich-text
 
-小程序 `<rich-text>` 组件不支持 Vue scoped CSS 的 `:deep()` 穿透。所有样式必须以 inline style 注入到 HTML 标签中。前端通过 `normalizeHtml()` 函数在渲染前预处理：
-- `<p>`: 统一 font-size:15px, line-height:1.8
-- `<img>`: 移除固定 width/height, 注入 max-width:100%
-- `<span>`: 移除来源自带的 font-size/font-family
-- `<h1/h2/h3>`: 分级标题 20/18/16px
-- `<table/td>`: 边框和 padding
+小程序原生 `<rich-text>` 致命局限：**没有事件系统**——图片不能放大、链接不能响应点击。早期用 `normalizeHtml()` 注入 inline style 凑合看，但无法解决交互缺失。
+
+**当前方案：`mp-html` 库**（`pnpm add mp-html`）
+- 在 `pages.json` 的 `easycom` 配置里注册：`"^mp-html$": "mp-html/dist/uni-app/components/mp-html/mp-html.vue"`，`<mp-html>` 标签全局可用
+- 替换 `<rich-text :nodes>` → `<mp-html :content="html" :tag-style="TAG_STYLE" @linktap="onLinkTap">`
+- **TAG_STYLE** 是一个 `{ p: "...", h1: "...", a: "...", ... }` 对象，按标签注入默认样式；比 `normalizeHtml` 的正则替换更稳定
+- `@linktap` 自定义外链行为：`mp.weixin.qq.com → web-view`，其他外链 → `uni.setClipboardData` + toast
+- 图片预览、表格滚动、lazy-load 都是 mp-html 内置，**无需再写任何代码**
+- 已删除旧的 `normalizeHtml()` 正则函数，不再需要
 
 **规则：显示问题从前端调，后端只管数据。**
 

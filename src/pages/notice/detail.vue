@@ -4,10 +4,12 @@
  *
  * 文件：src/pages/notice/detail.vue
  *
- * ⭐ 改动：
- * 1. rich-text 排版：前端 HTML 预处理注入 inline style（小程序不支持 :deep 穿透）
- * 2. 上下篇：基于 notice.vue 缓存的列表导航，不依赖后端 prev/next 解析
- * 3. 公文通需要登录才能查看
+ * ⭐ 改动：rich-text → mp-html（支持图片预览 + 链接可点）
+ *   小程序原生 rich-text 不支持事件系统（图片点不了、链接点不了）。
+ *   mp-html 库把 HTML 解析为小程序组件树，内置：
+ *     · <image> 点击自动 uni.previewImage（左右滑切换同文内图片）
+ *     · <a> 点击触发 linktap 事件，由我们决定外链怎么打开
+ *   tag-style 属性替代 normalizeHtml 的 regex 注入，更稳。
  */
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
@@ -51,101 +53,55 @@ const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 /** 是否是公文通频道（需要登录） */
 const isAnnouncement = computed(() => channelId.value === 'announcement')
 
-/** 经过标准化处理的正文 HTML（注入 inline style 供 rich-text 渲染） */
-const normalizedContent = computed(() => {
-    if (!content.value?.content) return ''
-    return normalizeHtml(content.value.content)
-})
-
-// ==================== HTML 预处理（小程序 rich-text 专用） ====================
+// ==================== mp-html 配置 ====================
 
 /**
- * 标准化 HTML：为 rich-text 组件注入 inline style
- *
- * 小程序的 rich-text 不支持外部 CSS 穿透（:deep 无效），
- * 不同来源的公文自带不同的 font-size/line-height，
- * 这里统一注入标准排版样式，确保所有来源的文章显示一致。
+ * mp-html 的 tag-style：按 HTML 标签名为其注入默认内联样式。
+ * 替代旧的 normalizeHtml 正则字符串替换，完全交给 mp-html 的 AST 渲染器处理。
+ * 特定标签的 inline style 仍然会叠加，不会丢失原文作者的样式。
  */
-function normalizeHtml(html: string): string {
-    if (!html) return ''
-
-    const pStyle = 'margin:0 0 16px 0;font-size:15px;line-height:1.8;color:#333;word-break:break-all;'
-    const imgStyle = 'max-width:100%;height:auto;display:block;margin:8px 0;'
-    const h1Style = 'font-size:20px;font-weight:bold;color:#333;margin:20px 0 12px 0;line-height:1.4;'
-    const h2Style = 'font-size:18px;font-weight:bold;color:#333;margin:16px 0 10px 0;line-height:1.4;'
-    const h3Style = 'font-size:16px;font-weight:bold;color:#333;margin:14px 0 8px 0;line-height:1.4;'
-    const tableStyle = 'width:100%;border-collapse:collapse;margin:12px 0;font-size:14px;'
-    const tdStyle = 'border:1px solid #ddd;padding:8px;font-size:14px;line-height:1.6;word-break:break-all;'
-    const spanBaseStyle = 'font-size:15px;line-height:1.8;'
-
-    let result = html
-
-    // 图片：移除固定宽高，注入响应式样式
-    result = result.replace(/<img([^>]*?)>/gi, (match, attrs) => {
-        let cleaned = attrs
-            .replace(/\s*width\s*=\s*["'][^"']*["']/gi, '')
-            .replace(/\s*height\s*=\s*["'][^"']*["']/gi, '')
-        if (/style\s*=\s*["']/i.test(cleaned)) {
-            cleaned = cleaned.replace(
-                /style\s*=\s*["']([^"']*)["']/i,
-                (_: string, s: string) => {
-                    const c = s.replace(/width\s*:[^;]*(;|$)/gi, '').replace(/height\s*:[^;]*(;|$)/gi, '')
-                    return `style="${c};${imgStyle}"`
-                }
-            )
-        } else {
-            cleaned += ` style="${imgStyle}"`
-        }
-        return `<img${cleaned}>`
-    })
-
-    // p 标签：统一字体和间距
-    result = result.replace(/<p([^>]*?)>/gi, (match, attrs) => {
-        if (/style\s*=\s*["']/i.test(attrs)) {
-            return match.replace(
-                /style\s*=\s*["']([^"']*)["']/i,
-                (_: string, s: string) => `style="${s};font-size:15px;line-height:1.8;color:#333;"`
-            )
-        }
-        return `<p${attrs} style="${pStyle}">`
-    })
-
-    // span 标签：覆盖来源自带的 font-size（统一为 15px）
-    result = result.replace(/<span([^>]*?)>/gi, (match, attrs) => {
-        if (/style\s*=\s*["']/i.test(attrs)) {
-            return match.replace(
-                /style\s*=\s*["']([^"']*)["']/i,
-                (_: string, s: string) => {
-                    const cleaned = s
-                        .replace(/font-size\s*:[^;]*(;|$)/gi, '')
-                        .replace(/font-family\s*:[^;]*(;|$)/gi, '')
-                    return `style="${cleaned};${spanBaseStyle}"`
-                }
-            )
-        }
-        return match
-    })
-
-    // 标题标签
-    result = result.replace(/<h1([^>]*?)>/gi, (_, attrs) => `<h1${attrs} style="${h1Style}">`)
-    result = result.replace(/<h2([^>]*?)>/gi, (_, attrs) => `<h2${attrs} style="${h2Style}">`)
-    result = result.replace(/<h3([^>]*?)>/gi, (_, attrs) => `<h3${attrs} style="${h3Style}">`)
-
-    // 表格
-    result = result.replace(/<table([^>]*?)>/gi, (_, attrs) => `<table${attrs} style="${tableStyle}">`)
-    result = result.replace(/<td([^>]*?)>/gi, (_, attrs) => {
-        if (/style\s*=\s*["']/i.test(attrs)) return `<td${attrs}>`
-        return `<td${attrs} style="${tdStyle}">`
-    })
-    result = result.replace(/<th([^>]*?)>/gi, (_, attrs) => {
-        if (/style\s*=\s*["']/i.test(attrs)) return `<th${attrs}>`
-        return `<th${attrs} style="${tdStyle}font-weight:bold;background:#f5f5f5;">`
-    })
-
-    return result
+const TAG_STYLE = {
+    p: 'margin:0 0 16px 0;font-size:15px;line-height:1.8;color:#333;word-break:break-all;',
+    h1: 'font-size:20px;font-weight:bold;color:#333;margin:20px 0 12px 0;line-height:1.4;',
+    h2: 'font-size:18px;font-weight:bold;color:#333;margin:16px 0 10px 0;line-height:1.4;',
+    h3: 'font-size:16px;font-weight:bold;color:#333;margin:14px 0 8px 0;line-height:1.4;',
+    h4: 'font-size:15px;font-weight:bold;color:#333;margin:12px 0 6px 0;line-height:1.4;',
+    h5: 'font-size:15px;font-weight:bold;color:#333;margin:12px 0 6px 0;line-height:1.4;',
+    h6: 'font-size:15px;font-weight:bold;color:#333;margin:12px 0 6px 0;line-height:1.4;',
+    table: 'width:100%;border-collapse:collapse;margin:12px 0;font-size:14px;',
+    td: 'border:1px solid #ddd;padding:8px;font-size:14px;line-height:1.6;word-break:break-all;',
+    th: 'border:1px solid #ddd;padding:8px;font-size:14px;line-height:1.6;font-weight:bold;background:#f5f5f5;',
+    a: 'color:#0052d9;word-break:break-all;',
+    img: 'max-width:100%;height:auto;display:block;margin:8px 0;',
 }
 
 // ==================== 方法 ====================
+
+/**
+ * 链接点击：mp-html 把 <a> 的点击通过 linktap 事件派发到这里。
+ * 我们按链接类型分级处理：
+ *   · mp.weixin.qq.com → 小程序内 web-view 打开（仅业务域名合法时生效）
+ *   · 其他外链 → 复制剪贴板 + 提示
+ *   · 返回 false 会阻止 mp-html 的默认行为（默认是复制）
+ */
+function onLinkTap(e: any) {
+    const url = e?.href || e?.detail?.href || ''
+    if (!url) return
+    if (url.includes('mp.weixin.qq.com')) {
+        uni.navigateTo({
+            url: `/pages/common/webview/webview?url=${encodeURIComponent(url)}`,
+            fail: () => uni.setClipboardData({
+                data: url,
+                success: () => uni.showToast({ title: '链接已复制', icon: 'success' }),
+            }),
+        })
+    } else {
+        uni.setClipboardData({
+            data: url,
+            success: () => uni.showToast({ title: '链接已复制', icon: 'success' }),
+        })
+    }
+}
 
 async function fetchDetail() {
     if (!id.value) {
@@ -272,9 +228,16 @@ onLoad((options) => {
                     </view>
                 </view>
 
-                <!-- 正文内容（使用预处理后的 HTML） -->
+                <!-- 正文：使用 mp-html 渲染（图片点开预览，链接自定义处理）-->
                 <view class="article">
-                    <rich-text :nodes="normalizedContent" />
+                    <mp-html
+                        :content="content.content"
+                        :tag-style="TAG_STYLE"
+                        :selectable="true"
+                        :lazy-load="true"
+                        scroll-table
+                        @linktap="onLinkTap"
+                    />
                 </view>
 
                 <!-- 附件 -->
@@ -399,7 +362,7 @@ onLoad((options) => {
     color: #0052d9;
 }
 
-// 正文容器（排版由 normalizeHtml 的 inline style 控制）
+// 正文容器（排版由 mp-html 的 tag-style 控制）
 .article {
     padding: 32rpx 0;
     overflow: hidden;
