@@ -16,6 +16,22 @@
 import { request } from '@/utils/http'
 import type { ActivityItem, ActivityStats } from '@/types/activity'
 
+/** 报告错误的原因枚举 */
+export type ReportReason =
+    | 'not_activity'
+    | 'wrong_time'
+    | 'wrong_title'
+    | 'wrong_location'
+    | 'other'
+
+export interface ReportPayload {
+    articleId: string
+    channelId?: string
+    reason: ReportReason
+    note?: string
+    titleSnapshot?: string
+}
+
 export const activityApi = {
     getUpcoming: (limit = 20, includePast = false) =>
         request.get<ActivityItem[]>('/activity/v1/upcoming', {
@@ -34,4 +50,8 @@ export const activityApi = {
 
     getStats: () =>
         request.get<ActivityStats>('/activity/v1/stats'),
+
+    /** 用户报告活动识别错误 —— B3 人机协同入口 */
+    report: (payload: ReportPayload) =>
+        request.post<void>('/activity/v1/report', payload),
 }
