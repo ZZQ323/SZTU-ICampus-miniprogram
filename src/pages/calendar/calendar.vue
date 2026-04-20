@@ -230,22 +230,30 @@ function onBottomTab(t: 'upcoming' | 'pending') {
     if (t === 'pending') loadPending()
 }
 
+// 防抖：华为等真机 @tap 偶尔触发两次，导致页面栈进两次
+let lastNavigateAt = 0
+function canNavigate(): boolean {
+    const now = Date.now()
+    if (now - lastNavigateAt < 400) return false
+    lastNavigateAt = now
+    return true
+}
+
 function onOpenArticle(item: ActivityItem) {
-    if (!item.articleUrl) {
-        uni.showToast({ title: '暂无原文链接', icon: 'none' })
-        return
-    }
-    if (item.articleUrl.startsWith('http')) {
-        uni.setClipboardData({
-            data: item.articleUrl,
-            success: () => uni.showToast({ title: '链接已复制', icon: 'success' }),
-        })
-        return
-    }
-    // 站内跳转（走信息流 detail 页）
+    if (!canNavigate()) return
+    // 统一跳公文详情页；detail 页内部自己处理站内/外链逻辑
     const ch = item.channelId || 'announcement'
     uni.navigateTo({
         url: `/pages/notice/detail?id=${item.articleId}&channelId=${ch}`,
+        fail: () => {
+            // 极端兜底：导航失败才复制原 URL
+            if (item.articleUrl) {
+                uni.setClipboardData({
+                    data: item.articleUrl,
+                    success: () => uni.showToast({ title: '链接已复制', icon: 'success' }),
+                })
+            }
+        },
     })
 }
 
@@ -259,9 +267,14 @@ const REPORT_OPTIONS: { label: string; reason: ReportReason }[] = [
     { label: '其他问题', reason: 'other' },
 ]
 
+let lastReportAt = 0
 function onReport(item: ActivityItem, ev?: any) {
     // 阻止冒泡到卡片的 onOpenArticle
     if (ev && ev.stopPropagation) ev.stopPropagation()
+    // 防抖，真机快速双击不会弹两次 action-sheet
+    const now = Date.now()
+    if (now - lastReportAt < 400) return
+    lastReportAt = now
     uni.showActionSheet({
         alertText: '报告活动识别错误',
         itemList: REPORT_OPTIONS.map(o => o.label),

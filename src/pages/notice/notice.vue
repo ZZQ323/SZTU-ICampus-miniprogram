@@ -242,7 +242,13 @@ function handleClearSearch() {
   fetchList(true)
 }
 
+// 防抖：华为/小米等真机 @tap 偶尔触发两次，detail 页会被推入栈两次
+let lastItemClickAt = 0
 function handleItemClick(item: InfoItemMeta) {
+  const now = Date.now()
+  if (now - lastItemClickAt < 400) return
+  lastItemClickAt = now
+
   if (item.extra && item.extra.includes('"external"')) {
     // 提取外链 URL（去掉 EXTERNAL: 前缀）
     const externalUrl = item.url?.replace(/^EXTERNAL:/, '') || ''
