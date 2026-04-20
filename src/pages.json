@@ -54,6 +54,12 @@
       "style": {
         "navigationBarTitleText": "活动日历"
       }
+    },
+    {
+      "path": "pages/school-calendar/school-calendar",
+      "style": {
+        "navigationBarTitleText": "校历"
+      }
     }
   ],
   "tabBar": {

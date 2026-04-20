@@ -60,6 +60,10 @@ function goSchedule() {
   uni.switchTab({ url: '/pages/schedule/schedule' })
 }
 
+function goSchoolCalendar() {
+  uni.navigateTo({ url: '/pages/school-calendar/school-calendar' })
+}
+
 function goLogin() {
   uni.navigateTo({ url: '/pages/common/login/login' })
 }
@@ -183,7 +187,7 @@ watch(isLoggedIn, (val) => {
 
       <!-- ==================== 功能入口 ==================== -->
       <view class="section">
-        <view class="grid-2">
+        <view class="grid-3">
           <!-- 信息流 -->
           <view class="grid-card" @tap="goNotice">
             <view class="grid-icon notice-icon">
@@ -203,6 +207,15 @@ watch(isLoggedIn, (val) => {
             </view>
             <text class="grid-title">课表</text>
             <text class="grid-desc">查看课程安排</text>
+          </view>
+
+          <!-- 校历 -->
+          <view class="grid-card" @tap="goSchoolCalendar">
+            <view class="grid-icon calendar-icon">
+              <t-icon name="calendar-2" size="44rpx" color="#ff976a" />
+            </view>
+            <text class="grid-title">校历</text>
+            <text class="grid-desc">学年 · 春秋学期</text>
           </view>
         </view>
       </view>
@@ -336,6 +349,12 @@ watch(isLoggedIn, (val) => {
   gap: 20rpx;
 }
 
+.grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16rpx;
+}
+
 .grid-card {
   background: #fff;
   border-radius: 16rpx;
@@ -369,6 +388,10 @@ watch(isLoggedIn, (val) => {
 
 .schedule-icon {
   background: rgba(7, 193, 96, 0.08);
+}
+
+.calendar-icon {
+  background: rgba(255, 151, 106, 0.12);
 }
 
 .badge {
