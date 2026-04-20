@@ -136,7 +136,8 @@ src/
 ```
 Layer 1: serverLatestId  - 服务器最新 ID（API / WS 推送）
 Layer 2: lastReadId      - 已读位置（本地持久化）
-Layer 3: readIds Set     - 单条已读集合（本地持久化，上限 200）
+Layer 3: readIds         - 单条已读集合（本地持久化，上限 200）
+                           ⚠️ 用 Record<string, true>，不要用 Set（见踩坑记录）
 
 unreadCount = max(0, min(serverLatestId - lastReadId, 99))
 ```
@@ -216,4 +217,21 @@ TabBar:
 ### 课表学期生成
 
 学期 ID 格式：`{year}-{year+1}-{1|2|3}`（如 `2025-2026-2`）。从当前年份倒推到 2017。第 3 学期（暑期）周次限制为 1-10 周，普通学期 1-22 周。
-- Vite 5.4
+
+### 小程序里不要把 Set/Map 放进 Pinia 状态
+
+Vue 3 浏览器端会代理 `Set.has/add`，但 **uni-app 小程序渲染层（setData 序列化）对 Set/Map 的变更追踪会失灵**。表现：mutate 之后 computed 不重算，视图不刷新。
+
+踩过的坑：`info.store` 里 `readIds: Set<string>` 持久化没问题，但点击后 `InfoListItem.isReadState` 不重算，已读态不生效。根因是 `v-for :key` 复用了老组件实例，而 `Set.add` 的变更没通知到依赖它的 computed。
+
+规避方式：
+- 集合类状态一律用 `Record<string, true>`（或数组），避免 Set/Map
+- 列表项 computed 里如果担心复用依赖不建立，可以显式 `void store.channelStates[id]?.xxx` 读一次
+- ID 统一 `String()` 强制类型一致，避免后端偶发 number 与前端 string key 不匹配
+
+### 已读/未读视觉设计（InfoListItem.vue）
+
+已读未读必须对比足够明显，不能只靠标题颜色变灰：
+- 已读卡片：背景 `#f7f8fa`（灰），去阴影，标题 `#999` 不加粗，tag/外链角标降透明度，日期/单位/图标降至 `#bbb/#ddd`
+- 未读卡片：标题 `#181818` + `font-weight: 600`，左侧蓝色指示条 8rpx 宽
+- `is-read` class 绑定依赖 `infoStore.isItemRead(channelId, id)`，channelId 缺省时走 `'announcement'`
