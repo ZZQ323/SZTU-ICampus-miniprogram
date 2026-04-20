@@ -21,6 +21,7 @@ import { infoApi } from '@/api/info-api'
 import { hasAuth } from '@/utils/cookie-manager'
 import type { CategoryTree, ChannelUnreadState } from '@/types/info'
 import type { WsMessage } from '@/utils/websocket'
+import { useSubscriptionStore } from './subscription'
 
 // ==================== 存储 Key ====================
 
@@ -130,14 +131,20 @@ export const useInfoStore = defineStore('info', () => {
         }
     }
 
-    function updateServerLatestId(channelId: string, latestId: string) {
+    function updateServerLatestId(channelId: string, latestId: string, extra?: { sourceName?: string; title?: string }) {
         ensureChannelState(channelId)
         const state = channelStates.value[channelId]
         const oldLatest = Number(state.serverLatestId) || 0
         const newLatest = Number(latestId) || 0
 
         if (newLatest > oldLatest && oldLatest > 0) {
-            newMessage.value = { channelId, latestId, count: newLatest - oldLatest }
+            newMessage.value = {
+                channelId,
+                latestId,
+                count: newLatest - oldLatest,
+                sourceName: extra?.sourceName,
+                title: extra?.title,
+            }
             updateTabBarBadge()
         }
         state.serverLatestId = latestId
@@ -184,20 +191,31 @@ export const useInfoStore = defineStore('info', () => {
     }
 
     function handleWsMessage(message: WsMessage) {
-        // 通用格式：message.data 包含 { channelId, latestId, ... }
+        // 通用格式：message.data 包含 { channelId, latestId, sourceId?, sourceOrgName?, latestTitle?, ... }
         const channelId = message.data?.channelId
         const latestId = message.data?.latestId
+        const sourceId = message.data?.sourceId
+        const sourceOrgName = message.data?.sourceOrgName
+        const latestTitle = message.data?.latestTitle
+
+        // 订阅过滤：非空订阅集合内的 sourceId 才通过；空集 / payload 缺 sourceId 都放行（减噪但不阻断）
+        const subscription = useSubscriptionStore()
+        if (!subscription.isEmpty && sourceId && !subscription.isSubscribed(sourceId)) {
+            return
+        }
+
+        const extra = { sourceName: sourceOrgName, title: latestTitle }
 
         switch (message.type) {
             case 'NEW_ANNOUNCEMENTS':
             case 'ANNOUNCEMENT_STATUS':
             case 'ANNOUNCEMENT_DATA':
                 // 兼容旧格式（无 channelId 字段，默认 announcement）
-                if (latestId) updateServerLatestId(channelId || 'announcement', latestId)
+                if (latestId) updateServerLatestId(channelId || 'announcement', latestId, extra)
                 break
             case 'NEW_CONTENT':
                 // 新的通用推送格式（所有频道统一）
-                if (channelId && latestId) updateServerLatestId(channelId, latestId)
+                if (channelId && latestId) updateServerLatestId(channelId, latestId, extra)
                 break
         }
     }

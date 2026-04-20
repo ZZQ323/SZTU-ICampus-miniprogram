@@ -13,12 +13,14 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { onShow, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onShow, onHide, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
 import InfoListItem from '@/components/info/InfoListItem.vue'
 import SourcePicker from '@/components/info/SourcePicker.vue'
+import FilterDrawer from '@/components/info/FilterDrawer.vue'
 import { useUserStore } from '@/store/modules/user'
 import { useInfoStore } from '@/store/modules/info'
+import { useSubscriptionStore } from '@/store/modules/subscription'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 import { infoApi } from '@/api/info-api'
 import type { InfoItemMeta, Channel } from '@/types/info'
@@ -26,7 +28,11 @@ import { TAB_LAYER1, TAB_LAYER2_NEWS, TAB_LAYER2_NOTICE, CATEGORY_LIST } from '@
 
 const userStore = useUserStore()
 const infoStore = useInfoStore()
+const subscriptionStore = useSubscriptionStore()
 const { ensure, isReady } = useAuthGuard()
+
+/** 已订阅视图上限（和 store 的 MAX_SUBSCRIPTIONS 是两回事：这是 feed 一次返回的条数） */
+const SUBSCRIBED_FEED_LIMIT = 20
 
 // ==================== 筛选状态 ====================
 
@@ -61,6 +67,13 @@ const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 /** 是否选中了公文通 */
 const isAnnouncement = computed(() => sourceFilter.value.channelId === 'announcement')
 
+/** 是否选中了"已订阅"视图 */
+const isSubscribedMode = computed(() => sourceFilter.value.sourceOrg === 'subscribed')
+
+/** 临时筛选（仅在已订阅视图有效）：null = 未筛选 = 显示全部已订阅 */
+const tempFilterIds = ref<string[] | null>(null)
+const showFilterDrawer = ref(false)
+
 /** 第二层 Tab 列表（随第一层变化） */
 const layer2Tabs = computed(() => {
   if (activeLayer1.value === 'news') return TAB_LAYER2_NEWS
@@ -69,10 +82,21 @@ const layer2Tabs = computed(() => {
 })
 
 /** 是否显示第二层 Tab */
-const showLayer2 = computed(() => activeLayer1.value !== '' && !isAnnouncement.value)
+const showLayer2 = computed(() => activeLayer1.value !== '' && !isAnnouncement.value && !isSubscribedMode.value)
 
 /** 是否显示公文通分类 pills */
 const showGwtCategories = computed(() => isAnnouncement.value)
+
+/** 已订阅视图是否应该显示"筛选"按钮（有订阅内容时才有意义） */
+const canFilter = computed(() => isSubscribedMode.value && subscriptionStore.count > 0)
+
+/** 当前生效的 source 白名单（已订阅视图下） */
+const effectiveSourceIds = computed<string[]>(() =>
+  tempFilterIds.value ?? subscriptionStore.subscribedIds
+)
+
+/** 临时筛选是否处于激活状态 */
+const isTempFilterActive = computed(() => tempFilterIds.value !== null)
 
 // ==================== 方法 ====================
 
@@ -83,12 +107,31 @@ async function fetchList(reset = false) {
     isSearchMode.value = false
   }
   if (!hasMore.value && !reset) return
+
+  // 已订阅模式且订阅集为空 → 清空列表，不发请求
+  if (isSubscribedMode.value && subscriptionStore.count === 0) {
+    list.value = []
+    hasMore.value = false
+    loading.value = false
+    refreshing.value = false
+    return
+  }
+
   loading.value = true
 
   try {
     let result: any
 
-    if (isAnnouncement.value) {
+    if (isSubscribedMode.value) {
+      // 已订阅视图：走 feed API，用 sourceIds 白名单；历史只给 20 条（重在推送）
+      result = await infoApi.getFeed({
+        sourceIds: effectiveSourceIds.value.join(','),
+        pageSize: SUBSCRIBED_FEED_LIMIT,
+        page: 1,
+      })
+      // 订阅视图不分页
+      hasMore.value = false
+    } else if (isAnnouncement.value) {
       // 公文通走原有的 list API（需要登录）
       result = await infoApi.getList({
         channelId: 'announcement',
@@ -96,6 +139,7 @@ async function fetchList(reset = false) {
         page: page.value,
         pageSize: 20
       })
+      hasMore.value = result.hasMore
     } else {
       // 其他来源走全局 feed API
       result = await infoApi.getFeed({
@@ -106,6 +150,7 @@ async function fetchList(reset = false) {
         page: page.value,
         pageSize: 20
       })
+      hasMore.value = result.hasMore
     }
 
     const items = result.items || []
@@ -114,7 +159,6 @@ async function fetchList(reset = false) {
     } else {
       list.value = [...list.value, ...items]
     }
-    hasMore.value = result.hasMore
 
   } catch (e) {
     console.error('[Notice] 获取列表失败', e)
@@ -127,9 +171,29 @@ async function fetchList(reset = false) {
 
 function handleSourceSelect(payload: { sourceOrg?: string; channelId?: string; label: string }) {
   sourceFilter.value = payload
-  // 切换来源时重置 Tab
+  // 切换来源时重置 Tab + 临时筛选
   activeLayer1.value = ''
   activeLayer2.value = ''
+  tempFilterIds.value = null
+  fetchList(true)
+}
+
+function openFilterDrawer() {
+  if (!canFilter.value) return
+  showFilterDrawer.value = true
+}
+
+function handleFilterApply(ids: string[]) {
+  // 若等价于全选则视为未筛选
+  const subSet = new Set(subscriptionStore.subscribedIds)
+  const picked = new Set(ids)
+  const allSubscribed = picked.size === subSet.size && [...subSet].every(id => picked.has(id))
+  tempFilterIds.value = allSubscribed ? null : ids
+  fetchList(true)
+}
+
+function handleFilterClear() {
+  tempFilterIds.value = null
   fetchList(true)
 }
 
@@ -241,7 +305,14 @@ onShow(async () => {
   loadChannels()
 })
 
+onHide(() => {
+  // 离开页面清空临时筛选（强调临时性）
+  if (tempFilterIds.value !== null) tempFilterIds.value = null
+  showFilterDrawer.value = false
+})
+
 onReachBottom(() => {
+  if (isSubscribedMode.value) return  // 订阅视图不分页
   if (!loading.value && hasMore.value && !isSearchMode.value) {
     page.value++
     fetchList()
@@ -257,11 +328,17 @@ onPullDownRefresh(() => {
   <PageLayout>
     <view v-if="isReady" class="notice-page">
 
-      <!-- 信息来源选择器 -->
-      <view class="source-selector" @tap="showSourcePicker = true">
-        <t-icon name="view-list" size="32rpx" color="#0052d9" />
-        <text class="source-label">{{ sourceFilter.label }}</text>
-        <t-icon name="chevron-down" size="28rpx" color="#999" />
+      <!-- 信息来源选择器 + 管理订阅入口（仅已订阅视图显示） -->
+      <view class="source-selector">
+        <view class="source-picker-trigger" @tap="showSourcePicker = true">
+          <t-icon name="view-list" size="32rpx" color="#0052d9" />
+          <text class="source-label">{{ sourceFilter.label }}</text>
+          <t-icon name="chevron-down" size="28rpx" color="#999" />
+        </view>
+        <view v-if="isSubscribedMode" class="manage-sub-btn" @tap="openSubscribePage">
+          <t-icon name="setting" size="36rpx" color="#0052d9" />
+          <text>管理订阅</text>
+        </view>
       </view>
 
       <!-- 第一层 Tab：内容大类 -->
@@ -313,6 +390,21 @@ onPullDownRefresh(() => {
         </t-button>
       </view>
 
+      <!-- 订阅视图的临时筛选栏 -->
+      <view v-if="canFilter" class="filter-row">
+        <view class="filter-status">
+          <text v-if="isTempFilterActive" class="filter-label active">筛选中 {{ effectiveSourceIds.length }}/{{ subscriptionStore.count }}</text>
+          <text v-else class="filter-label">已订阅 {{ subscriptionStore.count }}</text>
+        </view>
+        <view class="filter-actions">
+          <text v-if="isTempFilterActive" class="clear-filter" @tap="handleFilterClear">清除</text>
+          <view class="filter-btn" @tap="openFilterDrawer">
+            <t-icon name="filter" size="32rpx" color="#0052d9" />
+            <text>筛选</text>
+          </view>
+        </view>
+      </view>
+
       <!-- 搜索模式提示 -->
       <view v-if="isSearchMode" class="search-mode-tip">
         <text>搜索结果：{{ list.length }} 条</text>
@@ -336,6 +428,24 @@ onPullDownRefresh(() => {
 
       <!-- 列表 -->
       <view v-else class="list">
+        <!-- 已订阅视图空态：区分"没订阅"和"筛选后为空" -->
+        <view
+          v-if="isSubscribedMode && list.length === 0 && !loading"
+          class="subscribed-empty"
+        >
+          <t-icon name="mail" size="80rpx" color="#ccc" />
+          <text v-if="subscriptionStore.count === 0" class="empty-title">还没订阅任何数据源</text>
+          <text v-else-if="isTempFilterActive" class="empty-title">当前筛选下没有内容</text>
+          <text v-else class="empty-title">订阅的数据源暂无内容</text>
+          <view
+            v-if="subscriptionStore.count === 0"
+            class="go-subscribe-btn"
+            @tap="openSubscribePage"
+          >
+            <text>去管理订阅</text>
+          </view>
+        </view>
+
         <InfoListItem
           v-for="item in list"
           :key="(item.channelId || '') + ':' + item.id"
@@ -348,11 +458,15 @@ onPullDownRefresh(() => {
           <text>加载中...</text>
         </view>
 
-        <view v-if="!hasMore && list.length > 0 && !isSearchMode" class="no-more">
+        <view v-if="!hasMore && list.length > 0 && !isSearchMode && !isSubscribedMode" class="no-more">
           —— 没有更多了 ——
         </view>
 
-        <t-empty v-if="!loading && list.length === 0" :description="isSearchMode ? '未找到相关内容' : '暂无内容'" />
+        <view v-if="isSubscribedMode && list.length > 0" class="no-more">
+          —— 重在推送 ——
+        </view>
+
+        <t-empty v-if="!loading && list.length === 0 && !isSubscribedMode" :description="isSearchMode ? '未找到相关内容' : '暂无内容'" />
       </view>
     </view>
 
@@ -362,6 +476,17 @@ onPullDownRefresh(() => {
       :channels="channels"
       @select="handleSourceSelect"
       @close="showSourcePicker = false"
+    />
+
+    <!-- 订阅视图的临时筛选弹层 -->
+    <FilterDrawer
+      :visible="showFilterDrawer"
+      :channels="channels"
+      :subscribed-ids="subscriptionStore.subscribedIds"
+      :selected-ids="effectiveSourceIds"
+      @apply="handleFilterApply"
+      @clear="handleFilterClear"
+      @close="showFilterDrawer = false"
     />
 
     <!-- 回到顶部 -->
@@ -379,16 +504,40 @@ onPullDownRefresh(() => {
 .source-selector {
   display: flex;
   align-items: center;
-  gap: 8rpx;
+  justify-content: space-between;
   padding: 20rpx 32rpx;
   background: #fff;
   border-bottom: 1rpx solid #eee;
+}
+
+.source-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex: 1;
+  min-width: 0;
 }
 
 .source-label {
   font-size: 30rpx;
   font-weight: 500;
   color: #0052d9;
+}
+
+.manage-sub-btn {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 8rpx 16rpx;
+  font-size: 24rpx;
+  color: #0052d9;
+  background: #e6f0ff;
+  border-radius: 8rpx;
+  flex-shrink: 0;
+
+  &:active {
+    background: #d0e0ff;
+  }
 }
 
 /* Tab 栏 */
@@ -490,6 +639,84 @@ onPullDownRefresh(() => {
   color: #fff;
   border-radius: 8rpx;
   font-size: 26rpx;
+}
+
+/* 订阅视图的筛选栏 */
+.filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 32rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #eee;
+}
+
+.filter-status {
+  flex: 1;
+}
+
+.filter-label {
+  font-size: 24rpx;
+  color: #999;
+
+  &.active {
+    color: #0052d9;
+    font-weight: 600;
+  }
+}
+
+.filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+}
+
+.clear-filter {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 8rpx 16rpx;
+  font-size: 24rpx;
+  color: #0052d9;
+  background: #e6f0ff;
+  border-radius: 8rpx;
+
+  &:active {
+    background: #d0e0ff;
+  }
+}
+
+/* 订阅视图空态 */
+.subscribed-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 0;
+  gap: 20rpx;
+}
+
+.empty-title {
+  font-size: 28rpx;
+  color: #999;
+}
+
+.go-subscribe-btn {
+  margin-top: 20rpx;
+  padding: 16rpx 48rpx;
+  background: #0052d9;
+  color: #fff;
+  font-size: 28rpx;
+  border-radius: 8rpx;
+
+  &:active {
+    background: #003ea5;
+  }
 }
 
 .search-mode-tip {
