@@ -56,7 +56,9 @@ const isExpanded = ref(false)
 
 // ==================== 计算属性 ====================
 
-const totalUnread = computed(() => infoStore.totalUnread)
+const totalUnread = computed(() =>
+    menuItems.value.reduce((sum, m) => sum + m.unread, 0)
+)
 const newMessage = computed(() => infoStore.newMessage)
 
 const menuItems = computed(() => [
