@@ -158,9 +158,11 @@ export const useInfoStore = defineStore('info', () => {
         const state = channelStates.value[channelId]
         const key = String(id)
         state.readIds[key] = true
-        // 注意：不抬升 lastReadId —— lastReadId 只作为未读计数的水位线，
-        // 若这里同步抬升，会导致列表中所有 id < 当前点击的文章都被视为已读。
-        // 水位线由"一键已读"或退出频道时批量更新。
+        // 水位线自然随点击抬升（未读角标据此收敛）。
+        // 注意：isItemRead 不使用 lastReadId 做视觉判断，所以不会殃及更旧的未点文章。
+        const idNum = Number(key) || 0
+        const lastReadNum = Number(state.lastReadId) || 0
+        if (idNum > lastReadNum) state.lastReadId = key
         const keys = Object.keys(state.readIds)
         if (keys.length > MAX_READ_IDS) {
             const kept = keys.sort((a, b) => Number(b) - Number(a)).slice(0, MAX_READ_IDS)
@@ -173,6 +175,7 @@ export const useInfoStore = defineStore('info', () => {
     function isItemRead(channelId: string, id: string): boolean {
         ensureChannelState(channelId)
         const state = channelStates.value[channelId]
+        // 视觉已读仅看 readIds；lastReadId 水位线只用于未读计数，不参与视觉判断
         return state.readIds[String(id)] === true
     }
 
