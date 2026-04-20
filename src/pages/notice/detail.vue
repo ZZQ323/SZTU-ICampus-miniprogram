@@ -53,6 +53,29 @@ const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 /** 是否是公文通频道（需要登录） */
 const isAnnouncement = computed(() => channelId.value === 'announcement')
 
+/**
+ * 把文本中裸露的 http(s):// URL 包装成 <a>，让 mp-html 能识别为可点击链接。
+ * <p>
+ * 踩坑：学校公文里的 URL 往往是 Word/Office 粘贴带过来的，表现为带下划线的 <span>
+ * 而非真正的 <a>，mp-html 默认不会把它当链接。这里用正则兜住 95% 的场景：
+ *   · 仅匹配"HTML 标签外"的 URL（前面是 >, 空白, 或开头），避开 href="..." 里的 URL
+ *   · 匹配到就包一层 <a href="URL">URL</a>，mp-html 会正常渲染并触发 linktap
+ * <p>
+ * 局限：
+ *   · 不处理 <a> 包裹的嵌套（罕见）
+ *   · 中文标点作为终止符（避免把后面的全角标点吃进 URL）
+ */
+function linkifyPlainUrls(html: string): string {
+    if (!html) return ''
+    // 前导断言：>、空白、行首；URL 体：排除空白/尖括号/引号/中文常见标点
+    return html.replace(
+        /(>|\s|^)(https?:\/\/[^\s<"'，。、；？！)）】]+)/g,
+        (_m, before, url) => `${before}<a href="${url}">${url}</a>`
+    )
+}
+
+const renderedContent = computed(() => linkifyPlainUrls(content.value?.content || ''))
+
 // ==================== mp-html 配置 ====================
 
 /**
@@ -85,7 +108,6 @@ const TAG_STYLE = {
  *   · 返回 false 会阻止 mp-html 的默认行为（默认是复制）
  */
 function onLinkTap(e: any) {
-    console.log('[Detail] linktap fired:', JSON.stringify(e))   // DIAGNOSTIC: 确认事件是否触发
     const url = e?.href || e?.detail?.href || e?.ownerInstance?.href || ''
     if (!url) return
     if (url.includes('mp.weixin.qq.com')) {
@@ -232,14 +254,12 @@ onLoad((options) => {
                 <!-- 正文：使用 mp-html 渲染（图片点开预览，链接自定义处理）-->
                 <view class="article">
                     <mp-html
-                        :content="content.content"
+                        :content="renderedContent"
                         :tag-style="TAG_STYLE"
                         :selectable="true"
                         :lazy-load="true"
                         scroll-table
                         @linktap="onLinkTap"
-                        @load="() => console.log('[Detail] mp-html loaded')"
-                        @error="(e) => console.warn('[Detail] mp-html error:', e)"
                     />
                 </view>
 
