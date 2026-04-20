@@ -16,22 +16,22 @@
   <PageLayout>
     <view class="schedule-page">
       <!-- 顶部控制栏 -->
-      <view class="control-bar">
-        <view class="semester-btn" @tap="showSemesterInput = !showSemesterInput">
+      <view :class="['control-bar', { disabled: !isLoggedIn }]">
+        <view class="semester-btn" @tap="isLoggedIn && (showSemesterInput = !showSemesterInput)">
           <t-icon name="calendar" size="28rpx" />
           <text>{{ currentSemester || '选择学期' }}</text>
         </view>
-        <view class="week-btn" @tap="showWeekPicker = !showWeekPicker">
+        <view class="week-btn" @tap="isLoggedIn && (showWeekPicker = !showWeekPicker)">
           <text>第 {{ currentWeek }} 周</text>
           <t-icon name="chevron-down" size="24rpx" />
         </view>
-        <view class="refresh-btn" @tap="handleRefresh">
+        <view class="refresh-btn" @tap="isLoggedIn && handleRefresh()">
           <t-icon name="refresh" size="32rpx" />
         </view>
       </view>
 
       <!-- 学期选择面板（自动生成学期列表） -->
-      <view v-if="showSemesterInput" class="semester-panel">
+      <view v-if="isLoggedIn && showSemesterInput" class="semester-panel">
         <scroll-view scroll-y class="semester-scroll">
           <view v-for="sem in semesterList" :key="sem"
             :class="['semester-item', { active: currentSemester === sem }]"
@@ -42,7 +42,7 @@
       </view>
 
       <!-- 周次快速选择（根据学期类型限制数量） -->
-      <view v-if="showWeekPicker" class="week-picker">
+      <view v-if="isLoggedIn && showWeekPicker" class="week-picker">
         <view v-for="w in maxWeeks" :key="w"
           :class="['week-item', { active: currentWeek === w }]"
           @tap="handleWeekChange(w)">
@@ -50,8 +50,15 @@
         </view>
       </view>
 
+      <!-- 未登录空态：灰色框架 + "去登录" -->
+      <view v-if="!isLoggedIn" class="state-wrap">
+        <t-icon name="calendar-2" size="80rpx" color="#ccc" />
+        <text class="state-text">登录后可查看课表</text>
+        <view class="login-hint-btn" @tap="goLogin">去登录</view>
+      </view>
+
       <!-- 加载 -->
-      <view v-if="loading" class="state-wrap">
+      <view v-else-if="loading" class="state-wrap">
         <t-loading theme="circular" size="80rpx" />
         <text class="state-text">正在获取课表...</text>
       </view>
@@ -152,14 +159,22 @@ import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
+import { useUserStore } from '@/store/modules/user'
 import { useSchedule, type CourseInfo } from '@/hooks/useSchedule'
 import { extractBoolean } from '@/utils/tdesign'
 
 const { ensure } = useAuthGuard()
+const userStore = useUserStore()
 const {
     courses, currentWeek, currentSemester, loading, error,
     weekDays, fetchSchedule, getCourseColor, isToday,
 } = useSchedule()
+
+const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
+
+function goLogin() {
+    uni.navigateTo({ url: '/pages/common/login/login' })
+}
 
 // ==================== 学期自动生成 ====================
 
@@ -259,7 +274,8 @@ async function handleWeekChange(week: number) {
 // ==================== 生命周期 ====================
 
 onShow(async () => {
-    const result = await ensure({ requireSchoolLogin: true })
+    // 课表是"软"登录：未登录也展示页面框架，引导用户去登录，不再强制跳转
+    const result = await ensure({ requireSchoolLogin: false })
     if (result.success && result.logined && courses.value.length === 0) {
         await fetchSchedule()
     }
@@ -281,6 +297,21 @@ onShow(async () => {
     background: #fff;
     gap: 12rpx;
     border-bottom: 1rpx solid #eee;
+
+    &.disabled {
+        opacity: 0.55;
+        pointer-events: none;
+
+        .semester-btn,
+        .week-btn {
+            background: #f0f0f0;
+            color: #999;
+        }
+
+        .refresh-btn {
+            color: #bbb;
+        }
+    }
 }
 
 .semester-btn, .week-btn {
@@ -371,6 +402,20 @@ onShow(async () => {
 .state-text {
     font-size: 26rpx;
     color: #999;
+}
+
+/* 未登录空态的"去登录"按钮：灰底柔和风格 */
+.login-hint-btn {
+    margin-top: 8rpx;
+    padding: 16rpx 56rpx;
+    background: #f0f0f0;
+    color: #666;
+    font-size: 26rpx;
+    border-radius: 999rpx;
+
+    &:active {
+        background: #e0e0e0;
+    }
 }
 
 // ==================== 课表网格 ====================
