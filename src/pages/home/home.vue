@@ -72,23 +72,14 @@ function goLogin() {
   uni.navigateTo({ url: '/pages/common/login/login' })
 }
 
-async function handleRefreshData() {
+async function handleRefreshSession() {
   if (refreshing.value) return
   refreshing.value = true
-  try {
-    await infoStore.init()
-    uni.showToast({ title: '已刷新', icon: 'success' })
-  } catch (e) {
-    console.error('[Home] 刷新失败', e)
-  } finally {
-    refreshing.value = false
-  }
-}
-
-async function handleRefreshSession() {
   uni.showLoading({ title: '刷新中...' })
   try {
+    // 一次刷新做两件事：学校 cookie 续期 + 信息流未读计数拉取
     await userStore.refreshSession()
+    await infoStore.init().catch(() => { /* info init 失败不影响主流程 */ })
     uni.showToast({ title: '会话已刷新', icon: 'success' })
   } catch (e: any) {
     if (e?.code === 401 || e?.code === 400) {
@@ -100,6 +91,7 @@ async function handleRefreshSession() {
     }
   } finally {
     uni.hideLoading()
+    refreshing.value = false
   }
 }
 
@@ -239,9 +231,14 @@ watch(isLoggedIn, (val) => {
           <text class="section-title">快捷操作</text>
         </view>
         <t-cell-group theme="card">
-          <t-cell title="刷新数据" left-icon="refresh" arrow hover :note="refreshing ? '刷新中...' : ''"
-            @click="handleRefreshData" />
-          <t-cell v-if="isLoggedIn" title="刷新会话" left-icon="secured" arrow hover description="续期学校 Cookie"
+          <t-cell
+            v-if="isLoggedIn"
+            title="刷新会话"
+            left-icon="refresh"
+            arrow
+            hover
+            description="续期学校 Cookie + 拉取最新未读"
+            :note="refreshing ? '刷新中...' : ''"
             @click="handleRefreshSession" />
         </t-cell-group>
       </view>

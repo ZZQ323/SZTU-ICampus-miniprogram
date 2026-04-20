@@ -85,7 +85,8 @@ const TAG_STYLE = {
  *   · 返回 false 会阻止 mp-html 的默认行为（默认是复制）
  */
 function onLinkTap(e: any) {
-    const url = e?.href || e?.detail?.href || ''
+    console.log('[Detail] linktap fired:', JSON.stringify(e))   // DIAGNOSTIC: 确认事件是否触发
+    const url = e?.href || e?.detail?.href || e?.ownerInstance?.href || ''
     if (!url) return
     if (url.includes('mp.weixin.qq.com')) {
         uni.navigateTo({
@@ -237,6 +238,8 @@ onLoad((options) => {
                         :lazy-load="true"
                         scroll-table
                         @linktap="onLinkTap"
+                        @load="() => console.log('[Detail] mp-html loaded')"
+                        @error="(e) => console.warn('[Detail] mp-html error:', e)"
                     />
                 </view>
 
