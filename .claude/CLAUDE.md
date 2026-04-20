@@ -78,42 +78,41 @@ loginTypes（登录方式列表）可以从 URL 参数、Pinia 缓存快速获�
 ```
 src/
 ├── api/                  # API 定义
-│   ├── auth-apis.ts      # 认证、会话
-│   ├── info-api.ts       # 信息流
-│   └── schedule-apis.ts  # 课表
+│   ├── auth-apis.ts       # 认证、会话
+│   ├── info-api.ts        # 信息流（getFeed 支持 sourceIds 订阅）
+│   ├── schedule-apis.ts   # 课表
+│   └── calendar-apis.ts   # 校历（years + year detail）
 ├── store/modules/        # Pinia 状态管理
-│   ├── auth.ts           # 认证阶段机（idle/checking/ready/error）
-│   ├── user.ts           # 用户信息、登录/登出
-│   ├── info.ts           # 信息流未读（三层分治）
-│   └── ws.ts             # WebSocket 连接
-├── hooks/                # Vue Composables
-│   ├── useAuthGuard.ts   # 认证守卫（页面 onShow 调用）
-│   ├── useSchedule.ts    # 课表数据处理
-│   └── useCountdown.ts   # 倒计时
+│   ├── auth.ts            # 认证阶段机
+│   ├── user.ts            # 用户信息、登录/登出
+│   ├── info.ts            # 信息流未读（三层分治）+ WS 订阅过滤
+│   ├── subscription.ts    # source 订阅集合（Record，20 上限，持久化）
+│   └── ws.ts              # WebSocket 连接
+├── hooks/                 # Vue Composables
+│   ├── useAuthGuard.ts    # 认证守卫
+│   ├── useSchedule.ts     # 课表数据处理
+│   └── useCountdown.ts    # 倒计时
 ├── utils/
-│   ├── cookie-manager.ts # Cookie 存取（uni.storage）
-│   ├── http.ts           # Axios 拦截器（Cookie 注入/提取）
-│   ├── websocket.ts      # WsClient（uni.connectSocket）
-│   ├── tdesign.ts        # TDesign 事件提取工具
-│   ├── storage.ts        # 本地存储（用户信息）
-│   ├── navigate.ts       # 路由导航
-│   └── date.ts           # 日期格式化
+│   ├── cookie-manager.ts / http.ts / websocket.ts / tdesign.ts
+│   ├── storage.ts / navigate.ts / date.ts
 ├── components/
-│   ├── PageLayout.vue    # 页面外壳（认证遮罩+错误弹窗）
+│   ├── PageLayout.vue
 │   ├── FloatingNotification.vue
 │   ├── BadgeDot.vue
 │   ├── common/NewMessageToast.vue
 │   └── info/
-│       ├── InfoListItem.vue   # 文章列表项
-│       └── SourcePicker.vue   # 信息源选择器
+│       ├── InfoListItem.vue    # 文章列表项（已读态灰化，readIds 用 Record）
+│       ├── SourcePicker.vue    # 信息源选择器（含"已订阅"入口）
+│       └── FilterDrawer.vue    # 临时筛选弹层（订阅子集 + 三态 checkbox）
 ├── pages/
-│   ├── home/home.vue                    # 首页（不要求登录）
-│   ├── schedule/schedule.vue            # 课表（强制登录）
-│   ├── notice/notice.vue                # 信息流（多频道三维筛选）
-│   ├── notice/detail.vue                # 文章详情
-│   ├── notice/subscribe.vue             # 频道订阅管理
-│   ├── calendar/calendar.vue            # 活动日历
-│   └── common/login/login.vue           # SMS + 密码登录
+│   ├── home/home.vue                      # 首页（2×3 入口：信息流/课表/校历，后续加活动日历）
+│   ├── schedule/schedule.vue              # 课表（软登录，空态引导去登录）
+│   ├── notice/notice.vue                  # 信息流（订阅模式 + 临时筛选 + 管理订阅入口）
+│   ├── notice/detail.vue                  # 文章详情
+│   ├── notice/subscribe.vue               # 订阅管理（使用 store，20 上限提示）
+│   ├── school-calendar/school-calendar.vue # 校历（学年 timeline + 双学期图 + 预览保存）
+│   ├── calendar/calendar.vue               # 活动日历（stub，Step B 会重构）
+│   └── common/login/login.vue              # SMS + 密码登录
 └── types/                # TypeScript 类型
     ├── auth.ts
     ├── info.ts
@@ -158,6 +157,34 @@ unreadCount = max(0, min(serverLatestId - lastReadId, 99))
 - 指数退避重连（3s, 6s, 12s...），最多 5 次
 - 消息类型：`NEW_ANNOUNCEMENTS`, `ANNOUNCEMENT_DATA`, `AUTH_REQUIRED`, `NEW_CONTENT`, `COOKIE_UPDATE` 等
 - 连接参数：`ws://host/ws?userId=XXX&topics=announcement,schedule,calendar`
+
+## 订阅管理 + 视图筛选
+
+订阅 = 减噪开关，source 粒度。
+
+- **唯一真理源**：`subscription` store 里 `subscribedMap: Record<string, true>`，上限 20 个
+- **持久化**：`uni.storage` key `icampus_subscribed_sources`（数组形式，兼容老版本）
+- **三态 UI**：SourcePicker 里有"已订阅"入口 → 进 notice 的 subscribed 模式
+- **管理入口**：notice 页右上角"管理订阅"按钮跳 `subscribe.vue`
+- **临时筛选**：notice 搜索框下"筛选"按钮开 `FilterDrawer`（分类→频道→source 三层 checkbox），关闭即失效
+
+**订阅模式下的 feed**：
+```
+subscribed 模式 → getFeed({ sourceIds: subscriptionStore.sourceIdsCsv, pageSize: 20 })
+空订阅 → 显示引导"去管理订阅"
+```
+
+**WS 过滤**：`info.store.handleWsMessage` 里
+```ts
+if (!subscription.isEmpty && sourceId && !subscription.isSubscribed(sourceId)) return
+```
+空订阅回退到全量推送（冷启动不提示用户配置）。
+
+## 校历（school-calendar.vue）
+
+学校官网 `www.sztu.edu.cn/xxgk/xxxl/a{y}___{y+1}xnd.htm` 每学年一页，页内 `div.xl1` 有春秋两张图。后端爬 + 解析 + /proxy/image 包装。
+
+前端布局：左侧学年时间轴（圆点 + 连线）+ 右侧双卡片（秋季/春季）。点图 `uni.previewImage`（长按保存）。Map 缓存已加载学年，切换不重发。
 
 ## 信息流三维筛选（notice.vue）
 
@@ -247,3 +274,22 @@ if (props.useStore === false) return false
 - 已读卡片：背景 `#f7f8fa`（灰），去阴影，标题 `#999` 不加粗，tag/外链角标降透明度，日期/单位/图标降至 `#bbb/#ddd`
 - 未读卡片：标题 `#181818` + `font-weight: 600`，左侧蓝色指示条 8rpx 宽
 - `is-read` class 绑定依赖 `infoStore.isItemRead(channelId, id)`，channelId 缺省时走 `'announcement'`
+
+### 软登录 vs 强制登录（课表页踩过的坑）
+
+**规则**：home / notice / calendar 都用"软登录" —— 未登录也能进页面，看到框架，需要数据的地方才提示去登录。**不要用 `ensure({ requireSchoolLogin: true })` 自动 navigate 到登录页**——用户点一个按钮就被踢到登录页非常粗暴。
+
+课表页的现在做法（参考）：
+- `ensure({ requireSchoolLogin: false })` — 不强制
+- 控件 `:class="{ disabled: !isLoggedIn }"` + `pointer-events: none` 灰出
+- 空态块 "登录后可查看课表" + 灰底 pill 按钮让用户自己决定点不点
+- `onShow` 里判 `isLoggedIn` 才 fetch
+
+### 活动识别后端联动（Step A 已就绪）
+
+后端 `/admin/activity/scan-recent` 已能跑，返回 JSON 含规则 + LLM 双判。前端 B1/B2 规划：
+- B1（后端）：活动索引 Service + `/activity/v1/list`
+- B2（前端）：重构 `calendar/calendar.vue`，手机原生日历那种月历 + 下方活动列表
+- B3（前端）：活动详情页的"报告错误"按钮 → 论文"人机协同"节
+
+**过拟合警告**：后端规则词库已基于标注数据迭代到 F1=0.92，在未见过的文章上可能下降。毕设需要单独标 50 条"test set"验证。
