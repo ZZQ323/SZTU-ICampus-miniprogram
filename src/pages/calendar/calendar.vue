@@ -35,7 +35,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { activityApi } from '@/api/activity-apis'
+import { activityApi, type ReportReason } from '@/api/activity-apis'
 import type { ActivityItem } from '@/types/activity'
 
 // ==================== 状态 ====================
@@ -212,6 +212,41 @@ function onOpenArticle(item: ActivityItem) {
     })
 }
 
+// ==================== 报告错误 ====================
+
+const REPORT_OPTIONS: { label: string; reason: ReportReason }[] = [
+    { label: '这不是活动', reason: 'not_activity' },
+    { label: '时间错了', reason: 'wrong_time' },
+    { label: '标题不对', reason: 'wrong_title' },
+    { label: '地点不对', reason: 'wrong_location' },
+    { label: '其他问题', reason: 'other' },
+]
+
+function onReport(item: ActivityItem, ev?: any) {
+    // 阻止冒泡到卡片的 onOpenArticle
+    if (ev && ev.stopPropagation) ev.stopPropagation()
+    uni.showActionSheet({
+        alertText: '报告活动识别错误',
+        itemList: REPORT_OPTIONS.map(o => o.label),
+        success: async (res) => {
+            const picked = REPORT_OPTIONS[res.tapIndex]
+            if (!picked) return
+            try {
+                await activityApi.report({
+                    articleId: item.articleId,
+                    channelId: item.channelId,
+                    reason: picked.reason,
+                    titleSnapshot: item.title,
+                })
+                uni.showToast({ title: '已提交，感谢反馈', icon: 'success' })
+            } catch (e: any) {
+                console.error('[Calendar] report failed', e)
+                uni.showToast({ title: e?.message || '提交失败', icon: 'none' })
+            }
+        },
+    })
+}
+
 // ==================== 辅助 ====================
 
 function isoDate(d: Date): string {
@@ -323,6 +358,9 @@ onMounted(() => {
                         报名：{{ a.registration }}
                     </view>
                 </view>
+                <view class="card-report" @tap.stop="onReport(a, $event)">
+                    <t-icon name="more" size="32rpx" color="#bbb" />
+                </view>
             </view>
         </view>
 
@@ -360,6 +398,9 @@ onMounted(() => {
                         <text v-if="a.startAt?.length >= 16"> · {{ displayTime(a) }}</text>
                     </view>
                 </view>
+                <view class="card-report" @tap.stop="onReport(a, $event)">
+                    <t-icon name="more" size="32rpx" color="#bbb" />
+                </view>
             </view>
         </view>
 
@@ -382,6 +423,9 @@ onMounted(() => {
                         <text v-if="a.type" class="meta-type">{{ a.type }}</text>
                         <text v-if="a.registration"> · 报名：{{ a.registration }}</text>
                     </view>
+                </view>
+                <view class="card-report" @tap.stop="onReport(a, $event)">
+                    <t-icon name="more" size="32rpx" color="#bbb" />
                 </view>
             </view>
         </view>
@@ -636,6 +680,20 @@ onMounted(() => {
     font-size: 22rpx;
     color: #ff976a;
     margin-top: 4rpx;
+}
+
+/* 报告错误按钮（⋯）—— 右上角，点击不触发卡片打开 */
+.card-report {
+    flex-shrink: 0;
+    padding: 4rpx 8rpx;
+    margin-left: 12rpx;
+    opacity: 0.6;
+
+    &:active {
+        opacity: 1;
+        background: #f0f0f0;
+        border-radius: 50%;
+    }
 }
 
 /* ==================== 底部 tab ==================== */
