@@ -55,6 +55,37 @@ const pendingActivities = ref<ActivityItem[]>([])
 const loading = ref(false)
 const bottomTab = ref<'upcoming' | 'pending'>('upcoming')
 
+// ==================== 本地隐藏（B3 即时反馈）====================
+
+/** 用户通过报告按钮本地隐藏的活动 id 集合（uni.storage 持久化） */
+const HIDDEN_KEY = 'activity:hidden-ids'
+const hiddenIds = ref<Record<string, true>>(loadHidden())
+
+function loadHidden(): Record<string, true> {
+    try {
+        const raw = uni.getStorageSync(HIDDEN_KEY)
+        if (!raw) return {}
+        const arr = typeof raw === 'string' ? JSON.parse(raw) : raw
+        const out: Record<string, true> = {}
+        if (Array.isArray(arr)) for (const id of arr) out[String(id)] = true
+        else if (arr && typeof arr === 'object') for (const k of Object.keys(arr)) out[k] = true
+        return out
+    } catch { return {} }
+}
+
+function persistHidden() {
+    uni.setStorageSync(HIDDEN_KEY, JSON.stringify(Object.keys(hiddenIds.value)))
+}
+
+function hideLocally(articleId: string) {
+    hiddenIds.value = { ...hiddenIds.value, [articleId]: true }
+    persistHidden()
+}
+
+function isHidden(articleId: string): boolean {
+    return hiddenIds.value[articleId] === true
+}
+
 // ==================== 月历生成 ====================
 
 /** 6 × 7 的网格：每格是一个日期 cell */
@@ -96,7 +127,9 @@ const grid = computed<DayCell[]>(() => {
 
 function dayCellFor(d: Date, inMonth: boolean): DayCell {
     const iso = isoDate(d)
-    const matched = allActivities.value.filter(a => startDateIso(a) === iso)
+    const matched = allActivities.value.filter(a =>
+        startDateIso(a) === iso && !isHidden(a.articleId)
+    )
     const types: string[] = []
     for (const a of matched) {
         const t = a.type || '活动'
@@ -116,17 +149,21 @@ function dayCellFor(d: Date, inMonth: boolean): DayCell {
 
 const selectedActivities = computed(() =>
     allActivities.value
-        .filter(a => startDateIso(a) === selectedDate.value)
+        .filter(a => startDateIso(a) === selectedDate.value && !isHidden(a.articleId))
         .sort((a, b) => (a.startAtEpoch || 0) - (b.startAtEpoch || 0))
 )
 
 const upcomingActivities = computed(() => {
     const now = Date.now()
     return allActivities.value
-        .filter(a => (a.startAtEpoch || 0) >= now)
+        .filter(a => (a.startAtEpoch || 0) >= now && !isHidden(a.articleId))
         .sort((a, b) => (a.startAtEpoch || 0) - (b.startAtEpoch || 0))
         .slice(0, 30)
 })
+
+const visiblePendingActivities = computed(() =>
+    pendingActivities.value.filter(a => !isHidden(a.articleId))
+)
 
 // ==================== 加载 ====================
 
@@ -231,6 +268,8 @@ function onReport(item: ActivityItem, ev?: any) {
         success: async (res) => {
             const picked = REPORT_OPTIONS[res.tapIndex]
             if (!picked) return
+            // 本地立即隐藏（B3 即时反馈），不影响其他用户
+            hideLocally(item.articleId)
             try {
                 await activityApi.report({
                     articleId: item.articleId,
@@ -238,10 +277,11 @@ function onReport(item: ActivityItem, ev?: any) {
                     reason: picked.reason,
                     titleSnapshot: item.title,
                 })
-                uni.showToast({ title: '已提交，感谢反馈', icon: 'success' })
+                uni.showToast({ title: '已隐藏并提交，感谢反馈', icon: 'success' })
             } catch (e: any) {
+                // 即使提交失败，本地已隐藏；记 log 就行，不惊动用户
                 console.error('[Calendar] report failed', e)
-                uni.showToast({ title: e?.message || '提交失败', icon: 'none' })
+                uni.showToast({ title: '已本地隐藏', icon: 'success' })
             }
         },
     })
@@ -405,11 +445,15 @@ onMounted(() => {
         </view>
 
         <view v-else class="section pending-list">
-            <view v-if="pendingActivities.length === 0" class="empty-inline">
+            <view class="pending-hint">
+                <t-icon name="info-circle" size="24rpx" color="#ff976a" />
+                <text>这里的活动时间信息不充分，点卡片跳原文查看完整内容</text>
+            </view>
+            <view v-if="visiblePendingActivities.length === 0" class="empty-inline">
                 <text>暂无时间待定活动</text>
             </view>
             <view
-                v-for="a in pendingActivities"
+                v-for="a in visiblePendingActivities"
                 :key="a.articleId"
                 class="upcoming-card"
                 @tap="onOpenArticle(a)"
@@ -735,6 +779,19 @@ onMounted(() => {
 .pending-list {
     margin-top: 0;
     border-radius: 0 0 16rpx 16rpx;
+}
+
+/* 时间待定 tab 顶部提示条 —— 引导跳原文 */
+.pending-hint {
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    padding: 12rpx 16rpx;
+    margin-bottom: 12rpx;
+    background: #fff7e6;
+    color: #d46b08;
+    border-radius: 8rpx;
+    font-size: 22rpx;
 }
 
 .upcoming-card {
