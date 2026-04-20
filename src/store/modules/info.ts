@@ -158,6 +158,8 @@ export const useInfoStore = defineStore('info', () => {
         const state = channelStates.value[channelId]
         const key = String(id)
         state.readIds[key] = true
+        // 水位线自然随点击抬升（未读角标据此收敛）。
+        // 注意：isItemRead 不使用 lastReadId 做视觉判断，所以不会殃及更旧的未点文章。
         const idNum = Number(key) || 0
         const lastReadNum = Number(state.lastReadId) || 0
         if (idNum > lastReadNum) state.lastReadId = key
@@ -173,9 +175,8 @@ export const useInfoStore = defineStore('info', () => {
     function isItemRead(channelId: string, id: string): boolean {
         ensureChannelState(channelId)
         const state = channelStates.value[channelId]
-        const key = String(id)
-        if ((Number(key) || 0) <= (Number(state.lastReadId) || 0)) return true
-        return state.readIds[key] === true
+        // 视觉已读仅看 readIds；lastReadId 水位线只用于未读计数，不参与视觉判断
+        return state.readIds[String(id)] === true
     }
 
     function getUnreadCount(channelId: string): number {
