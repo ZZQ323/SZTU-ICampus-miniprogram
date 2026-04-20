@@ -214,6 +214,8 @@ export interface FeedParams {
     channelId?: string
     contentType?: string
     subContentType?: string
+    /** 订阅模式：逗号分隔的 sourceId 白名单 */
+    sourceIds?: string
     page?: number
     pageSize?: number
 }

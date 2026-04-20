@@ -13,16 +13,15 @@ import { ref, computed, onMounted } from 'vue'
 import { infoApi } from '@/api/info-api'
 import type { Channel, SourceInfo } from '@/types/info'
 import { SOURCE_ORG_TREE } from '@/types/info'
-
-const STORAGE_KEY = 'icampus_subscribed_sources'
+import { useSubscriptionStore, MAX_SUBSCRIPTIONS } from '@/store/modules/subscription'
 
 // ==================== 状态 ====================
 
 const channels = ref<Channel[]>([])
-const subscribedSourceIds = ref<string[]>(loadSubscribedIds())
 const loading = ref(false)
-const expandedOrg = ref('')
 const activeOrg = ref('')
+
+const subscriptionStore = useSubscriptionStore()
 
 // ==================== 计算属性 ====================
 
@@ -56,7 +55,7 @@ const displaySources = computed<Array<{ source: SourceInfo; channelName: string 
   return result
 })
 
-const subscribedCount = computed(() => subscribedSourceIds.value.length)
+const subscribedCount = computed(() => subscriptionStore.count)
 
 // 可展开的分类列表（排除 全部/已订阅/公文通）
 const subscribableOrgs = computed(() =>
@@ -67,29 +66,18 @@ const subscribableOrgs = computed(() =>
 
 // ==================== 方法 ====================
 
-function loadSubscribedIds(): string[] {
-  try {
-    const raw = uni.getStorageSync(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch { return [] }
-}
-
-function saveSubscribedIds() {
-  uni.setStorageSync(STORAGE_KEY, JSON.stringify(subscribedSourceIds.value))
-}
-
 function toggleSubscribe(sourceId: string) {
-  const idx = subscribedSourceIds.value.indexOf(sourceId)
-  if (idx >= 0) {
-    subscribedSourceIds.value.splice(idx, 1)
-  } else {
-    subscribedSourceIds.value.push(sourceId)
+  const result = subscriptionStore.toggle(sourceId)
+  if (result === 'full') {
+    uni.showToast({
+      title: `订阅已达上限 ${MAX_SUBSCRIPTIONS} 个`,
+      icon: 'none',
+    })
   }
-  saveSubscribedIds()
 }
 
 function isSubscribed(sourceId: string): boolean {
-  return subscribedSourceIds.value.includes(sourceId)
+  return subscriptionStore.isSubscribed(sourceId)
 }
 
 function selectOrg(orgValue: string) {
@@ -120,7 +108,8 @@ onMounted(async () => {
   <view class="subscribe-page">
 
     <view class="header-info">
-      <text class="subscribed-count">已订阅 {{ subscribedCount }} 个数据源</text>
+      <text class="subscribed-count">已订阅 {{ subscribedCount }} / {{ MAX_SUBSCRIPTIONS }}</text>
+      <text class="header-hint">订阅后在"已订阅"视图中聚合查看，推送也只提示订阅的源</text>
     </view>
 
     <!-- 主布局：左侧分类 + 右侧 source 列表 -->
@@ -187,10 +176,19 @@ onMounted(async () => {
   padding: 20rpx 32rpx;
   background: #fff;
   border-bottom: 1rpx solid #eee;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
 }
 
 .subscribed-count {
-  font-size: 26rpx;
+  font-size: 28rpx;
+  color: #0052d9;
+  font-weight: 600;
+}
+
+.header-hint {
+  font-size: 22rpx;
   color: #999;
 }
 
