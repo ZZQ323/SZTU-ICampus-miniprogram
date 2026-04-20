@@ -1,7 +1,8 @@
 {
   "easycom": {
     "custom": {
-      "^t-(.*)": "tdesign-uniapp/$1/$1.vue"
+      "^t-(.*)": "tdesign-uniapp/$1/$1.vue",
+      "^mp-html$": "mp-html/dist/uni-app/components/mp-html/mp-html.vue"
     }
   },
   "pages": [
