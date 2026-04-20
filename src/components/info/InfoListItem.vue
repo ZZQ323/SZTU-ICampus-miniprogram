@@ -79,8 +79,6 @@ const props = defineProps<{
         department?: string
         category?: string
     }
-    useStore?: boolean
-    isRead?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -94,8 +92,6 @@ const infoStore = useInfoStore()
 // ==================== 计算属性 ====================
 
 const isReadState = computed(() => {
-    if (props.isRead !== undefined) return props.isRead
-    if (props.useStore === false) return false
     const channelId = props.item.channelId || 'announcement'
     // 显式读取 channelStates 建立依赖，确保 markItemRead 后 computed 重算
     const chState = infoStore.channelStates[channelId]
@@ -147,10 +143,8 @@ const cleanTitle = computed(() => {
 // ==================== 方法 ====================
 
 function handleTap() {
-    if (props.useStore !== false) {
-        const channelId = props.item.channelId || 'announcement'
-        infoStore.markItemRead(channelId, props.item.id)
-    }
+    const channelId = props.item.channelId || 'announcement'
+    infoStore.markItemRead(channelId, String(props.item.id))
     emit('tap', props.item)
 }
 </script>

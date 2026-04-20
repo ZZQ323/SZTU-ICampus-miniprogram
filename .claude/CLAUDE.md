@@ -229,6 +229,18 @@ Vue 3 浏览器端会代理 `Set.has/add`，但 **uni-app 小程序渲染层（s
 - 列表项 computed 里如果担心复用依赖不建立，可以显式 `void store.channelStates[id]?.xxx` 读一次
 - ID 统一 `String()` 强制类型一致，避免后端偶发 number 与前端 string key 不匹配
 
+### Boolean prop 默认值是 false，不是 undefined
+
+Vue 3 遵循 HTML boolean attribute 语义：**声明为 `boolean` 的 prop 没传时默认是 `false`**（不是 `undefined`）。所以这种"未传则回退"的写法是错的：
+
+```ts
+// ❌ 永远命中第一行，useStore 实际上永远是 false
+if (props.isRead !== undefined) return props.isRead
+if (props.useStore === false) return false
+```
+
+踩过的坑：`InfoListItem` 的 `isRead?: boolean` / `useStore?: boolean` 导致 `isReadState` 恒为 `false`，已读态永远看不出变化。解决：单消费者场景直接砍掉这种"可选开关"，让组件只有一条确定路径；需要保留开关时改用字符串枚举或 `default: undefined` 显式声明。
+
 ### 已读/未读视觉设计（InfoListItem.vue）
 
 已读未读必须对比足够明显，不能只靠标题颜色变灰：
