@@ -303,6 +303,23 @@ async function loadChannels() {
   } catch { /* ignore */ }
 }
 
+/**
+ * 全部已读：把所有频道的 lastReadId 推到 serverLatestId + 清推送队列。
+ * 徽章会自动从 number/dot 变成 none。
+ */
+function handleMarkAllRead() {
+  uni.showModal({
+    title: '标记全部已读',
+    content: '所有频道未读将被清除',
+    success: (res) => {
+      if (!res.confirm) return
+      infoStore.markAllChannelsRead()
+      infoStore.clearToastQueue()
+      uni.showToast({ title: '已全部标记为已读', icon: 'success' })
+    }
+  })
+}
+
 // ==================== 生命周期 ====================
 
 onShow(async () => {
@@ -334,7 +351,7 @@ onPullDownRefresh(() => {
   <PageLayout>
     <view v-if="isReady" class="notice-page">
 
-      <!-- 信息来源选择器 + 管理订阅入口（仅已订阅视图显示） -->
+      <!-- 信息来源选择器 + 管理订阅入口（仅已订阅视图显示）+ 全部已读 -->
       <view class="source-selector">
         <view class="source-picker-trigger" @tap="showSourcePicker = true">
           <t-icon name="view-list" size="32rpx" color="#0052d9" />
@@ -344,6 +361,11 @@ onPullDownRefresh(() => {
         <view v-if="isSubscribedMode" class="manage-sub-btn" @tap="openSubscribePage">
           <t-icon name="setting" size="36rpx" color="#0052d9" />
           <text>管理订阅</text>
+        </view>
+        <!-- 有徽章时才显示"全部已读" -->
+        <view v-if="infoStore.badge.mode !== 'none'" class="mark-all-btn" @tap="handleMarkAllRead">
+          <t-icon name="check-circle" size="32rpx" color="#07c160" />
+          <text>全部已读</text>
         </view>
       </view>
 
@@ -543,6 +565,23 @@ onPullDownRefresh(() => {
 
   &:active {
     background: #d0e0ff;
+  }
+}
+
+.mark-all-btn {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 8rpx 14rpx;
+  font-size: 24rpx;
+  color: #07c160;
+  background: #ebfaf0;
+  border-radius: 8rpx;
+  flex-shrink: 0;
+  margin-left: 8rpx;
+
+  &:active {
+    background: #d8f0de;
   }
 }
 

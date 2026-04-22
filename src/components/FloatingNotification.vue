@@ -1,129 +1,135 @@
 <!--
-  悬浮按钮组件（重构版）
-  
-  文件：src/components/common/FloatingNotification.vue
-  
-  功能：
-  - 主按钮显示总未读数
-  - 展开显示公告、日历入口（各自带未读数）
-  - 集成新消息浮窗
+  悬浮通知球（基于推送队列的消息中心）
+
+  文件：src/components/FloatingNotification.vue
+
+  两态徽章（由 infoStore.badge 统一决定）：
+    · number：队列非空，显示数字（登录态期间收到的推送）
+    · dot：队列空但有未读文章
+    · none：完全已读
+
+  点击展开：
+    · 队列非空 → 悬浮列表，每条可点（跳详情并 dismiss）或 ✗（只 dismiss），底部"全部已读"清空队列
+    · 队列空但有红点 → 空态卡片 + "去信息流看看"
+    · 完全已读 → 展开后仍是空态（给个兜底）
 -->
+
 <template>
     <view class="fab-wrapper">
-        <!-- 展开的菜单 -->
-        <view v-if="isExpanded" class="fab-menu">
-            <view v-for="item in menuItems" :key="item.id" class="fab-menu-item" @tap="handleMenuTap(item)">
-                <view class="menu-icon-wrapper">
-                    <t-icon :name="item.icon" size="40rpx" :color="item.color" />
-                    <view v-if="item.unread > 0" class="menu-badge">
-                        {{ item.unread > 99 ? '99+' : item.unread }}
+        <!-- 展开的面板 -->
+        <view v-if="isExpanded" class="fab-panel">
+            <view class="panel-header">
+                <text class="panel-title">最近推送</text>
+                <view v-if="queue.length > 0" class="clear-btn" @tap="handleClearAll">
+                    <text>全部已读</text>
+                </view>
+            </view>
+
+            <!-- 队列列表 -->
+            <scroll-view v-if="queue.length > 0" scroll-y class="panel-list">
+                <view v-for="item in queue" :key="item.articleId" class="queue-item"
+                    @tap="handleTapItem(item)">
+                    <view class="item-icon">
+                        <t-icon name="notification" size="32rpx" color="#0052d9" />
+                    </view>
+                    <view class="item-main">
+                        <text class="item-title">{{ displayTitle(item) }}</text>
+                        <text class="item-meta">{{ displaySource(item) }} · {{ displayTime(item.receivedAt) }}</text>
+                    </view>
+                    <view class="item-dismiss" @tap.stop="handleDismiss(item.articleId)">
+                        <t-icon name="close" size="32rpx" color="#bbb" />
                     </view>
                 </view>
-                <text class="menu-label">{{ item.label }}</text>
+            </scroll-view>
+
+            <!-- 空态（队列空，不管有没有红点都展示引导） -->
+            <view v-else class="panel-empty">
+                <t-icon name="notification" size="80rpx" color="#ddd" />
+                <text class="empty-text">最近无推送</text>
+                <view class="go-notice-btn" @tap="goNotice">去信息流看看</view>
             </view>
         </view>
 
-        <!-- 遮罩层 -->
+        <!-- 背景遮罩（点击关闭）-->
         <view v-if="isExpanded" class="fab-overlay" @tap="isExpanded = false" />
 
         <!-- 主按钮 -->
         <view class="fab-main" :class="{ 'is-expanded': isExpanded }" @tap="toggleExpand">
             <t-icon :name="isExpanded ? 'close' : 'notification'" size="44rpx" color="#fff" />
 
-            <!-- 总未读红点（折叠时显示） -->
-            <view v-if="!isExpanded && totalUnread > 0" class="fab-badge">
-                {{ totalUnread > 99 ? '99+' : totalUnread }}
+            <!-- 徽章：三态 -->
+            <view v-if="!isExpanded && badge.mode === 'number'" class="fab-badge">
+                {{ (badge.value || 0) > 99 ? '99+' : badge.value }}
             </view>
+            <view v-else-if="!isExpanded && badge.mode === 'dot'" class="fab-badge-dot" />
         </view>
-
-        <!-- 新消息浮窗 -->
-        <NewMessageToast :message="newMessage" @tap="handleToastTap" @close="handleToastClose" />
     </view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useInfoStore } from '@/store/modules/info'
-import NewMessageToast from './common/NewMessageToast.vue'
-
-// ==================== Store ====================
+import { ref, computed } from 'vue'
+import { useInfoStore, type ToastItem } from '@/store/modules/info'
 
 const infoStore = useInfoStore()
 
-// ==================== 状态 ====================
-
 const isExpanded = ref(false)
 
-// ==================== 计算属性 ====================
+const queue = computed<ToastItem[]>(() => infoStore.toastQueue)
+const badge = computed(() => infoStore.badge)
 
-const totalUnread = computed(() =>
-    menuItems.value.reduce((sum, m) => sum + m.unread, 0)
-)
-const newMessage = computed(() => infoStore.newMessage)
-
-const menuItems = computed(() => [
-    {
-        id: 'announcement',
-        label: '公告',
-        icon: 'notification',
-        color: '#0052d9',
-        unread: infoStore.getUnreadCount('announcement'),
-        path: '/pages/notice/notice'
-    },
-    {
-        id: 'activity',
-        label: '日历',
-        icon: 'calendar',
-        color: '#07c160',
-        unread: infoStore.getUnreadCount('activity'),
-        path: '/pages/calendar/calendar'
-    }
-])
-
-// ==================== 方法 ====================
+// ==================== 交互 ====================
 
 function toggleExpand() {
     isExpanded.value = !isExpanded.value
 }
 
-function handleMenuTap(item: typeof menuItems.value[0]) {
+let lastClickAt = 0
+function handleTapItem(item: ToastItem) {
+    const now = Date.now()
+    if (now - lastClickAt < 400) return
+    lastClickAt = now
+
+    const ch = item.channelId || 'announcement'
+    uni.navigateTo({
+        url: `/pages/notice/detail?id=${item.articleId}&channelId=${ch}`,
+        success: () => infoStore.dismissToast(item.articleId),
+        fail: () => { /* 保留在队列里供用户重试 */ },
+    })
     isExpanded.value = false
-
-    // TabBar 页面用 switchTab，其他用 navigateTo
-    if (item.path === '/pages/notice/notice') {
-        uni.switchTab({ url: item.path })
-    } else {
-        uni.navigateTo({ url: item.path })
-    }
 }
 
-function handleToastTap(message: any) {
-    infoStore.clearNewMessage()
-
-    // 跳转到公告页
-    if (message.channelId === 'announcement') {
-        uni.switchTab({ url: '/pages/notice/notice' })
-    } else {
-        uni.navigateTo({ url: `/pages/calendar/calendar` })
-    }
+function handleDismiss(articleId: string) {
+    infoStore.dismissToast(articleId)
 }
 
-function handleToastClose() {
-    infoStore.clearNewMessage()
+function handleClearAll() {
+    infoStore.clearToastQueue()
 }
 
-// ==================== 暴露方法 ====================
-
-/**
- * 显示新消息浮窗（供外部调用）
- */
-function showNewMessage(message: any) {
-    infoStore.newMessage = message
+function goNotice() {
+    uni.switchTab({ url: '/pages/notice/notice' })
+    isExpanded.value = false
 }
 
-defineExpose({
-    showNewMessage
-})
+// ==================== 显示辅助 ====================
+
+function displayTitle(item: ToastItem): string {
+    if (item.title) return item.title
+    return `${item.sourceOrgName || '新消息'} · 新动态`
+}
+
+function displaySource(item: ToastItem): string {
+    return item.sourceOrgName || item.channelId || ''
+}
+
+function displayTime(ts: number): string {
+    const diff = Date.now() - ts
+    if (diff < 60_000) return '刚刚'
+    if (diff < 3600_000) return `${Math.floor(diff / 60_000)} 分钟前`
+    if (diff < 86400_000) return `${Math.floor(diff / 3600_000)} 小时前`
+    const d = new Date(ts)
+    return `${d.getMonth() + 1}-${d.getDate()}`
+}
 </script>
 
 <style lang="scss" scoped>
@@ -153,7 +159,6 @@ defineExpose({
     &.is-expanded {
         background: #666;
         box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.2);
-        transform: rotate(90deg);
     }
 }
 
@@ -175,6 +180,17 @@ defineExpose({
     box-shadow: 0 2rpx 8rpx rgba(245, 74, 69, 0.4);
 }
 
+.fab-badge-dot {
+    position: absolute;
+    top: 6rpx;
+    right: 6rpx;
+    width: 20rpx;
+    height: 20rpx;
+    background: #f54a45;
+    border-radius: 50%;
+    border: 2rpx solid #fff;
+}
+
 .fab-overlay {
     position: fixed;
     top: 0;
@@ -185,73 +201,144 @@ defineExpose({
     z-index: -1;
 }
 
-.fab-menu {
+/* ==================== 展开面板 ==================== */
+
+.fab-panel {
     position: absolute;
     bottom: 116rpx;
     right: 0;
+    width: 560rpx;
+    max-height: 720rpx;
+    background: #fff;
+    border-radius: 20rpx;
+    box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.15);
+    animation: fadeInUp 0.2s ease-out;
     display: flex;
     flex-direction: column;
-    gap: 20rpx;
-    animation: fadeInUp 0.2s ease-out;
+    overflow: hidden;
 }
 
 @keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20rpx);
-    }
+    from { opacity: 0; transform: translateY(20rpx); }
+    to   { opacity: 1; transform: translateY(0); }
+}
 
-    to {
-        opacity: 1;
-        transform: translateY(0);
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24rpx 28rpx;
+    border-bottom: 1rpx solid #f0f0f0;
+    flex-shrink: 0;
+}
+
+.panel-title {
+    font-size: 30rpx;
+    font-weight: 600;
+    color: #333;
+}
+
+.clear-btn {
+    padding: 6rpx 16rpx;
+    font-size: 24rpx;
+    color: #0052d9;
+    background: #e6f0ff;
+    border-radius: 20rpx;
+
+    &:active {
+        background: #d0e0ff;
     }
 }
 
-.fab-menu-item {
+/* 列表 */
+
+.panel-list {
+    flex: 1;
+    max-height: 560rpx;
+    padding: 8rpx 0;
+}
+
+.queue-item {
     display: flex;
     align-items: center;
     gap: 16rpx;
-    padding: 16rpx 24rpx 16rpx 16rpx;
-    background: #fff;
-    border-radius: 48rpx;
-    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
+    padding: 20rpx 24rpx;
+    border-bottom: 1rpx solid #f5f5f5;
+
+    &:last-child { border-bottom: none; }
+    &:active { background: #f7f8fa; }
+}
+
+.item-icon {
+    width: 56rpx;
+    height: 56rpx;
+    background: #e6f0ff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.item-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+}
+
+.item-title {
+    font-size: 26rpx;
+    color: #333;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.item-meta {
+    font-size: 22rpx;
+    color: #999;
+}
+
+.item-dismiss {
+    padding: 8rpx;
+    flex-shrink: 0;
 
     &:active {
-        background: #f5f5f5;
+        background: #f0f0f0;
+        border-radius: 50%;
     }
 }
 
-.menu-icon-wrapper {
-    width: 56rpx;
-    height: 56rpx;
-    border-radius: 50%;
-    background: #f5f5f5;
+/* 空态 */
+
+.panel-empty {
+    padding: 60rpx 40rpx;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    position: relative;
+    gap: 16rpx;
 }
 
-.menu-badge {
-    position: absolute;
-    top: -6rpx;
-    right: -6rpx;
-    min-width: 28rpx;
-    height: 28rpx;
-    padding: 0 6rpx;
-    font-size: 18rpx;
-    font-weight: 600;
-    color: #fff;
-    background-color: #f54a45;
-    border-radius: 14rpx;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.menu-label {
+.empty-text {
     font-size: 28rpx;
-    color: #333;
-    white-space: nowrap;
+    color: #999;
+}
+
+.go-notice-btn {
+    margin-top: 12rpx;
+    padding: 14rpx 40rpx;
+    background: #0052d9;
+    color: #fff;
+    font-size: 26rpx;
+    border-radius: 24rpx;
+
+    &:active {
+        background: #003ea5;
+    }
 }
 </style>

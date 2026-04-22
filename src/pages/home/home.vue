@@ -48,7 +48,8 @@ const displayName = computed(() => {
   return userInfo.value?.realName || '同学'
 })
 
-const announcementBadge = computed(() => infoStore.getUnreadCount('announcement'))
+/** 2×2 信息流格子的徽章：和 FAB / TabBar 同源（队列长度 or 红点 or 无）*/
+const infoBadge = computed(() => infoStore.badge)
 
 // ==================== 方法 ====================
 
@@ -188,9 +189,10 @@ watch(isLoggedIn, (val) => {
           <view class="grid-card" @tap="goNotice">
             <view class="grid-icon notice-icon">
               <t-icon name="notification" size="44rpx" color="#0052d9" />
-              <view v-if="announcementBadge > 0" class="badge">
-                {{ announcementBadge > 99 ? '99+' : announcementBadge }}
+              <view v-if="infoBadge.mode === 'number'" class="badge">
+                {{ (infoBadge.value || 0) > 99 ? '99+' : infoBadge.value }}
               </view>
+              <view v-else-if="infoBadge.mode === 'dot'" class="badge-dot" />
             </view>
             <text class="grid-title">信息流</text>
             <text class="grid-desc">公告 · 教务 · 新闻</text>
@@ -423,6 +425,17 @@ watch(isLoggedIn, (val) => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.badge-dot {
+  position: absolute;
+  top: 0;
+  right: -2rpx;
+  width: 16rpx;
+  height: 16rpx;
+  background: #fa5151;
+  border-radius: 50%;
+  border: 2rpx solid #fff;
 }
 
 .grid-title {
