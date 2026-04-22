@@ -42,7 +42,6 @@ const groupedChannels = computed(() => {
   const groups: Record<string, Channel[]> = {}
   for (const ch of props.channels) {
     const org = ch.sourceOrg || 'unknown'
-    if (org === 'fixed') continue // 公文通不在分类里展开
     if (!groups[org]) groups[org] = []
     groups[org].push(ch)
   }
@@ -52,7 +51,6 @@ const groupedChannels = computed(() => {
 /** 获取分类下的频道列表 */
 function getChannelsForOrg(orgValue: string): Channel[] {
   if (!orgValue || orgValue === 'subscribed') return []
-  if (orgValue === 'fixed') return []
   return groupedChannels.value[orgValue] || []
 }
 
@@ -68,12 +66,11 @@ function toggleExpand(orgValue: string) {
 
 /** 选中分类（点击文字） */
 function selectOrg(orgValue: string, label: string) {
-  if (orgValue === 'fixed') {
-    // 公文通特殊：直接选中 announcement 频道
-    emit('select', { channelId: 'announcement', label: '公文通' })
-  } else if (orgValue === 'subscribed') {
+  if (orgValue === 'subscribed') {
     emit('select', { sourceOrg: 'subscribed', label: '已订阅' })
   } else {
+    // fixed 也走 sourceOrg 维度（3 个子频道: 公文通 / 已收公告 / 消息通知），
+    // 点 label 选择父组 = 聚合显示，点子项单独显示
     emit('select', { sourceOrg: orgValue || undefined, label })
   }
   emit('close')

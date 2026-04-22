@@ -39,7 +39,7 @@ export interface Channel {
 export const SOURCE_ORG_TREE = [
     { value: '', label: '全部' },
     { value: 'subscribed', label: '已订阅' },
-    { value: 'fixed', label: '公文通' },
+    { value: 'fixed', label: '教务内网' },
     { value: 'official', label: '学校' },
     { value: 'department', label: '职能部门' },
     { value: 'support', label: '教辅科研单位' },

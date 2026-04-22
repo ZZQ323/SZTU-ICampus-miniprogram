@@ -115,6 +115,7 @@ import { useAuthStore } from '@/store/modules/auth'
 import { useInfoStore } from '@/store/modules/info'
 import { hasAuth } from '@/utils/cookie-manager'
 import { type LoginType } from '@/types/auth'
+import { academicApi } from '@/api/auth-apis'
 
 // ==================== Store ====================
 
@@ -340,6 +341,19 @@ async function handleLogin() {
       // 登录成功后，重置失败标记
       const infoStore = useInfoStore()
       infoStore.resetInitState()
+
+      // 登录成功 → 后台触发教务系统初始化（拿 jwxt 子域 cookies）
+      // 不 await：不阻塞跳转，用户无感；失败不影响其他功能
+      // 成功后后端会自动爬 acdm-* 源，之后用户可在"教务内网"频道看到数据
+      academicApi.initAcademic().catch(() => {
+        uni.showModal({
+          title: '教务系统初始化失败',
+          content: '课表、已收公告、消息通知暂不可用。\n请在「首页」点击"刷新会话"重试。',
+          showCancel: false,
+          confirmText: '知道了'
+        })
+      })
+
       // 延迟返回
       setTimeout(() => {
         uni.navigateBack()

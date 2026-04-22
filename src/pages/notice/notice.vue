@@ -23,8 +23,12 @@ import { useInfoStore } from '@/store/modules/info'
 import { useSubscriptionStore } from '@/store/modules/subscription'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 import { infoApi } from '@/api/info-api'
+import { academicApi } from '@/api/auth-apis'
 import type { InfoItemMeta, Channel } from '@/types/info'
 import { TAB_LAYER1, TAB_LAYER2_NEWS, TAB_LAYER2_NOTICE, CATEGORY_LIST } from '@/types/info'
+
+/** 教务内网的固定频道 id — 依赖 jwxt cookies，可触发 initAcademic 自愈 */
+const ACDM_CHANNELS = new Set(['acdm-notice', 'acdm-message'])
 
 const userStore = useUserStore()
 const infoStore = useInfoStore()
@@ -64,11 +68,23 @@ const isSearchMode = ref(false)
 
 const isLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 
-/** 是否选中了公文通 */
+/** 是否是某个教务内网固定频道（需登录、需 jwxt cookies） */
+const isFixedChannel = computed(() => {
+  const c = sourceFilter.value.channelId
+  return c === 'announcement' || ACDM_CHANNELS.has(c || '')
+})
+
+/** 是否选中了公文通（独有分类 pills） */
 const isAnnouncement = computed(() => sourceFilter.value.channelId === 'announcement')
+
+/** 是否选中了教务 inbox 类频道（空态可触发 initAcademic） */
+const isAcdmChannel = computed(() => ACDM_CHANNELS.has(sourceFilter.value.channelId || ''))
 
 /** 是否选中了"已订阅"视图 */
 const isSubscribedMode = computed(() => sourceFilter.value.sourceOrg === 'subscribed')
+
+/** init 教务正在进行中（按钮 loading 态） */
+const acdmIniting = ref(false)
 
 /** 临时筛选（仅在已订阅视图有效）：null = 未筛选 = 显示全部已订阅 */
 const tempFilterIds = ref<string[] | null>(null)
@@ -82,9 +98,9 @@ const layer2Tabs = computed(() => {
 })
 
 /** 是否显示第二层 Tab */
-const showLayer2 = computed(() => activeLayer1.value !== '' && !isAnnouncement.value && !isSubscribedMode.value)
+const showLayer2 = computed(() => activeLayer1.value !== '' && !isFixedChannel.value && !isSubscribedMode.value)
 
-/** 是否显示公文通分类 pills */
+/** 是否显示公文通分类 pills（只有 announcement 有教务/科研/行政... 这些子分类） */
 const showGwtCategories = computed(() => isAnnouncement.value)
 
 /** 已订阅视图是否应该显示"筛选"按钮（有订阅内容时才有意义） */
@@ -131,11 +147,12 @@ async function fetchList(reset = false) {
       })
       // 订阅视图不分页
       hasMore.value = false
-    } else if (isAnnouncement.value) {
-      // 公文通走原有的 list API（需要登录）
+    } else if (isFixedChannel.value) {
+      // 教务内网组（公文通 / 已收公告 / 消息通知）走 list API（需要登录）
+      // categoryCode 只对 announcement 有意义（教务/科研/行政...）
       result = await infoApi.getList({
-        channelId: 'announcement',
-        categoryCode: activeLayer2.value || undefined,
+        channelId: sourceFilter.value.channelId!,
+        categoryCode: isAnnouncement.value ? (activeLayer2.value || undefined) : undefined,
         page: page.value,
         pageSize: 20
       })
@@ -294,6 +311,26 @@ async function handleRefresh() {
   await fetchList(true)
 }
 
+/** acdm 频道空态兜底：用户手动触发教务初始化 → 成功后重新拉列表 */
+async function handleInitAcdm() {
+  if (acdmIniting.value) return
+  acdmIniting.value = true
+  try {
+    await academicApi.initAcademic()
+    uni.showToast({ title: '已初始化，刷新中...', icon: 'success' })
+    // 后端异步爬取，稍等一会再拉 —— 2s 通常够 acdm-* 跑完首页
+    setTimeout(() => fetchList(true), 2000)
+  } catch (e: any) {
+    uni.showModal({
+      title: '初始化失败',
+      content: e?.message || '网络不稳定，请稍后再试或去"首页"点击"刷新会话"。',
+      showCancel: false
+    })
+  } finally {
+    acdmIniting.value = false
+  }
+}
+
 /** 加载频道列表（用于 SourcePicker） */
 async function loadChannels() {
   if (channels.value.length > 0) return
@@ -369,8 +406,8 @@ onPullDownRefresh(() => {
         </view>
       </view>
 
-      <!-- 第一层 Tab：内容大类 -->
-      <view v-if="!isAnnouncement" class="tab-bar">
+      <!-- 第一层 Tab：内容大类（教务内网组不展示，它们自成体系）-->
+      <view v-if="!isFixedChannel" class="tab-bar">
         <view
           v-for="tab in TAB_LAYER1"
           :key="tab.value"
@@ -442,10 +479,10 @@ onPullDownRefresh(() => {
         </view>
       </view>
 
-      <!-- 未登录提示（仅公文通需要） -->
-      <view v-if="isAnnouncement && !isLoggedIn" class="login-tip">
+      <!-- 未登录提示（教务内网所有固定频道都需要登录） -->
+      <view v-if="isFixedChannel && !isLoggedIn" class="login-tip">
         <t-icon name="info-circle" size="32rpx" />
-        <text>登录后可查看公文通内容</text>
+        <text>登录后可查看教务内网内容</text>
       </view>
 
       <!-- 加载状态 -->
@@ -456,6 +493,19 @@ onPullDownRefresh(() => {
 
       <!-- 列表 -->
       <view v-else class="list">
+        <!-- 教务 inbox 空态：cookies 可能没 init，提供手动触发按钮 -->
+        <view
+          v-if="isAcdmChannel && isLoggedIn && list.length === 0 && !loading"
+          class="subscribed-empty"
+        >
+          <t-icon name="mail" size="80rpx" color="#ccc" />
+          <text class="empty-title">暂无内容</text>
+          <text class="empty-hint">如果登录后该频道一直为空，可能是教务 cookie 没初始化成功</text>
+          <view class="go-subscribe-btn" :class="{ disabled: acdmIniting }" @tap="handleInitAcdm">
+            <text>{{ acdmIniting ? '初始化中...' : '初始化教务信息' }}</text>
+          </view>
+        </view>
+
         <!-- 已订阅视图空态：区分"没订阅"和"筛选后为空" -->
         <view
           v-if="isSubscribedMode && list.length === 0 && !loading"
@@ -494,7 +544,7 @@ onPullDownRefresh(() => {
           —— 重在推送 ——
         </view>
 
-        <t-empty v-if="!loading && list.length === 0 && !isSubscribedMode" :description="isSearchMode ? '未找到相关内容' : '暂无内容'" />
+        <t-empty v-if="!loading && list.length === 0 && !isSubscribedMode && !(isAcdmChannel && isLoggedIn)" :description="isSearchMode ? '未找到相关内容' : '暂无内容'" />
       </view>
     </view>
 
@@ -751,6 +801,14 @@ onPullDownRefresh(() => {
   color: #999;
 }
 
+.empty-hint {
+  font-size: 24rpx;
+  color: #bbb;
+  padding: 0 48rpx;
+  text-align: center;
+  line-height: 1.5;
+}
+
 .go-subscribe-btn {
   margin-top: 20rpx;
   padding: 16rpx 48rpx;
@@ -761,6 +819,11 @@ onPullDownRefresh(() => {
 
   &:active {
     background: #003ea5;
+  }
+
+  &.disabled {
+    background: #a0a0a0;
+    pointer-events: none;
   }
 }
 

@@ -253,7 +253,12 @@ onLoad((options) => {
 
                 <!-- 正文：使用 mp-html 渲染（图片点开预览，链接自定义处理）-->
                 <view class="article">
+                    <view v-if="!renderedContent" class="empty-content-hint">
+                        <t-icon name="info-circle" size="60rpx" color="#ccc" />
+                        <text>此消息无详情内容</text>
+                    </view>
                     <mp-html
+                        v-else
                         :content="renderedContent"
                         :tag-style="TAG_STYLE"
                         :selectable="true"
@@ -389,6 +394,17 @@ onLoad((options) => {
 .article {
     padding: 32rpx 0;
     overflow: hidden;
+}
+
+.empty-content-hint {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16rpx;
+    padding: 80rpx 0;
+    color: #aaa;
+    font-size: 28rpx;
 }
 
 // 附件
