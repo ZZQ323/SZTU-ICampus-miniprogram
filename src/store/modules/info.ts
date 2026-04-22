@@ -22,6 +22,7 @@ import { hasAuth } from '@/utils/cookie-manager'
 import type { CategoryTree, ChannelUnreadState } from '@/types/info'
 import type { WsMessage } from '@/utils/websocket'
 import { useSubscriptionStore } from './subscription'
+import { useUserStore } from './user'
 
 // ==================== 存储 Key ====================
 
@@ -29,6 +30,25 @@ const STORAGE_PREFIX = 'info_'
 const STORAGE_LAST_READ = (channelId: string) => `${STORAGE_PREFIX}last_read_${channelId}`
 const STORAGE_READ_IDS = (channelId: string) => `${STORAGE_PREFIX}read_ids_${channelId}`
 const MAX_READ_IDS = 200
+
+// ==================== 推送队列 ====================
+
+/** 推送队列单条（文章级） */
+export interface ToastItem {
+    articleId: string
+    channelId: string
+    sourceOrgName?: string
+    /** 只有批次头部有真实标题，其他条目用 "${sourceOrgName} · 新动态" 兜底 */
+    title?: string
+    receivedAt: number
+}
+
+/** 队列上限（超出按时间 FIFO 截断）*/
+const MAX_QUEUE_SIZE = 20
+
+/** 徽章模式：number（有推送队列，显示数字）/ dot（无队列但有未读文章）/ none（完全已读）*/
+export type BadgeMode = 'number' | 'dot' | 'none'
+export interface Badge { mode: BadgeMode; value?: number }
 
 // ==================== Store ====================
 
@@ -45,6 +65,15 @@ export const useInfoStore = defineStore('info', () => {
     const categoryTree = ref<CategoryTree | null>(null)
     const wsConnected = ref(false)
     const newMessage = ref<any>(null)
+
+    /**
+     * 推送队列（仅内存，不持久化）
+     *   入队条件：用户处于"登录态"（isSchoolLoggedIn=true）时的 WS 推送
+     *   清空时机：登录态从 true → false 的那一刻（登出 / 被挤 / cookie 失效）
+     *   上限：MAX_QUEUE_SIZE，超出按 FIFO 截断
+     *   顺序：receivedAt desc（最新在最前）
+     */
+    const toastQueue = ref<ToastItem[]>([])
 
     /** 防并发 */
     let _initing = false
@@ -69,6 +98,28 @@ export const useInfoStore = defineStore('info', () => {
 
     const hasUnread = computed(() => totalUnread.value > 0)
     const announcementUnread = computed(() => unreadCounts.value.announcement || 0)
+
+    /**
+     * 任意频道是否有"未读文章"（serverLatestId > lastReadId）。
+     * 用于红点降级模式：队列清空且用户本地仍有未读时显示红点。
+     */
+    const hasAnyUnread = computed(() =>
+        Object.values(unreadCounts.value).some(n => n > 0)
+    )
+
+    /**
+     * 统一徽章：FAB / TabBar / 首页 2×2 同源消费。
+     *   queue.length > 0 → number（登录态下持续积累）
+     *   else hasAnyUnread → dot（离线/初始状态的降级展示）
+     *   else             → none（全部已读）
+     */
+    const badge = computed<Badge>(() => {
+        if (toastQueue.value.length > 0) {
+            return { mode: 'number', value: toastQueue.value.length }
+        }
+        if (hasAnyUnread.value) return { mode: 'dot' }
+        return { mode: 'none' }
+    })
 
     // ==================== 持久化 ====================
 
@@ -191,12 +242,13 @@ export const useInfoStore = defineStore('info', () => {
     }
 
     function handleWsMessage(message: WsMessage) {
-        // 通用格式：message.data 包含 { channelId, latestId, sourceId?, sourceOrgName?, latestTitle?, ... }
+        // 通用格式：message.data 包含 { channelId, latestId, sourceId?, sourceOrgName?, latestTitle?, ids?: string[], ... }
         const channelId = message.data?.channelId
         const latestId = message.data?.latestId
         const sourceId = message.data?.sourceId
         const sourceOrgName = message.data?.sourceOrgName
         const latestTitle = message.data?.latestTitle
+        const ids: string[] = message.data?.ids || (latestId ? [latestId] : [])
 
         // 订阅过滤：非空订阅集合内的 sourceId 才通过；空集 / payload 缺 sourceId 都放行（减噪但不阻断）
         const subscription = useSubscriptionStore()
@@ -210,30 +262,124 @@ export const useInfoStore = defineStore('info', () => {
             case 'NEW_ANNOUNCEMENTS':
             case 'ANNOUNCEMENT_STATUS':
             case 'ANNOUNCEMENT_DATA':
-                // 兼容旧格式（无 channelId 字段，默认 announcement）
-                if (latestId) updateServerLatestId(channelId || 'announcement', latestId, extra)
-                break
             case 'NEW_CONTENT':
-                // 新的通用推送格式（所有频道统一）
-                if (channelId && latestId) updateServerLatestId(channelId, latestId, extra)
+                // 统一处理：抬水位线 + 入队（若登录态）
+                if (latestId) {
+                    updateServerLatestId(channelId || 'announcement', latestId, extra)
+                }
+                // 仅登录态才入队（未登录下 WS 理论上不会连，但加道保险）
+                if (isLoggedInForQueue() && ids.length > 0) {
+                    for (const id of ids) {
+                        enqueueToast({
+                            articleId: String(id),
+                            channelId: channelId || 'announcement',
+                            sourceOrgName,
+                            title: String(id) === String(latestId) ? latestTitle : undefined,
+                            receivedAt: Date.now(),
+                        })
+                    }
+                }
                 break
         }
     }
 
     function clearNewMessage() { newMessage.value = null }
 
-    // ==================== TabBar 红点 ====================
+    // ==================== 推送队列操作 ====================
 
-    function updateTabBarBadge() {
-        const count = totalUnread.value
+    function isLoggedInForQueue(): boolean {
         try {
-            if (count > 0) {
-                uni.setTabBarBadge({ index: 2, text: count > 99 ? '99+' : String(count) })
+            return useUserStore().isSchoolLoggedIn === true
+        } catch {
+            return false
+        }
+    }
+
+    /** 入队：新条目放队首，重复 articleId 去重（保留最新 receivedAt），超限 FIFO 截断 */
+    function enqueueToast(item: ToastItem) {
+        const existingIdx = toastQueue.value.findIndex(t => t.articleId === item.articleId)
+        if (existingIdx >= 0) {
+            // 已存在 → 提到队首并刷新 title（若新的有 title）
+            const existing = toastQueue.value[existingIdx]
+            const merged: ToastItem = {
+                ...existing,
+                title: item.title || existing.title,
+                receivedAt: item.receivedAt,
+            }
+            toastQueue.value.splice(existingIdx, 1)
+            toastQueue.value.unshift(merged)
+        } else {
+            toastQueue.value.unshift(item)
+        }
+        if (toastQueue.value.length > MAX_QUEUE_SIZE) {
+            toastQueue.value.splice(MAX_QUEUE_SIZE)
+        }
+        updateTabBarBadge()
+    }
+
+    /** 单条删除（用户点 ✗ 或点击跳转后） */
+    function dismissToast(articleId: string) {
+        const idx = toastQueue.value.findIndex(t => t.articleId === articleId)
+        if (idx >= 0) {
+            toastQueue.value.splice(idx, 1)
+            updateTabBarBadge()
+        }
+    }
+
+    /** 清空整个队列（用户点"全部已读"或登录态中断触发） */
+    function clearToastQueue() {
+        if (toastQueue.value.length === 0) return
+        toastQueue.value = []
+        updateTabBarBadge()
+    }
+
+    /**
+     * 所有频道"全部已读"：把每个频道的 lastReadId 推到 serverLatestId，
+     * 红点消除。通常和 clearToastQueue 一起用（让徽章直接归 none）。
+     */
+    function markAllChannelsRead() {
+        for (const channelId of Object.keys(channelStates.value)) {
+            markChannelRead(channelId)
+        }
+    }
+
+    // ==================== TabBar 徽章（信息流 tab，index=2）====================
+
+    /**
+     * 和 FAB / home 2x2 同源：队列非空 → 数字；空但有未读 → 红点；全部已读 → 无
+     * 小程序的 tabBar 原生 badge 不支持同时设数字+红点，我们优先数字。
+     */
+    function updateTabBarBadge() {
+        const b = badge.value
+        try {
+            if (b.mode === 'number') {
+                uni.setTabBarBadge({ index: 2, text: (b.value || 0) > 99 ? '99+' : String(b.value) })
+                // 数字模式不需要红点
+                try { (uni as any).hideTabBarRedDot?.({ index: 2 }) } catch { /* ignore */ }
+            } else if (b.mode === 'dot') {
+                uni.removeTabBarBadge({ index: 2 })
+                try { (uni as any).showTabBarRedDot?.({ index: 2 }) } catch { /* ignore */ }
             } else {
                 uni.removeTabBarBadge({ index: 2 })
+                try { (uni as any).hideTabBarRedDot?.({ index: 2 }) } catch { /* ignore */ }
             }
         } catch { /* 非 tabBar 页面会报错 */ }
     }
+
+    // ==================== 登录态断点监听 ====================
+
+    // 登录态从 true → false 时清空队列（降级为红点模式）
+    try {
+        const userStore = useUserStore()
+        watch(() => userStore.isSchoolLoggedIn, (now, before) => {
+            if (before && !now) {
+                clearToastQueue()
+            }
+        })
+    } catch { /* store 未初始化完时忽略 */ }
+
+    // badge 任何变化都同步一次 tabBar（兜底：handleWsMessage / enqueueToast 也会调）
+    watch(badge, () => updateTabBarBadge(), { immediate: false })
 
     // ==================== 内部 ====================
 
@@ -256,7 +402,11 @@ export const useInfoStore = defineStore('info', () => {
 
     return {
         channelStates, categoryTree, wsConnected, newMessage,
-        unreadCounts, totalUnread, hasUnread, announcementUnread,
+        unreadCounts, totalUnread, hasUnread, hasAnyUnread, announcementUnread,
+        // 统一徽章 + 队列
+        badge, toastQueue,
+        enqueueToast, dismissToast, clearToastQueue, markAllChannelsRead,
+        // 原有
         init, resetInitState, loadCategoryTree,
         updateServerLatestId, markChannelRead, markItemRead,
         isItemRead, getUnreadCount, handleWsMessage, clearNewMessage,
