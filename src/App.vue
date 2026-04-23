@@ -16,6 +16,7 @@ import { useUserStore } from '@/store/modules/user'
 import { useWsStore } from '@/store/modules/ws'
 import { useInfoStore } from '@/store/modules/info'
 import { hasAuth } from '@/utils/cookie-manager'
+import { academicApi } from '@/api/auth-apis'
 
 const userStore = useUserStore()
 const wsStore = useWsStore()
@@ -32,6 +33,13 @@ onLaunch(async () => {
       const status = await userStore.checkSchoolSession()
       if (status.logined) {
         infoStore.init()
+        // 挂机恢复：checkSchoolSession 续上了 webvpn 会话，但 jwxt 子域专属 cookies
+        // 不会被 refresh 自动带回来（走不同 host）。fire-and-forget 触发一次教务 init，
+        // 让后端拿到 jwxt cookies + 发 AcademicSessionReadyEvent → 爬 acdm-*。
+        // 静默：失败不打扰用户（他只是挂机恢复），空频道由 notice 页空态按钮兜底。
+        academicApi.initAcademic().catch((e: any) => {
+          console.warn('[App] 教务系统静默初始化失败', e?.message)
+        })
       }
       // 未登录：不加载数据，等用户操作
     } catch (e) {
