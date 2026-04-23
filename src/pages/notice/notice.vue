@@ -285,18 +285,24 @@ function handleItemClick(item: InfoItemMeta) {
     return
   }
 
+  // channelId 解析策略：
+  //   1) item 自己的 channelId（后端 enrichItemsWithSourceMeta 设置，新爬的必有）
+  //   2) fallback 用当前 sourceFilter 的 channelId（如果用户就是在某个具体频道下点的）
+  //   3) 再不行用 'announcement'（存量数据兜底）
+  // 之前硬编码 'announcement' 导致 acdm-* 频道的 item 被误路由到公文通 source → 404。
+  const effectiveChannelId = item.channelId || sourceFilter.value.channelId || 'announcement'
+
   // ⭐ 缓存当前列表到 storage，供 detail.vue 实现上一篇/下一篇导航
   const navList = list.value.map(i => ({
     id: i.id,
     title: i.title,
-    channelId: i.channelId || 'announcement',
+    channelId: i.channelId || sourceFilter.value.channelId || 'announcement',
     categoryCode: i.categoryCode || '',
   }))
   uni.setStorageSync('detail_nav_list', JSON.stringify(navList))
 
-  const channelId = item.channelId || 'announcement'
   uni.navigateTo({
-    url: `/pages/notice/detail?id=${item.id}&channelId=${channelId}&category=${item.categoryCode || ''}`
+    url: `/pages/notice/detail?id=${item.id}&channelId=${effectiveChannelId}&category=${item.categoryCode || ''}`
   })
 }
 
