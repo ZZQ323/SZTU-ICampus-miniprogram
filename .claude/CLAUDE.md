@@ -287,6 +287,10 @@ TabBar:
 
 **页面转发**（区别于"附件转发"）：`onShareAppMessage` + `onShareTimeline` + `uni.showShareMenu({ menus:['shareAppMessage','shareTimeline'] })`，用户点右上角胶囊即可。path 带上 channelId/id/category，好友点开直达详情页。
 
+**openDocument 必传 fileType**（否则真机也挂）：学校附件 URL 多是 `download.jsp?urltype=...` 不带扩展名，`uni.downloadFile` 的 `tempFilePath` 通常也没扩展名。openDocument 靠扩展名判类型，不传 `fileType` 参数就报 `filetype not supported`。`resolveOpenDocFileType(att)` 按顺序：附件名/URL 扩展名 → 后端 `type` 字段（pdf/word/excel/ppt）→ 空串（压缩包/未知），空串时提前用 showModal 告诉用户"无法预览"，别让 openDocument 去挨打。
+
+**DevTools 限制**：Windows/Mac 微信开发者工具**不支持 openDocument**，总是返回 `filetype not supported`。这是官方限制，真机（iOS/Android）正常。错误文案要引导用户"开发者工具不支持预览，请用真机测试"，不要让新手以为代码有 bug 调半天。
+
 ### 外链处理
 
 - `mp.weixin.qq.com` → 通过 `web-view` 页面在小程序内打开

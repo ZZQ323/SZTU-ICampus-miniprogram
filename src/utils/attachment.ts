@@ -44,6 +44,40 @@ export function isImageAttachment(att: Attachment): boolean {
     return /\.(jpe?g|png|gif|webp|bmp)(\?|$)/.test(lower)
 }
 
+/**
+ * 把附件信息映射成 uni.openDocument 认识的 fileType。
+ * openDocument 支持：'pdf' | 'doc' | 'docx' | 'xls' | 'xlsx' | 'ppt' | 'pptx'。
+ * 其它（zip/rar/7z）返回空串，代表"不能预览"。
+ *
+ * URL 是 download.jsp?... 时，downloadFile 拿回来的 tempFilePath 可能没扩展名，
+ * 必须显式告诉 openDocument filetype，否则真机也会 "filetype not supported"。
+ */
+export function resolveOpenDocFileType(att: Attachment): string {
+    const hay = (att.name + ' ' + att.url).toLowerCase()
+    // 先走扩展名，最准；URL 里常有 downloadattachurl 之类噪声，放后面
+    if (/\.pdf(\?|$)/.test(hay)) return 'pdf'
+    if (/\.docx(\?|$)/.test(hay)) return 'docx'
+    if (/\.doc(\?|$)/.test(hay)) return 'doc'
+    if (/\.xlsx(\?|$)/.test(hay)) return 'xlsx'
+    if (/\.xls(\?|$)/.test(hay)) return 'xls'
+    if (/\.pptx(\?|$)/.test(hay)) return 'pptx'
+    if (/\.ppt(\?|$)/.test(hay)) return 'ppt'
+    // 扩展名匹不到再退回 type 提示
+    switch (att.type) {
+        case 'pdf': return 'pdf'
+        case 'word': return 'docx'
+        case 'excel': return 'xlsx'
+        case 'ppt': return 'pptx'
+        default: return ''   // archive / file / 未知 —— openDocument 打不开
+    }
+}
+
+/** 是否是压缩包（openDocument 不支持，需要特别提示用户） */
+export function isArchiveAttachment(att: Attachment): boolean {
+    if (att.type === 'archive') return true
+    return /\.(zip|rar|7z)(\?|$)/.test((att.name + ' ' + att.url).toLowerCase())
+}
+
 /** 把 downloadFile 的 fail/statusCode 映射成用户能看懂的文案。 */
 export function describeDownloadError(statusCode?: number, errMsg?: string): string {
     if (statusCode === 401 || statusCode === 403) return '登录已过期，请重新登录后再下载'
