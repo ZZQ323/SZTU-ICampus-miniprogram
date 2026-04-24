@@ -19,7 +19,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { infoApi } from '@/api/info-api'
 import { hasAuth } from '@/utils/cookie-manager'
-import type { CategoryTree, ChannelUnreadState } from '@/types/info'
+import type { CategoryTree, ChannelUnreadState, InfoItemMeta } from '@/types/info'
 import type { WsMessage } from '@/utils/websocket'
 import { useSubscriptionStore } from './subscription'
 import { useUserStore } from './user'
@@ -46,6 +46,9 @@ export interface ToastItem {
 /** 队列上限（超出按时间 FIFO 截断）*/
 const MAX_QUEUE_SIZE = 20
 
+/** 每频道在 store 内存里保留的最大条目数（超出 FIFO 截断）*/
+const CHANNEL_LIST_CAP = 40
+
 /** 徽章模式：number（有推送队列，显示数字）/ dot（无队列但有未读文章）/ none（完全已读）*/
 export type BadgeMode = 'number' | 'dot' | 'none'
 export interface Badge { mode: BadgeMode; value?: number }
@@ -65,6 +68,20 @@ export const useInfoStore = defineStore('info', () => {
     const categoryTree = ref<CategoryTree | null>(null)
     const wsConnected = ref(false)
     const newMessage = ref<any>(null)
+
+    /**
+     * ⭐ 流式推送列表缓存（CLAUDE.md 硬规则）
+     * <p>
+     * 频道 → 该频道当前展示的文章列表（顶部最新）
+     * 数据来源：
+     *   1. notice.vue 首次挂载 fetch 后 → setChannelList()
+     *   2. 下拉刷新 → setChannelList()
+     *   3. WS 推送 → prependChannelItems()  ← 实时
+     * <p>
+     * notice.vue 的 list 必须 = computed(getChannelList(channelId))，
+     * 不允许 onShow 里 fetchList(true)。
+     */
+    const channelLists = ref<Record<string, InfoItemMeta[]>>({})
 
     /**
      * 推送队列（仅内存，不持久化）
@@ -267,6 +284,12 @@ export const useInfoStore = defineStore('info', () => {
                 if (latestId) {
                     updateServerLatestId(channelId || 'announcement', latestId, extra)
                 }
+                // ⭐ 流式推送核心：把 backend 推来的完整 items 直接 unshift 进列表
+                // 注意：这条之前是缺的，导致 notice.vue 必须 onShow 重 fetch（伪推送）
+                const items: InfoItemMeta[] | undefined = (message as any).data?.items
+                if (channelId && items && items.length > 0) {
+                    prependChannelItems(channelId, items)
+                }
                 // 仅登录态才入队（未登录下 WS 理论上不会连，但加道保险）
                 if (isLoggedInForQueue() && ids.length > 0) {
                     for (const id of ids) {
@@ -281,6 +304,55 @@ export const useInfoStore = defineStore('info', () => {
                 }
                 break
         }
+    }
+
+    // ==================== ⭐ 频道列表（流式推送承接点）====================
+
+    /**
+     * notice.vue 首次 fetch 或下拉刷新成功后调用，初始化某频道的列表。
+     * <p>覆盖式写入；后续 WS 推来的新条目通过 {@link prependChannelItems} 头部 unshift。
+     */
+    function setChannelList(channelId: string, items: InfoItemMeta[]) {
+        channelLists.value[channelId] = items.slice(0, CHANNEL_LIST_CAP)
+    }
+
+    /**
+     * notice.vue 分页加载更老的历史条目。
+     * <p>追加到末尾 + 按 (id) 去重。
+     */
+    function appendChannelItems(channelId: string, olderItems: InfoItemMeta[]) {
+        if (!olderItems?.length) return
+        const current = channelLists.value[channelId] ?? []
+        const existing = new Set(current.map(i => String(i.id)))
+        const fresh = olderItems.filter(i => !existing.has(String(i.id)))
+        if (!fresh.length) return
+        // 追加历史不应顶掉 WS 推送的新条目，所以不应 cap 截到太狠 —— 保留全量（上限 200 防爆）
+        const merged = [...current, ...fresh]
+        channelLists.value[channelId] = merged.slice(0, 200)
+    }
+
+    /**
+     * ⭐ WS 推送的新文章 → 头部 unshift（流式推送的核心动作）
+     * <p>
+     * 按 id 去重防止 WS 重发或与下拉刷新交叉。
+     * console.info 是论文证据 2 —— 真机调试可见"WS 在推、UI 在动"。
+     */
+    function prependChannelItems(channelId: string, newItems: InfoItemMeta[]) {
+        if (!newItems?.length) return
+        const current = channelLists.value[channelId] ?? []
+        const existing = new Set(current.map(i => String(i.id)))
+        const deduped = newItems.filter(i => !existing.has(String(i.id)))
+        if (!deduped.length) {
+            console.info('[WS] prepend skipped (all duplicates)', channelId, newItems.length)
+            return
+        }
+        channelLists.value[channelId] = [...deduped, ...current].slice(0, CHANNEL_LIST_CAP)
+        console.info('[WS] prepend', channelId, deduped.length, deduped[0]?.title)
+    }
+
+    /** notice.vue 直接消费的 getter（保持 reactive） */
+    function getChannelList(channelId: string): InfoItemMeta[] {
+        return channelLists.value[channelId] ?? []
     }
 
     function clearNewMessage() { newMessage.value = null }
@@ -406,6 +478,8 @@ export const useInfoStore = defineStore('info', () => {
         // 统一徽章 + 队列
         badge, toastQueue,
         enqueueToast, dismissToast, clearToastQueue, markAllChannelsRead,
+        // ⭐ 流式推送承接点
+        channelLists, getChannelList, setChannelList, prependChannelItems, appendChannelItems,
         // 原有
         init, resetInitState, loadCategoryTree,
         updateServerLatestId, markChannelRead, markItemRead,
