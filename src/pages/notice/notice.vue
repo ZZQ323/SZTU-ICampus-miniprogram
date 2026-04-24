@@ -387,6 +387,10 @@ function handleItemClick(item: InfoItemMeta) {
   }))
   uni.setStorageSync('detail_nav_list', JSON.stringify(navList))
 
+  // ⭐ 阅读 = 消费推送：同步 dismiss 对应 toast + mark channel read
+  // 三处徽章（FAB / home 2x2 / TabBar）都从 infoStore.badge 派生，会一致递减
+  infoStore.markArticleRead(effectiveChannelId, String(item.id))
+
   uni.navigateTo({
     url: `/pages/notice/detail?id=${item.id}&channelId=${effectiveChannelId}&category=${item.categoryCode || ''}`
   })

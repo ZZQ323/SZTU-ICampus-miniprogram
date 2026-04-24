@@ -17,12 +17,14 @@ import PageLayout from '@/components/PageLayout.vue'
 import BackTop from '@/components/BackTop.vue'
 import { useBackTop } from '@/hooks/useBackTop'
 import { useUserStore } from '@/store/modules/user'
+import { useInfoStore } from '@/store/modules/info'
 import { infoApi } from '@/api/info-api'
 import type { InfoContent } from '@/types/info'
 
 // ==================== Store ====================
 
 const userStore = useUserStore()
+const infoStore = useInfoStore()
 const { visible: backTopVisible, scrollToTop } = useBackTop()
 
 // ==================== 路由参数 ====================
@@ -151,6 +153,12 @@ async function fetchDetail() {
         content.value = {
             ...result,
             content: (result as any).htmlContent || result.content || '',
+        }
+        // ⭐ 阅读兜底：列表入口已经在 notice.vue 点击时 markArticleRead 过一次；
+        // 这里再标一次覆盖其他入口（FAB 已在 success 回调做、深链、从收藏进等）。
+        // markArticleRead 是幂等的 —— 重复调用不会重复扣减（findIndex 后 splice 一次即止）。
+        if (channelId.value && id.value) {
+            infoStore.markArticleRead(channelId.value, String(id.value))
         }
     } catch (e: any) {
         console.error('[Detail] 获取详情失败', e)

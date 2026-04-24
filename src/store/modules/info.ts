@@ -43,8 +43,8 @@ export interface ToastItem {
     receivedAt: number
 }
 
-/** 队列上限（超出按时间 FIFO 截断）*/
-const MAX_QUEUE_SIZE = 20
+/** 队列上限（超出按 FIFO 截断）*/
+const MAX_QUEUE_SIZE = 30
 
 /** 每频道在 store 内存里保留的最大条目数（超出 FIFO 截断）*/
 const CHANNEL_LIST_CAP = 40
@@ -398,6 +398,18 @@ export const useInfoStore = defineStore('info', () => {
         }
     }
 
+    /**
+     * ⭐ 阅读一篇文章 = 该文从 toast 队列移除 + 频道 readIds 增量。
+     * <p>调用点：notice.vue 点击文章 / detail.vue 加载完成兜底 / FAB 点击项（已有）。
+     * <p>语义：阅读 === 消费推送。三处徽章（FAB / home 2x2 / TabBar）都从 {@link badge}
+     * 派生，dismissToast 改动 toastQueue 后一致同步。
+     */
+    function markArticleRead(channelId: string, articleId: string) {
+        if (!channelId || !articleId) return
+        markItemRead(channelId, articleId)
+        dismissToast(articleId)
+    }
+
     /** 清空整个队列（用户点"全部已读"或登录态中断触发） */
     function clearToastQueue() {
         if (toastQueue.value.length === 0) return
@@ -478,6 +490,8 @@ export const useInfoStore = defineStore('info', () => {
         // 统一徽章 + 队列
         badge, toastQueue,
         enqueueToast, dismissToast, clearToastQueue, markAllChannelsRead,
+        // 阅读 = 消费推送（队列 & 已读态一起动）
+        markArticleRead,
         // ⭐ 流式推送承接点
         channelLists, getChannelList, setChannelList, prependChannelItems, appendChannelItems,
         // 原有
