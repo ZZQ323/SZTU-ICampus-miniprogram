@@ -73,6 +73,40 @@ loginTypes（登录方式列表）可以从 URL 参数、Pinia 缓存快速获�
 
 项目采用 **轮询学校网页 → 爬取 → WSS 推送** 的方式，全程不使用微信小程序的 openId。后端用自研 SmartHttp 代替 Playwright 解决并发问题。
 
+### ⚠️ 硬性规则：信息流禁用前端轮询，必须 WS 推式
+
+本项目已验证微信小程序 WS 长连通道可用（FAB 红点、徽章水位线已在用），但历史上多次把"WS + 列表"实现成「WS 当信号枪 → 触发 HTTP fetch」的伪推送模式。这是 **反模式**。
+
+**定义的"真推送"**：
+
+| 角色 | 职责 |
+|---|---|
+| 后端 `CrawlEngine.broadcastNewContent` | WS payload 必须带完整 `items: InfoItemMeta[]`，不是只 id 列表 |
+| 前端 `info store.handleWsMessage` | 收到后直接 `prependChannelItems(channelId, items)` 进 store |
+| 前端 `notice.vue.list` | 改为 `computed(() => infoStore.getChannelList(channelId))` —— 响应式，DOM 自动 unshift |
+| 前端 `notice.vue.onShow` | **不得**调用 `fetchList(true)` |
+
+**HTTP fetch 仅允许以下三种用途**：
+1. **冷启动**：页面首次挂载拉一次初始列表（`onMounted`，非 `onShow`）
+2. **下拉刷新**：用户主动 `onPullDownRefresh`，补齐 WS 断连期间 missed
+3. **分页加载**：`onReachBottom` 拉更老的历史
+
+**禁止**：
+- ❌ `onShow` 里 `fetchList(true)` —— 每次返回都 reset 列表 = 轮询换皮
+- ❌ WS 收到 NEW_CONTENT 后再调用 HTTP —— 这是 WS 做信号枪，典型反模式
+- ❌ 后端 payload 只给 id 列表让前端按 id 拉 —— 同理
+
+**AI 修改提示**：如果下一个 session 又想在 WS 消息 handler 里加 `fetch*()`，或者在 `onShow` 里加 `fetchList`，**必须先回头读这节**。流式推送是论文核心论点，不可降级。
+
+### WS 技术事实（微信小程序）
+
+- **可用**：`uni.connectSocket` 已在 `src/utils/websocket.ts` 跑通
+- **单消息 ≤ 1 MB**：一条 WS 消息带 10 条 InfoItemMeta ≈ 5-8KB，充裕
+- **切后台 5 分钟 WS 会被 iOS WeChat 杀**：依赖已有的指数退避重连 + 下拉刷新补偿
+- **切网络（WiFi↔4G）会断**：同上
+- **DevTools 和真机行为不完全一致**：以真机为准
+
+
 ## 项目结构
 
 ```

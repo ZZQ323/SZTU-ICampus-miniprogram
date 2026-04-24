@@ -152,6 +152,15 @@ async function fetchDetail() {
     } catch (e: any) {
         console.error('[Detail] 获取详情失败', e)
         error.value = e.message || '加载失败'
+        // 学校页面常见失败：404（链接已失效）/ 连接超时（如 nbw.sztu.edu.cn 时灵时不灵）
+        // 直接弹 modal + 自动返回，避免演示时停在错误页。重试可重新点列表项。
+        uni.showModal({
+            title: '该文章无法访问',
+            content: '可能是学校页面已下线或临时不可达，可稍后重试。',
+            showCancel: false,
+            confirmText: '返回',
+            success: () => uni.navigateBack({ fail: () => {} })
+        })
     } finally {
         loading.value = false
     }
