@@ -123,10 +123,27 @@
                         width: DAY_WIDTH_RPX + 'rpx',
                         height: (canvasHeightRpx - HEADER_H_RPX) + 'rpx' }" />
 
-            <!-- 节次之间的横向分隔线（只画 slot 的 end 那一条，画在课程卡下面）-->
+            <!-- 休息时段大斜纹条 + 居中大字（午休 / 晚餐+大课间），z-index 0 垫底 -->
+            <view v-for="band in PERIOD_BREAK_BANDS" :key="'band-' + band.startMin"
+              class="break-band"
+              :style="{ top: yOfMin(band.startMin) + 'rpx',
+                        left: TIME_COL_RPX + 'rpx',
+                        width: (canvasWidthRpx - TIME_COL_RPX) + 'rpx',
+                        height: ((band.endMin - band.startMin) / 5 * CELL_UNIT_RPX) + 'rpx' }">
+              <text class="break-band__text">{{ band.label }}</text>
+            </view>
+
+            <!-- 节次之间的横向分隔线（slot 的 end，课程卡下面的淡灰 hairline）-->
             <view v-for="slot in SZTU_TIME_TABLE" :key="'div-' + slot.slot"
               class="slot-divider"
               :style="{ top: yOfMin(slot.endMin) + 'rpx',
+                        left: TIME_COL_RPX + 'rpx',
+                        width: (canvasWidthRpx - TIME_COL_RPX) + 'rpx' }" />
+
+            <!-- 上午/下午/晚上三个时段的起始实线（第1/6/11节的顶部）-->
+            <view v-for="bound in PERIOD_BOUNDARIES" :key="'bnd-' + bound"
+              class="period-boundary"
+              :style="{ top: yOfMin(bound) + 'rpx',
                         left: TIME_COL_RPX + 'rpx',
                         width: (canvasWidthRpx - TIME_COL_RPX) + 'rpx' }" />
 
@@ -233,15 +250,32 @@ const DAY_START_MIN = 7 * 60
 const DAY_END_MIN = 23 * 60
 /** 每一天列宽 */
 const DAY_WIDTH_RPX = 200
-/** 左侧时间列宽（要塞得下"第十一、十二节 19:00-20:20"）*/
-const TIME_COL_RPX = 140
+/** 左侧时间列宽（要塞得下"第十一、十二节 19:00-20:20"两行，比单节 label 长不少）*/
+const TIME_COL_RPX = 180
 /** 顶部日期头高 */
 const HEADER_H_RPX = 88
 
 /** 画布总高 = 头 + (23:00 - 07:00) / 5 * 15rpx = 88 + 16*12*15 = 88 + 2880 = 2968 */
 const canvasHeightRpx = HEADER_H_RPX + (DAY_END_MIN - DAY_START_MIN) / 5 * CELL_UNIT_RPX
-/** 画布总宽 = 时间列 + 7 * 日列宽 = 140 + 1400 = 1540 */
+/** 画布总宽 = 时间列 + 7 * 日列宽 */
 const canvasWidthRpx = TIME_COL_RPX + 7 * DAY_WIDTH_RPX
+
+/**
+ * 上午/下午/晚上三段起始位置（对应第 1/6/11 节的 startMin），画成更重的横线标出。
+ * 第一节 08:30、第六节 14:00、第十一节 19:00。
+ */
+const PERIOD_BOUNDARIES = [8 * 60 + 30, 14 * 60, 19 * 60]
+
+/**
+ * 两大休息时段（斜纹条 + 居中大字）：
+ *   · 午饭午休：5 节结束 12:25 → 6 节开始 14:00 = 95min
+ *   · 晚饭+大课间：10 节结束 17:55 → 11 节开始 19:00 = 65min
+ * 20min 的上午/下午课间（10:55-11:00、15:25-15:45 等）太短，留白即可，不画大字。
+ */
+const PERIOD_BREAK_BANDS = [
+    { startMin: 12 * 60 + 25, endMin: 14 * 60,      label: '午饭 · 午休' },
+    { startMin: 17 * 60 + 55, endMin: 19 * 60,      label: '晚饭 · 大课间' },
+]
 
 // ==================== 本地状态 ====================
 
@@ -615,6 +649,42 @@ onShow(async () => {
     background: #eee;
     pointer-events: none;
     z-index: 0;
+}
+
+// ---- 上午/下午/晚上起始处的加重横线（第 1/6/11 节的顶部）----
+.period-boundary {
+    position: absolute;
+    height: 2rpx;
+    background: #c8c8c8;
+    pointer-events: none;
+    z-index: 0;
+}
+
+// ---- 午休 / 晚饭大课间 斜纹背景 + 居中大字 ----
+.break-band {
+    position: absolute;
+    // 淡灰斜纹：45°，两色间隔 12rpx
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(0, 0, 0, 0.035),
+        rgba(0, 0, 0, 0.035) 12rpx,
+        transparent 12rpx,
+        transparent 24rpx
+    );
+    background-color: rgba(250, 250, 250, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.break-band__text {
+    font-size: 40rpx;
+    font-weight: 500;
+    color: rgba(80, 80, 80, 0.35);
+    letter-spacing: 4rpx;
+    white-space: nowrap;
 }
 
 // ---- 课程卡（绝对定位，z-index 1）----
