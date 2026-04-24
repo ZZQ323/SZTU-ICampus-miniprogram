@@ -64,6 +64,40 @@ onHide(() => {
 </script>
 
 <style lang="scss">
+/*
+ * ⭐ 锁定 TDesign 浅色主题（见 .claude/CLAUDE.md）
+ *
+ * main.ts 引入的 tdesign-uniapp/common/style/theme/index.css 里有一段
+ * @media (prefers-color-scheme: dark) {...}，会把所有 --td-*-color-* CSS 变量
+ * 改成暗色值。华为 EMUI / WeChat 里用户开了"深色模式" → 这个媒体查询命中 →
+ * TDesign 组件（尤其 t-input / t-button / t-card）全部变暗。
+ *
+ * pages.json: darkmode: false 只影响 tabBar/导航栏，管不住 CSS 媒体查询。
+ * 我们项目没做完整暗色适配，直接重写同一段媒体查询覆盖掉关键变量，锁死浅色。
+ */
+@media (prefers-color-scheme: dark) {
+  page,
+  .page {
+    --td-bg-color-page: #f5f5f5 !important;
+    --td-bg-color-container: #ffffff !important;
+    --td-bg-color-component: #ffffff !important;
+    --td-bg-color-component-hover: #f3f3f3 !important;
+    --td-bg-color-component-active: #e7e7e7 !important;
+    --td-bg-color-component-disabled: #eeeeee !important;
+    --td-bg-color-specialcomponent: #ffffff !important;
+    --td-bg-color-secondarycontainer: #f3f3f3 !important;
+    --td-text-color-primary: #181818 !important;
+    --td-text-color-secondary: #333333 !important;
+    --td-text-color-placeholder: #bbbbbb !important;
+    --td-text-color-disabled: #cccccc !important;
+    --td-text-color-anti: #ffffff !important;
+    --td-component-border: #e7e7e7 !important;
+    --td-component-stroke: #dcdcdc !important;
+    --td-border-level-1-color: #e7e7e7 !important;
+    --td-border-level-2-color: #e7e7e7 !important;
+  }
+}
+
 page {
   background-color: #f5f5f5;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
