@@ -24,6 +24,8 @@ import {
     buildProxyImageUrl,
     attachmentHeaders,
     isImageAttachment,
+    isArchiveAttachment,
+    resolveOpenDocFileType,
     describeDownloadError,
 } from '@/utils/attachment'
 
@@ -274,6 +276,28 @@ function downloadAttachment(att: { url: string; name: string; type?: string }) {
         return
     }
 
+    // 压缩包 openDocument 打不开，提前告诉用户（否则在真机会得到和 devtools 一样的 filetype not supported）
+    if (isArchiveAttachment(att as any)) {
+        uni.showModal({
+            title: '暂不支持预览',
+            content: '压缩包（.zip/.rar）在微信内无法直接打开。可长按链接复制到电脑下载。',
+            showCancel: false
+        })
+        return
+    }
+
+    // 学校 URL 多是 download.jsp?urltype=... 无扩展名，tempFilePath 也会没扩展名。
+    // 必须显式告诉 openDocument filetype，否则真机上也会报 "filetype not supported"。
+    const fileType = resolveOpenDocFileType(att as any)
+    if (!fileType) {
+        uni.showModal({
+            title: '暂不支持预览',
+            content: `无法识别的文件类型：${att.name}。可长按链接复制到电脑下载。`,
+            showCancel: false
+        })
+        return
+    }
+
     uni.showLoading({ title: '下载中...' })
 
     uni.downloadFile({
@@ -283,13 +307,20 @@ function downloadAttachment(att: { url: string; name: string; type?: string }) {
             if (res.statusCode === 200) {
                 uni.openDocument({
                     filePath: res.tempFilePath,
+                    fileType,
                     // showMenu=true 让微信文档预览页带"…"菜单（发送给朋友、保存到手机、其他应用打开）
                     showMenu: true,
                     success: () => uni.hideLoading(),
                     fail: (err) => {
                         uni.hideLoading()
-                        console.error('[attachment] openDocument fail', err)
-                        uni.showToast({ title: `打开失败：${err?.errMsg || '格式不支持'}`, icon: 'none' })
+                        console.error('[attachment] openDocument fail', err, 'fileType=', fileType)
+                        // DevTools 不支持 openDocument，真机正常；把这个坑写到文案里
+                        const isDev = (err?.errMsg || '').includes('filetype not supported')
+                        uni.showToast({
+                            title: isDev ? '开发者工具不支持预览，请用真机测试' : `打开失败：${err?.errMsg || '格式不支持'}`,
+                            icon: 'none',
+                            duration: 3000
+                        })
                     }
                 })
             } else {
