@@ -18,6 +18,16 @@
 
 ## 关键开发规范
 
+### 0. ⚠️ X-Set-Cookies **永远 merge，不 replace**
+
+**铁规**：前端收到后端 `X-Set-Cookies` / WS `COOKIE_UPDATE` / body 兜底 cookiesJson 时，**按 (name, domain, path) 三元组合并**写入本地存储，**不得整体替换**。入口统一走 `mergeSchoolCookies(incoming)`，**不要再用 `setSchoolCookies(full)`**（后者只保留给真正需要"全量替换"的极少数场景，比如测试夹具）。
+
+**为什么**：HAR 实证学校 VWebVPN / IDP 服务端的 Set-Cookie 行为是**只发增量**——特别 `TWFID` 这条 webvpn 根 cookie 一辈子只在第一次登录的 `thdportal_validate?code=...` 那一跳 set 一次，之后所有 logout / re-login / refresh 流程都**不会再 re-issue**。浏览器按 name/domain/path 合并，不碰的就保留。我们做整体替换 → 某个 API 的响应子集把 TWFID 擦掉 → 下次 HTTP 请求缺 TWFID → 学校 414 / jsxsd 回登录页 / 附件下载挂。
+
+**合并语义**：`src/utils/cookie-manager.ts` 里 `mergeSchoolCookies(incomingJson)` 用 `(name, domain, path)` 作为 cookie 唯一键，incoming 覆盖同键条目，不在 incoming 里的 existing 条目**保留**（镜像浏览器原生 Set-Cookie 行为）。
+
+**真正需要清空的场景**（logout / resetSession）：用 `clearAuth()` / `removeSchoolCookies()`，显式删，不要靠"替换成空"这种侧信道。
+
 ### 1. TDesign v-model 问题
 TDesign 小程序组件的 `v-model` 在某些环境下不工作。**统一使用 `:value` + `@change`**：
 
