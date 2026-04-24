@@ -266,6 +266,20 @@ function handleItemClick(item: InfoItemMeta) {
   if (now - lastItemClickAt < 400) return
   lastItemClickAt = now
 
+  // 教务"消息通知"频道：学校设计上就没有详情页（list 里已显示完整内容）。
+  // 直接弹 modal，不进 detail 页，避免演示时误点导致空白错误页。
+  const itemChannelId = item.channelId || sourceFilter.value.channelId
+  if (itemChannelId === 'acdm-message') {
+    uni.showModal({
+      title: '消息通知（无详情页）',
+      content: (item.title || '此消息无更多内容') +
+        (item.publishDate ? `\n\n时间：${item.publishDate}` : ''),
+      showCancel: false,
+      confirmText: '知道了'
+    })
+    return
+  }
+
   if (item.extra && item.extra.includes('"external"')) {
     // 提取外链 URL（去掉 EXTERNAL: 前缀）
     const externalUrl = item.url?.replace(/^EXTERNAL:/, '') || ''
