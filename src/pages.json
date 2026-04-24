@@ -39,6 +39,12 @@
       }
     },
     {
+      "path": "pages/favorite/favorite",
+      "style": {
+        "navigationBarTitleText": "我的收藏"
+      }
+    },
+    {
       "path": "pages/schedule/schedule",
       "style": {
         "navigationBarTitleText": "课表查询"

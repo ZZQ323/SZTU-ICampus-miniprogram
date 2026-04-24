@@ -400,6 +400,10 @@ function openSubscribePage() {
   uni.navigateTo({ url: '/pages/notice/subscribe' })
 }
 
+function openFavoritePage() {
+  uni.navigateTo({ url: '/pages/favorite/favorite' })
+}
+
 async function handleRefresh() {
   refreshing.value = true
   searchKeyword.value = ''
@@ -501,6 +505,11 @@ onPullDownRefresh(() => {
         <view v-if="isSubscribedMode" class="manage-sub-btn" @tap="openSubscribePage">
           <t-icon name="setting" size="36rpx" color="#0052d9" />
           <text>管理订阅</text>
+        </view>
+        <!-- 我的收藏入口 -->
+        <view class="favorite-btn" @tap="openFavoritePage">
+          <t-icon name="star" size="32rpx" color="#f5a623" />
+          <text>收藏</text>
         </view>
         <!-- 有徽章时才显示"全部已读" -->
         <view v-if="infoStore.badge.mode !== 'none'" class="mark-all-btn" @tap="handleMarkAllRead">
@@ -718,6 +727,23 @@ onPullDownRefresh(() => {
 
   &:active {
     background: #d0e0ff;
+  }
+}
+
+.favorite-btn {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 8rpx 14rpx;
+  font-size: 24rpx;
+  color: #f5a623;
+  background: #fff6e5;
+  border-radius: 8rpx;
+  flex-shrink: 0;
+  margin-left: 8rpx;
+
+  &:active {
+    background: #ffeacc;
   }
 }
 
