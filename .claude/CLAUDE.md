@@ -316,6 +316,27 @@ TabBar:
 
 学期 ID 格式：`{year}-{year+1}-{1|2|3}`（如 `2025-2026-2`）。从当前年份倒推到 2017。第 3 学期（暑期）周次限制为 1-10 周，普通学期 1-22 周。
 
+### 课表 UI = 2D 画布（绝对定位，不用 flex 表格）
+
+旧版 `schedule.vue` 用 flex 行/列 grid，每行固定 180rpx，导致"大课间 / 午休 / 晚餐"这种不等长休息时间视觉上全被压平成一样——刻度对不上课。2026-04 重写为**分钟刻度 2D 画布**：
+
+- **基本单位**：5min = 15rpx（`CELL_UNIT_RPX`）
+- **日窗口**：`DAY_START_MIN = 7:00`，`DAY_END_MIN = 23:00`（留跨日缓冲）
+- **画布尺寸**：宽 1540rpx（140+7×200）、高 2968rpx（88 头 + 16h×12×15）
+- **外层**：单 `scroll-view scroll-x scroll-y :enhanced="true"`（双轴都能拖）
+- **时间列**：`position: sticky; left: 0; z-index: 2`，每个 `SZTU_TIME_TABLE` 节次按 `startMin/5×15rpx` 绝对定位 label
+- **日期头**：`position: sticky; top: 0; z-index: 2`
+- **左上角 .corner**：同时 sticky-left + sticky-top，`z-index: 3`
+- **课程卡**：绝对定位，`top = (startMin - DAY_START)/5×15`, `height = (endMin - startMin)/5×15`，`left = TIME_COL + col×200`
+- **今日列**：半透明蓝背景绝对定位层（z-index 0 垫底）
+- **节次分割线**：每个 slot 的 `endMin` 处一条 1rpx 淡灰（z-index 0）
+
+**courseTime 是唯一定位真理源**：后端 `CrouseParser` 用 `(\d{2}:\d{2}-\d{2}:\d{2})` 从教务 HTML 的 `<th>` 扒原始时间字符串，前端 `parseCourseTime(s)` 解析成 `{ startMin, endMin }`。后端 `row` 字段保留但画布不读（仅防御性兜底）。
+
+**SZTU_TIME_TABLE 的角色**：**仅用于时间列 label 显示**（"第一节 08:30-09:10"），不参与课程卡定位。学校每学年改时间表时只改这一个常量，画布刻度自动重算。学校页面（`jw.sztu.edu.cn/fwc/sksj.htm`）是纯图不可 parse，手抄更新。
+
+**休息时间自动留白**：画布上不画任何休息时间的显式内容，靠课程卡之间的空隙自然体现比例。午休 95min = 19 格=285rpx 空白，大课间 20min=4 格=60rpx 空白，一眼就能看出来。
+
 ### 小程序里不要把 Set/Map 放进 Pinia 状态
 
 Vue 3 浏览器端会代理 `Set.has/add`，但 **uni-app 小程序渲染层（setData 序列化）对 Set/Map 的变更追踪会失灵**。表现：mutate 之后 computed 不重算，视图不刷新。

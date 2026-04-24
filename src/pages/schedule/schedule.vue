@@ -70,54 +70,69 @@
         <t-button theme="primary" size="small" @click="handleRefresh">重试</t-button>
       </view>
 
-      <!-- 课表网格 -->
-      <view v-else class="grid-container">
-        <!-- 星期表头 -->
-        <view class="grid-header">
-          <view class="time-col-header"></view>
-          <scroll-view scroll-x class="days-scroll" :scroll-left="scrollLeft"
-            @scroll="(e: any) => scrollLeft = e.detail.scrollLeft">
-            <view class="days-row">
+      <!--
+        课表 2D 画布
+        ======================================================================
+        · 单个 scroll-view 双轴（scroll-x + scroll-y），用户可横纵自由拖
+        · 画布按 5min = 15rpx 的刻度绘制；课程卡和时间列 label 都按分钟绝对定位
+        · 时间列 sticky-left（z-index 2）、日期头 sticky-top（z-index 2）
+        · 今日列半透明蓝色底
+        · 休息时间不画内容，留白比例 = 真实分钟比例
+      -->
+      <view v-else class="canvas-wrap">
+        <scroll-view class="canvas-scroll" scroll-x scroll-y :enhanced="true"
+          :show-scrollbar="false" :bounces="true">
+          <view class="canvas" :style="{ width: canvasWidthRpx + 'rpx', height: canvasHeightRpx + 'rpx' }">
+
+            <!-- 左上角：固定的"时段"角落（sticky 左上）-->
+            <view class="corner" :style="{ width: TIME_COL_RPX + 'rpx', height: HEADER_H_RPX + 'rpx' }" />
+
+            <!-- 日期表头（sticky top）-->
+            <view class="day-header" :style="{ top: 0, left: TIME_COL_RPX + 'rpx', height: HEADER_H_RPX + 'rpx' }">
               <view v-for="(day, idx) in weekDays" :key="idx"
-                :class="['day-cell', { today: isToday(idx) }]">
+                class="day-cell" :class="{ today: isToday(idx) }"
+                :style="{ width: DAY_WIDTH_RPX + 'rpx' }">
                 <text class="day-name">{{ day.label }}</text>
                 <text class="day-date">{{ day.date }}</text>
               </view>
             </view>
-          </scroll-view>
-        </view>
 
-        <!-- 课表主体（时间列 + 课程网格） -->
-        <view class="grid-body">
-          <!-- 左侧固定时间列 -->
-          <view class="time-column">
-            <view v-for="slot in ROW_CONFIG" :key="slot.row" class="time-cell"
-              :style="{ height: slot.height + 'rpx' }">
-              <text class="slot-label">{{ slot.label }}</text>
-              <text class="slot-time">{{ slot.time }}</text>
-            </view>
-          </view>
-
-          <!-- 右侧可滑动课程网格 -->
-          <scroll-view scroll-x class="courses-scroll" :scroll-left="scrollLeft"
-            @scroll="(e: any) => scrollLeft = e.detail.scrollLeft">
-            <view class="courses-grid">
-              <view v-for="slot in ROW_CONFIG" :key="slot.row" class="course-row"
-                :style="{ height: slot.height + 'rpx' }">
-                <view v-for="dayIdx in 7" :key="dayIdx" class="course-cell">
-                  <!-- 渲染该位置的课程 -->
-                  <view v-if="getCourseAt(slot.row, dayIdx - 1)"
-                    class="course-card"
-                    :style="cardStyle(getCourseAt(slot.row, dayIdx - 1)!)"
-                    @tap="handleCourseTap(getCourseAt(slot.row, dayIdx - 1)!)">
-                    <text class="card-name">{{ getCourseAt(slot.row, dayIdx - 1)!.courseName }}</text>
-                    <text class="card-location">{{ getCourseAt(slot.row, dayIdx - 1)!.location }}</text>
-                  </view>
-                </view>
+            <!-- 时间列（sticky left），每节课 label 按 startMin 绝对定位 -->
+            <view class="time-col" :style="{ width: TIME_COL_RPX + 'rpx', top: HEADER_H_RPX + 'rpx' }">
+              <view v-for="slot in SZTU_TIME_TABLE" :key="slot.slot"
+                class="time-slot"
+                :style="{ top: yOfMin(slot.startMin) + 'rpx',
+                          height: ((slot.endMin - slot.startMin) / 5 * CELL_UNIT_RPX) + 'rpx' }">
+                <text class="slot-label">{{ slot.label }}</text>
+                <text class="slot-time">{{ fmt(slot.startMin) }}-{{ fmt(slot.endMin) }}</text>
               </view>
             </view>
-          </scroll-view>
-        </view>
+
+            <!-- 今日列背景（绝对定位，z-index 0 垫底）-->
+            <view v-if="todayCol >= 0" class="today-hint"
+              :style="{ left: (TIME_COL_RPX + todayCol * DAY_WIDTH_RPX) + 'rpx',
+                        top: HEADER_H_RPX + 'rpx',
+                        width: DAY_WIDTH_RPX + 'rpx',
+                        height: (canvasHeightRpx - HEADER_H_RPX) + 'rpx' }" />
+
+            <!-- 节次之间的横向分隔线（只画 slot 的 end 那一条，画在课程卡下面）-->
+            <view v-for="slot in SZTU_TIME_TABLE" :key="'div-' + slot.slot"
+              class="slot-divider"
+              :style="{ top: yOfMin(slot.endMin) + 'rpx',
+                        left: TIME_COL_RPX + 'rpx',
+                        width: (canvasWidthRpx - TIME_COL_RPX) + 'rpx' }" />
+
+            <!-- 课程卡（绝对定位，z-index 1）-->
+            <view v-for="(c, i) in positionedCourses" :key="c.course.courseId + '-' + i"
+              class="course-card"
+              :style="c.cardStyle"
+              @tap="handleCourseTap(c.course)">
+              <text class="card-name">{{ c.course.courseName }}</text>
+              <text class="card-location">{{ c.course.location }}</text>
+            </view>
+
+          </view>
+        </scroll-view>
 
         <!-- 无课提示 -->
         <view v-if="courses.length === 0" class="empty-hint">
@@ -161,7 +176,7 @@ import PageLayout from '@/components/PageLayout.vue'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 import { useUserStore } from '@/store/modules/user'
 import { useInfoStore } from '@/store/modules/info'
-import { useSchedule, type CourseInfo } from '@/hooks/useSchedule'
+import { useSchedule, type CourseInfo, SZTU_TIME_TABLE, parseCourseTime, fmtMinutes } from '@/hooks/useSchedule'
 import { extractBoolean } from '@/utils/tdesign'
 
 const { ensure } = useAuthGuard()
@@ -201,30 +216,24 @@ const maxWeeks = computed(() => {
     return 22
 })
 
-// ==================== 课表行配置（对应后端 CrouseParser 的 rowIndex） ====================
+// ==================== 画布常量（2D canvas 版，见 useSchedule.ts 头部说明） ====================
 
-/**
- * 后端解析 #timetable 表格时 rowIndex 的映射：
- * row 0 = 表头（无数据），row 1-6 = 实际课表行，row 7 = 大课间
- *
- * 教务系统的表格行：
- * 第一二节 (01,02) 08:30-10:00
- * 第三四节 (03,04) 10:20-11:50
- * 第五六节 (05,06) 14:00-15:30
- * 第七八节 (07,08) 15:50-17:20
- * 第九十节 (09,10) 18:50-20:10   ← 注意是晚上
- * 第十一十二节 (11,12) 20:20-21:40
- * 大课间 (13,14) 17:30-18:49     ← 穿插在第七八节之后
- */
-const ROW_CONFIG = [
-    { row: 1, label: '1-2节', time: '8:30\n10:00', height: 180, period: '上午' },
-    { row: 2, label: '3-4节', time: '10:20\n11:50', height: 180, period: '上午' },
-    { row: 3, label: '5-6节', time: '14:00\n15:30', height: 180, period: '下午' },
-    { row: 4, label: '7-8节', time: '15:50\n17:20', height: 180, period: '下午' },
-    { row: 7, label: '大课间', time: '17:30\n18:49', height: 140, period: '傍晚' },
-    { row: 5, label: '9-10节', time: '18:50\n20:10', height: 180, period: '晚上' },
-    { row: 6, label: '11-12节', time: '20:20\n21:40', height: 180, period: '晚上' },
-]
+/** 5min = 15rpx（基本刻度单位） */
+const CELL_UNIT_RPX = 15
+/** 日窗口 07:00 - 23:00（足够覆盖任何课程时间，含早晚缓冲） */
+const DAY_START_MIN = 7 * 60
+const DAY_END_MIN = 23 * 60
+/** 每一天列宽 */
+const DAY_WIDTH_RPX = 200
+/** 左侧时间列宽（要塞得下"第十一、十二节 19:00-20:20"）*/
+const TIME_COL_RPX = 140
+/** 顶部日期头高 */
+const HEADER_H_RPX = 88
+
+/** 画布总高 = 头 + (23:00 - 07:00) / 5 * 15rpx = 88 + 16*12*15 = 88 + 2880 = 2968 */
+const canvasHeightRpx = HEADER_H_RPX + (DAY_END_MIN - DAY_START_MIN) / 5 * CELL_UNIT_RPX
+/** 画布总宽 = 时间列 + 7 * 日列宽 = 140 + 1400 = 1540 */
+const canvasWidthRpx = TIME_COL_RPX + 7 * DAY_WIDTH_RPX
 
 // ==================== 本地状态 ====================
 
@@ -232,22 +241,63 @@ const showSemesterInput = ref(false)
 const showWeekPicker = ref(false)
 const showDetail = ref(false)
 const selectedCourse = ref<CourseInfo | null>(null)
-const scrollLeft = ref(0)
 
-// ==================== 课程查找 ====================
+// ==================== 坐标工具 ====================
 
-function getCourseAt(row: number, col: number): CourseInfo | null {
-    return courses.value.find(c => c.row === row && c.col === col) || null
+/** 分钟数 → 画布上的 y 坐标（rpx），自动 clamp 到 [DAY_START, DAY_END] */
+function yOfMin(min: number): number {
+    const clamped = Math.max(DAY_START_MIN, Math.min(DAY_END_MIN, min))
+    return HEADER_H_RPX + (clamped - DAY_START_MIN) / 5 * CELL_UNIT_RPX
 }
 
-function cardStyle(course: CourseInfo) {
-    const color = getCourseColor(course.courseName)
-    return {
-        backgroundColor: color.bg,
-        color: color.text,
-        borderLeft: `6rpx solid ${color.text}`,
+/** 分钟数 → "HH:MM" */
+const fmt = fmtMinutes
+
+/** 今日列 index（0=周一 ... 6=周日），非今天返回 -1 */
+const todayCol = computed<number>(() => {
+    const wd = new Date().getDay()   // 0=Sun, 1=Mon ...
+    return wd === 0 ? 6 : wd - 1
+})
+
+// ==================== 课程定位 ====================
+
+interface PositionedCourse {
+    course: CourseInfo
+    cardStyle: Record<string, string>
+}
+
+/** 把 courses 扁平展开成带绝对定位 style 的数组（画布直接 v-for）*/
+const positionedCourses = computed<PositionedCourse[]>(() => {
+    const out: PositionedCourse[] = []
+    for (const c of courses.value) {
+        const t = parseCourseTime(c.courseTime)
+        if (!t) {
+            // courseTime 无法解析就跳过（极少数空字符串场景）
+            continue
+        }
+        if (t.endMin < DAY_START_MIN || t.startMin > DAY_END_MIN) {
+            // 完全在窗外的课（不可能，但防御）
+            continue
+        }
+        const color = getCourseColor(c.courseName)
+        const top = yOfMin(t.startMin)
+        const height = (Math.min(t.endMin, DAY_END_MIN) - Math.max(t.startMin, DAY_START_MIN)) / 5 * CELL_UNIT_RPX
+        const left = TIME_COL_RPX + c.col * DAY_WIDTH_RPX
+        out.push({
+            course: c,
+            cardStyle: {
+                top: `${top}rpx`,
+                height: `${height}rpx`,
+                left: `${left}rpx`,
+                width: `${DAY_WIDTH_RPX}rpx`,
+                backgroundColor: color.bg,
+                color: color.text,
+                borderLeft: `6rpx solid ${color.text}`,
+            }
+        })
     }
-}
+    return out
+})
 
 // ==================== 事件处理 ====================
 
@@ -422,43 +472,57 @@ onShow(async () => {
     }
 }
 
-// ==================== 课表网格 ====================
+// ==================== 课表 2D 画布 ====================
+//
+// 布局策略：
+//   · 外层 scroll-view 开双轴 scroll（scroll-x + scroll-y）
+//   · 画布内用绝对定位：课程卡 top/left/height/width 都按分钟刻度算
+//   · 时间列 position:sticky left:0、日期头 sticky top:0、左上角都 sticky
+//   · z-index 分层：底 today-hint(0) → 中 course-card(1) → 上 sticky 轴(2/3)
 
-.grid-container {
+.canvas-wrap {
     background: #fff;
     margin: 12rpx;
     border-radius: 12rpx;
     overflow: hidden;
     box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+    // 给 scroll-view 限定高度，让纵向滚在它内部发生
+    height: calc(100vh - 280rpx);
 }
 
-// 表头
-.grid-header {
-    display: flex;
+.canvas-scroll {
+    width: 100%;
+    height: 100%;
+    white-space: nowrap;    // 小程序 scroll-x 必须
+}
+
+.canvas {
+    position: relative;
+    background: #fff;
+}
+
+// ---- 左上角（双轴 sticky）----
+.corner {
+    position: sticky;
+    top: 0;
+    left: 0;
+    z-index: 3;
+    background: #f0f2f5;
+    border-right: 1rpx solid #e0e0e0;
     border-bottom: 2rpx solid #e0e0e0;
 }
 
-.time-col-header {
-    width: 100rpx;
-    height: 80rpx;
-    flex-shrink: 0;
-    background: #f0f2f5;
-    border-right: 1rpx solid #e0e0e0;
-}
-
-.days-scroll {
-    flex: 1;
-    white-space: nowrap;
-}
-
-.days-row {
+// ---- 日期表头（sticky top）----
+.day-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
     display: flex;
-    width: 700rpx; // 7天 × 100rpx
+    background: #f0f2f5;
+    border-bottom: 2rpx solid #e0e0e0;
 }
 
 .day-cell {
-    width: 100rpx;
-    height: 80rpx;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -474,103 +538,101 @@ onShow(async () => {
 }
 
 .day-name {
-    font-size: 24rpx;
+    font-size: 36rpx;
     color: #333;
 }
 
 .day-date {
-    font-size: 18rpx;
+    font-size: 26rpx;
     color: #999;
+    margin-top: 4rpx;
 }
 
-// 主体
-.grid-body {
-    display: flex;
+// ---- 时间列（sticky left）----
+.time-col {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    // top 由模板内联指定（偏移开 header）
+    background: #fafafa;
+    border-right: 1rpx solid #e0e0e0;
 }
 
-.time-column {
-    width: 100rpx;
-    flex-shrink: 0;
-}
-
-.time-cell {
+.time-slot {
+    position: absolute;
+    left: 0;
+    right: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: #fafafa;
-    border-right: 1rpx solid #e0e0e0;
-    border-bottom: 1rpx solid #e8e8e8;
     padding: 4rpx;
+    box-sizing: border-box;
 }
 
 .slot-label {
-    font-size: 20rpx;
+    font-size: 28rpx;
     font-weight: 600;
     color: #333;
     text-align: center;
 }
 
 .slot-time {
-    font-size: 16rpx;
+    font-size: 22rpx;
     color: #999;
     text-align: center;
-    white-space: pre-line;
     line-height: 1.3;
     margin-top: 4rpx;
 }
 
-// 课程滚动区
-.courses-scroll {
-    flex: 1;
-    white-space: nowrap;
+// ---- 今日列高亮（绝对定位，z-index 0 垫底）----
+.today-hint {
+    position: absolute;
+    background: rgba(21, 101, 192, 0.06);
+    pointer-events: none;
+    z-index: 0;
 }
 
-.courses-grid {
-    width: 700rpx;
+// ---- 节次分隔横线（画在 slot endMin 处）----
+.slot-divider {
+    position: absolute;
+    height: 1rpx;
+    background: #eee;
+    pointer-events: none;
+    z-index: 0;
 }
 
-.course-row {
-    display: flex;
-    border-bottom: 1rpx solid #e8e8e8;
-}
-
-.course-cell {
-    width: 100rpx;
-    flex-shrink: 0;
-    padding: 4rpx;
-    border-right: 1rpx solid #f0f0f0;
-    box-sizing: border-box;
-}
-
-// 课程卡片
+// ---- 课程卡（绝对定位，z-index 1）----
 .course-card {
-    width: 100%;
-    height: 100%;
-    border-radius: 8rpx;
-    padding: 6rpx 4rpx;
+    position: absolute;
+    z-index: 1;
+    border-radius: 10rpx;
+    padding: 10rpx 12rpx;
     display: flex;
     flex-direction: column;
     justify-content: center;
     overflow: hidden;
     box-sizing: border-box;
+    // 给卡片和相邻卡之间一个呼吸
+    margin: 2rpx;
 }
 
 .card-name {
-    font-size: 18rpx;
+    font-size: 32rpx;
     font-weight: 600;
     line-height: 1.3;
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     word-break: break-all;
+    white-space: normal;      // 抵消外层 .canvas-scroll 的 nowrap
 }
 
 .card-location {
-    font-size: 16rpx;
-    opacity: 0.8;
-    margin-top: 4rpx;
+    font-size: 26rpx;
+    opacity: 0.85;
+    margin-top: 6rpx;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
