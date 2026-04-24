@@ -16,14 +16,18 @@ import { onPageScroll } from '@dcloudio/uni-app'
  * 里生效；在组件里注册无效。所以 scrollTop 的监听必须由每个 page 自己做。
  * 这个 hook 把"监听 + 阈值判断 + 滚到顶"封装起来，页面接入只要两行。
  *
- * @param threshold 超过多少 rpx 才显示按钮，默认 600（约一屏）
+ * @param threshold 超过多少 px 才显示按钮，默认 200（scrollTop 来自小程序是 px，不是 rpx）
  */
-export function useBackTop(threshold = 600) {
+export function useBackTop(threshold = 200) {
     const visible = ref(false)
 
     onPageScroll(({ scrollTop }) => {
         const next = scrollTop > threshold
-        if (next !== visible.value) visible.value = next
+        if (next !== visible.value) {
+            visible.value = next
+            // 调试：验证 onPageScroll 确实触发；稳定后可删
+            console.info('[BackTop]', next ? 'show' : 'hide', 'scrollTop=', scrollTop)
+        }
     })
 
     function scrollToTop() {
