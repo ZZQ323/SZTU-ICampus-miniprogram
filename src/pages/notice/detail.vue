@@ -18,6 +18,7 @@ import BackTop from '@/components/BackTop.vue'
 import { useBackTop } from '@/hooks/useBackTop'
 import { useUserStore } from '@/store/modules/user'
 import { useInfoStore } from '@/store/modules/info'
+import { useFavoriteStore } from '@/store/modules/favorite'
 import { infoApi } from '@/api/info-api'
 import type { InfoContent } from '@/types/info'
 
@@ -25,6 +26,7 @@ import type { InfoContent } from '@/types/info'
 
 const userStore = useUserStore()
 const infoStore = useInfoStore()
+const favoriteStore = useFavoriteStore()
 const { visible: backTopVisible, scrollToTop } = useBackTop()
 
 // ==================== 路由参数 ====================
@@ -38,6 +40,42 @@ const channelId = ref('announcement')
 const loading = ref(true)
 const content = ref<InfoContent | null>(null)
 const error = ref('')
+
+// ==================== 收藏 ====================
+
+const isFavorited = computed(() =>
+    !!channelId.value && !!id.value &&
+    favoriteStore.isFavorited(channelId.value, String(id.value))
+)
+
+function toggleFavorite() {
+    if (!channelId.value || !id.value) return
+    const meta = {
+        channelId: channelId.value,
+        articleId: String(id.value),
+        title: content.value?.title || navListTitle() || '(无标题)',
+        publishDate: content.value?.publishTime,
+        author: content.value?.author,
+        sourceOrgName: (content.value as any)?.sourceOrgName,
+        categoryCode: category.value || undefined,
+    }
+    const r = favoriteStore.toggle(meta)
+    if (r === 'added') {
+        uni.showToast({ title: '已收藏', icon: 'success' })
+    } else if (r === 'removed') {
+        uni.showToast({ title: '已取消收藏', icon: 'none' })
+    } else if (r === 'full') {
+        uni.showModal({
+            title: '收藏已达上限',
+            content: `最多收藏 ${50} 条，请到"我的收藏"里先删除一些。`,
+            showCancel: false
+        })
+    }
+}
+
+function navListTitle(): string | undefined {
+    return navList.value.find(i => String(i.id) === String(id.value))?.title
+}
 
 // ==================== 列表导航（上一篇/下一篇） ====================
 
@@ -164,14 +202,30 @@ async function fetchDetail() {
         console.error('[Detail] 获取详情失败', e)
         error.value = e.message || '加载失败'
         // 学校页面常见失败：404（链接已失效）/ 连接超时（如 nbw.sztu.edu.cn 时灵时不灵）
-        // 直接弹 modal + 自动返回，避免演示时停在错误页。重试可重新点列表项。
-        uni.showModal({
-            title: '该文章无法访问',
-            content: '可能是学校页面已下线或临时不可达，可稍后重试。',
-            showCancel: false,
-            confirmText: '返回',
-            success: () => uni.navigateBack({ fail: () => {} })
-        })
+        // 如果当前是从收藏进来的，提示可移除 —— 否则直接 modal + 返回
+        if (isFavorited.value) {
+            uni.showModal({
+                title: '该文章无法访问',
+                content: '原文可能已被学校删除。是否从收藏里移除？',
+                cancelText: '仅返回',
+                confirmText: '移除并返回',
+                success: (res) => {
+                    if (res.confirm) {
+                        favoriteStore.remove(channelId.value, String(id.value))
+                        uni.showToast({ title: '已从收藏移除', icon: 'none' })
+                    }
+                    uni.navigateBack({ fail: () => { } })
+                }
+            })
+        } else {
+            uni.showModal({
+                title: '该文章无法访问',
+                content: '可能是学校页面已下线或临时不可达，可稍后重试。',
+                showCancel: false,
+                confirmText: '返回',
+                success: () => uni.navigateBack({ fail: () => { } })
+            })
+        }
     } finally {
         loading.value = false
     }
@@ -264,7 +318,14 @@ onLoad((options) => {
             <view v-else-if="content" class="content-wrap">
                 <!-- 标题区域 -->
                 <view class="header">
-                    <view v-if="content.title" class="title">{{ content.title }}</view>
+                    <view class="title-row">
+                        <view v-if="content.title" class="title">{{ content.title }}</view>
+                        <!-- 收藏按钮：☆ 未收藏 / ⭐ 已收藏 -->
+                        <view class="fav-btn" :class="{ active: isFavorited }" @tap.stop="toggleFavorite">
+                            <t-icon :name="isFavorited ? 'star-filled' : 'star'" size="44rpx"
+                                :color="isFavorited ? '#f5a623' : '#999'" />
+                        </view>
+                    </view>
                     <view class="meta">
                         <text v-if="content.author" class="author">{{ content.author }}</text>
                         <text v-if="content.publishTime" class="time">{{ content.publishTime }}</text>
@@ -390,12 +451,35 @@ onLoad((options) => {
     border-bottom: 1rpx solid #eee;
 }
 
+.title-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 16rpx;
+    margin-bottom: 24rpx;
+}
+
 .title {
+    flex: 1;
     font-size: 38rpx;
     font-weight: 600;
     color: #333;
     line-height: 1.4;
-    margin-bottom: 24rpx;
+}
+
+.fav-btn {
+    flex-shrink: 0;
+    padding: 8rpx;
+    border-radius: 50%;
+    transition: background 0.15s;
+    margin-top: -4rpx;
+}
+
+.fav-btn:active {
+    background: #f0f0f0;
+}
+
+.fav-btn.active {
+    /* 已收藏时星星已经是填充 + 金色 */
 }
 
 .meta {
