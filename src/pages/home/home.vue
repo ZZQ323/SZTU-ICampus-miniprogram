@@ -144,6 +144,8 @@ onShow(async () => {
   if (isLoggedIn.value) {
     infoStore.init()
   }
+  // 校准 TabBar 徽章：非 tabBar 页（detail 等）期间的 WS 推送/已读会让 TabBar 数字 stale
+  infoStore.syncTabBarBadge()
 })
 
 watch(isLoggedIn, (val) => {

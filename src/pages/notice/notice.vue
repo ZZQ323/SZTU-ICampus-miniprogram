@@ -464,6 +464,8 @@ onShow(async () => {
     fetchList(true)
   }
   loadChannels()
+  // 校准 TabBar 徽章（在 detail 等非 tabBar 页期间的改动会 stale）
+  infoStore.syncTabBarBadge()
 })
 
 onHide(() => {
