@@ -17,6 +17,7 @@ import PageLayout from '@/components/PageLayout.vue'
 import { useUserStore } from '@/store/modules/user'
 import { useInfoStore } from '@/store/modules/info'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
+import { academicApi } from '@/api/auth-apis'
 
 // ==================== Store ====================
 
@@ -77,8 +78,17 @@ async function handleRefreshSession() {
   refreshing.value = true
   uni.showLoading({ title: '刷新中...' })
   try {
-    // 一次刷新做两件事：学校 cookie 续期 + 信息流未读计数拉取
+    // 一次刷新做三件事：
+    //   1. 网关（WebVPN / 公文通）session 续期 —— 主路径，失败会弹重新登录
+    //   2. 教务系统 cookie 续期 —— 课表、已收公告、消息通知的 session 载体，
+    //      与网关走不同域名（jwxt-...webvpn），refresh-session 自己不管；
+    //      静默重试，失败不打扰用户（他下次点"课表"时会再触发一次自愈）
+    //   3. 信息流未读计数拉取
     await userStore.refreshSession()
+    // fire-and-forget：并发发起，不 await，不 block 主流程
+    academicApi.initAcademic().catch((e: any) => {
+      console.warn('[Home] 教务系统 cookie 静默刷新失败', e?.message)
+    })
     await infoStore.init().catch(() => { /* info init 失败不影响主流程 */ })
     uni.showToast({ title: '会话已刷新', icon: 'success' })
   } catch (e: any) {
