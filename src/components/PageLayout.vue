@@ -7,7 +7,7 @@
     - 包含 AuthMask 和 ErrorOverlay
     - 每个需要认证保护的页面都应该用此组件包裹
     
-    使用方式：
+    usage：
     ```vue
     <template>
         <PageLayout>
@@ -17,12 +17,18 @@
         </PageLayout>
     </template>
     ```
+
+    默认自带 FAB（FloatingNotification），登录态才显示。
+    个别页（如登录页）传 :enable-fab="false" 关掉。
 -->
 
 <template>
     <view class="page-layout">
         <!-- 页面内容插槽 -->
         <slot />
+
+        <!-- 全局 FAB：登录态才渲染，登录页等可 :enable-fab="false" 关闭 -->
+        <FloatingNotification v-if="enableFab" />
 
         <!-- 认证遮罩 -->
         <view v-if="authStore.showMask" class="auth-mask" @touchmove.stop.prevent>
@@ -100,6 +106,9 @@
 import { ref, computed } from 'vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
+import FloatingNotification from '@/components/FloatingNotification.vue'
+
+withDefaults(defineProps<{ enableFab?: boolean }>(), { enableFab: true })
 
 const authStore = useAuthStore()
 const { forceCheck } = useAuthGuard()

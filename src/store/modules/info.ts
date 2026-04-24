@@ -43,8 +43,8 @@ export interface ToastItem {
     receivedAt: number
 }
 
-/** 队列上限（超出按时间 FIFO 截断）*/
-const MAX_QUEUE_SIZE = 20
+/** 队列上限（超出按 FIFO 截断）*/
+const MAX_QUEUE_SIZE = 30
 
 /** 每频道在 store 内存里保留的最大条目数（超出 FIFO 截断）*/
 const CHANNEL_LIST_CAP = 40
@@ -398,6 +398,18 @@ export const useInfoStore = defineStore('info', () => {
         }
     }
 
+    /**
+     * ⭐ 阅读一篇文章 = 该文从 toast 队列移除 + 频道 readIds 增量。
+     * <p>调用点：notice.vue 点击文章 / detail.vue 加载完成兜底 / FAB 点击项（已有）。
+     * <p>语义：阅读 === 消费推送。三处徽章（FAB / home 2x2 / TabBar）都从 {@link badge}
+     * 派生，dismissToast 改动 toastQueue 后一致同步。
+     */
+    function markArticleRead(channelId: string, articleId: string) {
+        if (!channelId || !articleId) return
+        markItemRead(channelId, articleId)
+        dismissToast(articleId)
+    }
+
     /** 清空整个队列（用户点"全部已读"或登录态中断触发） */
     function clearToastQueue() {
         if (toastQueue.value.length === 0) return
@@ -420,22 +432,33 @@ export const useInfoStore = defineStore('info', () => {
     /**
      * 和 FAB / home 2x2 同源：队列非空 → 数字；空但有未读 → 红点；全部已读 → 无
      * 小程序的 tabBar 原生 badge 不支持同时设数字+红点，我们优先数字。
+     * <p>
+     * ⭐ uni.setTabBarBadge / hide/showTabBarRedDot 是<b>异步 API</b>，在非 tabBar 页
+     * 调用会走 fail 回调（无法被 try/catch 吞，会被 uni-app errorReport 到 console）。
+     * 所以每个调用都显式传 fail: noop。fail 发生时 TabBar 徽章保持上次成功的值，
+     * 下次回到 tabBar 页 onShow 时 {@link syncTabBarBadge} 会重新校准。
      */
     function updateTabBarBadge() {
         const b = badge.value
-        try {
-            if (b.mode === 'number') {
-                uni.setTabBarBadge({ index: 2, text: (b.value || 0) > 99 ? '99+' : String(b.value) })
-                // 数字模式不需要红点
-                try { (uni as any).hideTabBarRedDot?.({ index: 2 }) } catch { /* ignore */ }
-            } else if (b.mode === 'dot') {
-                uni.removeTabBarBadge({ index: 2 })
-                try { (uni as any).showTabBarRedDot?.({ index: 2 }) } catch { /* ignore */ }
-            } else {
-                uni.removeTabBarBadge({ index: 2 })
-                try { (uni as any).hideTabBarRedDot?.({ index: 2 }) } catch { /* ignore */ }
-            }
-        } catch { /* 非 tabBar 页面会报错 */ }
+        const noop = () => { }
+        if (b.mode === 'number') {
+            uni.setTabBarBadge({ index: 2, text: (b.value || 0) > 99 ? '99+' : String(b.value), fail: noop })
+            try { (uni as any).hideTabBarRedDot?.({ index: 2, fail: noop }) } catch { /* ignore */ }
+        } else if (b.mode === 'dot') {
+            uni.removeTabBarBadge({ index: 2, fail: noop })
+            try { (uni as any).showTabBarRedDot?.({ index: 2, fail: noop }) } catch { /* ignore */ }
+        } else {
+            uni.removeTabBarBadge({ index: 2, fail: noop })
+            try { (uni as any).hideTabBarRedDot?.({ index: 2, fail: noop }) } catch { /* ignore */ }
+        }
+    }
+
+    /**
+     * tabBar 页 onShow 时调用，校准 TabBar 徽章到当前 badge.value。
+     * <p>修复非 tabBar 页期间的推送/已读导致的 stale 值。
+     */
+    function syncTabBarBadge() {
+        updateTabBarBadge()
     }
 
     // ==================== 登录态断点监听 ====================
@@ -478,6 +501,10 @@ export const useInfoStore = defineStore('info', () => {
         // 统一徽章 + 队列
         badge, toastQueue,
         enqueueToast, dismissToast, clearToastQueue, markAllChannelsRead,
+        // 阅读 = 消费推送（队列 & 已读态一起动）
+        markArticleRead,
+        // TabBar 徽章校准（tabBar 页 onShow 调一次，修 stale）
+        syncTabBarBadge,
         // ⭐ 流式推送承接点
         channelLists, getChannelList, setChannelList, prependChannelItems, appendChannelItems,
         // 原有

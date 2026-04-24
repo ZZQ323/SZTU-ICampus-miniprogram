@@ -15,9 +15,11 @@
 import { ref, computed } from 'vue'
 import { onShow, onHide, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
+import BackTop from '@/components/BackTop.vue'
 import InfoListItem from '@/components/info/InfoListItem.vue'
 import SourcePicker from '@/components/info/SourcePicker.vue'
 import FilterDrawer from '@/components/info/FilterDrawer.vue'
+import { useBackTop } from '@/hooks/useBackTop'
 import { useUserStore } from '@/store/modules/user'
 import { useInfoStore } from '@/store/modules/info'
 import { useSubscriptionStore } from '@/store/modules/subscription'
@@ -34,6 +36,7 @@ const userStore = useUserStore()
 const infoStore = useInfoStore()
 const subscriptionStore = useSubscriptionStore()
 const { ensure, isReady } = useAuthGuard()
+const { visible: backTopVisible, scrollToTop } = useBackTop()
 
 /** 已订阅视图上限（和 store 的 MAX_SUBSCRIPTIONS 是两回事：这是 feed 一次返回的条数） */
 const SUBSCRIBED_FEED_LIMIT = 20
@@ -384,6 +387,10 @@ function handleItemClick(item: InfoItemMeta) {
   }))
   uni.setStorageSync('detail_nav_list', JSON.stringify(navList))
 
+  // ⭐ 阅读 = 消费推送：同步 dismiss 对应 toast + mark channel read
+  // 三处徽章（FAB / home 2x2 / TabBar）都从 infoStore.badge 派生，会一致递减
+  infoStore.markArticleRead(effectiveChannelId, String(item.id))
+
   uni.navigateTo({
     url: `/pages/notice/detail?id=${item.id}&channelId=${effectiveChannelId}&category=${item.categoryCode || ''}`
   })
@@ -457,6 +464,8 @@ onShow(async () => {
     fetchList(true)
   }
   loadChannels()
+  // 校准 TabBar 徽章（在 detail 等非 tabBar 页期间的改动会 stale）
+  infoStore.syncTabBarBadge()
 })
 
 onHide(() => {
@@ -661,8 +670,8 @@ onPullDownRefresh(() => {
       @close="showFilterDrawer = false"
     />
 
-    <!-- 回到顶部 -->
-    <t-back-top :fixed="true" text="顶部" />
+    <!-- 回到顶部：自定义 BackTop，避开 FAB 位置 -->
+    <BackTop :visible="backTopVisible" @tap="scrollToTop" />
   </PageLayout>
 </template>
 

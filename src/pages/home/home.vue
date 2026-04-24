@@ -14,7 +14,6 @@
 import { ref, computed, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
-import FloatingNotification from '@/components/FloatingNotification.vue'
 import { useUserStore } from '@/store/modules/user'
 import { useInfoStore } from '@/store/modules/info'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
@@ -145,6 +144,8 @@ onShow(async () => {
   if (isLoggedIn.value) {
     infoStore.init()
   }
+  // 校准 TabBar 徽章：非 tabBar 页（detail 等）期间的 WS 推送/已读会让 TabBar 数字 stale
+  infoStore.syncTabBarBadge()
 })
 
 watch(isLoggedIn, (val) => {
@@ -258,9 +259,7 @@ watch(isLoggedIn, (val) => {
 
       <!-- 底部留白 -->
       <view style="height: 120rpx;" />
-
-      <!-- 悬浮通知 -->
-      <FloatingNotification />
+      <!-- FAB 由 PageLayout 统一渲染，不再本地引入 -->
     </view>
   </PageLayout>
 </template>

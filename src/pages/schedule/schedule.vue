@@ -160,11 +160,13 @@ import { onShow } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 import { useUserStore } from '@/store/modules/user'
+import { useInfoStore } from '@/store/modules/info'
 import { useSchedule, type CourseInfo } from '@/hooks/useSchedule'
 import { extractBoolean } from '@/utils/tdesign'
 
 const { ensure } = useAuthGuard()
 const userStore = useUserStore()
+const infoStore = useInfoStore()
 const {
     courses, currentWeek, currentSemester, loading, error,
     weekDays, fetchSchedule, getCourseColor, isToday,
@@ -279,6 +281,8 @@ onShow(async () => {
     if (result.success && result.logined && courses.value.length === 0) {
         await fetchSchedule()
     }
+    // 校准 TabBar 徽章（detail 等非 tabBar 页期间的改动会 stale）
+    infoStore.syncTabBarBadge()
 })
 </script>
 

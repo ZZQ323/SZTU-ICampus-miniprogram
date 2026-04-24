@@ -11,7 +11,7 @@
 -->
 
 <template>
-  <PageLayout>
+  <PageLayout :enable-fab="false">
     <!-- 只有认证信息就绪后才显示登录表单 -->
     <view v-if="isReady" class="login-page">
       <!-- 顶部 Logo -->
