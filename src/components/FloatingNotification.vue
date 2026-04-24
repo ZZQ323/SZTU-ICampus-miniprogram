@@ -15,7 +15,7 @@
 -->
 
 <template>
-    <view class="fab-wrapper">
+    <view v-if="isSchoolLoggedIn" class="fab-wrapper">
         <!-- 展开的面板 -->
         <view v-if="isExpanded" class="fab-panel">
             <view class="panel-header">
@@ -69,8 +69,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useInfoStore, type ToastItem } from '@/store/modules/info'
+import { useUserStore } from '@/store/modules/user'
 
 const infoStore = useInfoStore()
+const userStore = useUserStore()
+
+// 未登录时 FAB 不显示（WS 未连，没有推送队列，红点无意义）
+const isSchoolLoggedIn = computed(() => userStore.isSchoolLoggedIn)
 
 const isExpanded = ref(false)
 

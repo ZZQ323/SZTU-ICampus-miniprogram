@@ -14,6 +14,8 @@
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
+import BackTop from '@/components/BackTop.vue'
+import { useBackTop } from '@/hooks/useBackTop'
 import { useUserStore } from '@/store/modules/user'
 import { infoApi } from '@/api/info-api'
 import type { InfoContent } from '@/types/info'
@@ -21,6 +23,7 @@ import type { InfoContent } from '@/types/info'
 // ==================== Store ====================
 
 const userStore = useUserStore()
+const { visible: backTopVisible, scrollToTop } = useBackTop()
 
 // ==================== 路由参数 ====================
 
@@ -292,8 +295,8 @@ onLoad((options) => {
                 </view>
             </view>
 
-            <!-- 回到顶部 -->
-            <t-back-top :fixed="true" text="顶部" />
+            <!-- 回到顶部：自定义 BackTop，避开 FAB 位置 -->
+            <BackTop :visible="backTopVisible" @tap="scrollToTop" />
 
             <!-- ⭐ 底部固定栏：导航 + 分享（不再被内容挤压） -->
             <view class="bottom-bar">
