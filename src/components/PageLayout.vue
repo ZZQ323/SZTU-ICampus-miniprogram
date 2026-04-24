@@ -52,6 +52,16 @@
 
                 <!-- 提示文字 -->
                 <text class="mask-hint">请稍候...</text>
+
+                <!--
+                  紧急逃生入口：如果 mask 显示超过 8 秒还没结束，浮出"卡住了？重置本地状态"
+                  按钮。点击 = 清 localStorage cookies + userId、强制 phase=idle、跳登录页。
+                  此前如果用户进入循环 (登录失败 → 跳回登录 → 自动 refreshSession 又失败 →
+                  回登录 ...) 唯一逃生路径就是删小程序，太粗暴。
+                -->
+                <view v-if="showStuckEscape" class="stuck-escape" @tap="handleStuckReset">
+                    <text>卡住了？点击重置本地状态</text>
+                </view>
             </view>
         </view>
 
@@ -103,15 +113,56 @@
 /**
  * 页面布局组件
  */
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 import FloatingNotification from '@/components/FloatingNotification.vue'
+import { clearAuth } from '@/utils/cookie-manager'
 
 withDefaults(defineProps<{ enableFab?: boolean }>(), { enableFab: true })
 
 const authStore = useAuthStore()
 const { forceCheck } = useAuthGuard()
+
+// ==================== mask 卡死逃生 ====================
+
+const showStuckEscape = ref(false)
+let stuckTimer: any = null
+
+watch(
+    () => authStore.showMask,
+    (visible) => {
+        if (visible) {
+            // 显示后 8 秒，浮出"重置本地"按钮
+            stuckTimer && clearTimeout(stuckTimer)
+            stuckTimer = setTimeout(() => { showStuckEscape.value = true }, 8000)
+        } else {
+            stuckTimer && clearTimeout(stuckTimer)
+            stuckTimer = null
+            showStuckEscape.value = false
+        }
+    },
+    { immediate: true }
+)
+
+onUnmounted(() => { stuckTimer && clearTimeout(stuckTimer) })
+
+function handleStuckReset() {
+    uni.showModal({
+        title: '重置本地状态',
+        content: '将清空本地 cookies 和登录状态。原因可能是上次会话残留导致登录卡死，重置后请重新登录。',
+        confirmText: '清空',
+        cancelText: '再等等',
+        success: (res) => {
+            if (!res.confirm) return
+            clearAuth()
+            authStore.setPhase('idle')
+            uni.showToast({ title: '已重置，请重新登录', icon: 'none' })
+            // 强制跳到登录页（避免在脏 mask 上接着挂着）
+            uni.reLaunch({ url: '/pages/common/login/login', fail: () => {} })
+        }
+    })
+}
 
 // ==================== 遮罩相关 ====================
 
@@ -323,6 +374,21 @@ function handleBackdropClick() {
 .mask-hint {
     font-size: 24rpx;
     color: #999999;
+}
+
+.stuck-escape {
+    margin-top: 32rpx;
+    padding: 14rpx 28rpx;
+    border: 1rpx solid #e0e0e0;
+    border-radius: 999rpx;
+    background: rgba(255, 255, 255, 0.05);
+    color: #fa5151;
+    font-size: 24rpx;
+    text-align: center;
+
+    &:active {
+        background: rgba(250, 81, 81, 0.1);
+    }
 }
 
 // ==================== 错误弹窗样式 ====================
