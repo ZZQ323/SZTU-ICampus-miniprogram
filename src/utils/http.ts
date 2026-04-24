@@ -8,7 +8,7 @@
 import axios from 'axios'
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { createUniAppAxiosAdapter } from '@uni-helper/axios-adapter'
-import { getUserId, getSchoolCookies, setSchoolCookies } from '@/utils/cookie-manager'
+import { getUserId, getSchoolCookies, mergeSchoolCookies } from '@/utils/cookie-manager'
 
 // ==================== 配置 ====================
 
@@ -75,9 +75,12 @@ instance.interceptors.response.use(
 
     // 后端通过 header 下发更新的 cookies → 更新本地存储
     // uni-app adapter 可能保留原始大小写，需要 case-insensitive 查找
+    // ⚠️ 按 (name,domain,path) 合并，不要整体替换 —— 学校 Set-Cookie 只发增量，
+    // 整体替换会把学校没重发的关键 cookie（比如一辈子只 set 一次的 TWFID）擦掉，
+    // 下个请求带着"缺 TWFID 的子集"被学校 414。
     const setCookies = _getHeader(headers, 'x-set-cookies')
     if (setCookies) {
-      setSchoolCookies(setCookies)
+      mergeSchoolCookies(setCookies)
     }
 
     // 业务错误码

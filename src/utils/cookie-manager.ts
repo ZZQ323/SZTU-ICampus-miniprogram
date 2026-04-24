@@ -26,6 +26,55 @@ export function setSchoolCookies(cookiesJson: string): void {
   uni.setStorageSync(COOKIES_KEY, cookiesJson)
 }
 
+/**
+ * 合并式写入 cookies —— 镜像浏览器原生 Set-Cookie 语义。
+ *
+ * ⚠️ 关键 bug 修复（2026-04-25）：HAR 实证学校的 logout / re-login 流程里 Set-Cookie
+ * **只返回变化的 key**（尤其 TWFID 这条 webvpn 根 cookie 一辈子只在最初的
+ * thdportal_validate 那一跳 set 一次，此后所有流程都不再 re-issue）。浏览器按
+ * (name, domain, path) 合并，不碰的 key 就保留旧值。
+ *
+ * 我们之前在 http.ts 响应拦截器里是"整体替换"：只要某个 API 返回 X-Set-Cookies 的子集
+ * （例如公文通列表拉完只回了 2-4 个 cookie），前端就把 TWFID 擦了；紧接着附件 / 课表
+ * 请求就发着缺 TWFID 的子集，学校 414 拒绝。
+ *
+ * 合并策略：
+ *   - (name, domain, path) 三元组作为 cookie 唯一键
+ *   - incoming 里有这个键 → 覆盖（按 school 的新值）
+ *   - incoming 里没这个键 → 保留 existing（浏览器语义：server 没说删就继续带着）
+ *
+ * 若要完全清空（logout / reset），走 {@link removeSchoolCookies} / {@link clearAuth}。
+ */
+export function mergeSchoolCookies(incomingJson: string): void {
+  if (!incomingJson) return
+  const existing = parseCookieArray(getSchoolCookies())
+  const incoming = parseCookieArray(incomingJson)
+
+  const byKey = new Map<string, any>()
+  for (const c of existing) byKey.set(cookieKey(c), c)
+  for (const c of incoming) byKey.set(cookieKey(c), c)
+
+  const merged = [...byKey.values()]
+  uni.setStorageSync(COOKIES_KEY, JSON.stringify(merged))
+}
+
+function cookieKey(c: any): string {
+  const name = c?.name ?? ''
+  const domain = c?.domain ?? ''
+  const path = c?.path ?? '/'
+  return `${name}\t${domain}\t${path}`
+}
+
+function parseCookieArray(json: string): any[] {
+  if (!json) return []
+  try {
+    const parsed = JSON.parse(json)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 export function removeSchoolCookies(): void {
   uni.removeStorageSync(COOKIES_KEY)
 }

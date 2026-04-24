@@ -10,7 +10,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useUserStore } from './user'
 import { useInfoStore } from './info'
-import { getUserId, setSchoolCookies } from '@/utils/cookie-manager'
+import { getUserId, mergeSchoolCookies } from '@/utils/cookie-manager'
 import { WsClient } from '@/utils/websocket'
 import type { WsConnectionState, WsMessage } from '@/utils/websocket'
 
@@ -108,8 +108,10 @@ export const useWsStore = defineStore('ws', () => {
                 // 那边的 switch 吞没（它只处理 NEW_ANNOUNCEMENTS / NEW_CONTENT 等）。
                 const cookiesJson = (msg as any)?.data?.cookiesJson
                 if (typeof cookiesJson === 'string' && cookiesJson.length > 0) {
-                    setSchoolCookies(cookiesJson)
-                    console.log('[WS Store] 已应用 COOKIE_UPDATE，本地 cookie 刷新')
+                    // 合并而非替换：后端爬虫只回推轮换过的 key，其它 cookie（如 TWFID）
+                    // 前端必须保留原值，否则下一次 HTTP 请求会缺 key 被学校拒。
+                    mergeSchoolCookies(cookiesJson)
+                    console.log('[WS Store] 已应用 COOKIE_UPDATE（合并），本地 cookie 刷新')
                 } else {
                     console.warn('[WS Store] COOKIE_UPDATE payload 无 cookiesJson，忽略')
                 }
