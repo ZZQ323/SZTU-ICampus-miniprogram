@@ -291,6 +291,16 @@ TabBar:
 
 **DevTools 限制**：Windows/Mac 微信开发者工具**不支持 openDocument**，总是返回 `filetype not supported`。这是官方限制，真机（iOS/Android）正常。错误文案要引导用户"开发者工具不支持预览，请用真机测试"，不要让新手以为代码有 bug 调半天。
 
+### ⚠️ TDesign 浅色主题锁死（华为 EMUI 深色模式坑）
+
+`src/main.ts` 引入 `tdesign-uniapp/common/style/theme/index.css`，里面有一整段 `@media (prefers-color-scheme: dark)` 重写所有 `--td-*-color-*` 变量为暗色。用户手机（尤其华为 EMUI）开了系统深色模式后：
+
+- `pages.json: darkmode: false` **管不住** CSS 媒体查询（它只影响 tabBar/导航栏）
+- `@media (prefers-color-scheme: dark)` 在 WebView 里照样匹配 → TDesign 组件（t-input / t-button / t-card）全部变暗
+- 华为用户反馈"t-input 背景变暗"就是这个
+
+**已在 `App.vue` 写入覆盖媒体查询**，把 `--td-bg-color-*` / `--td-text-color-*` / `--td-component-border` 等关键变量强制锁定为浅色。项目没做完整暗色适配，不要改回跟随系统。如果以后想做暗色，需要重新自检全局每一处硬编码颜色（`#fff` / `#333` / 等）。
+
 ### 外链处理
 
 - `mp.weixin.qq.com` → 通过 `web-view` 页面在小程序内打开
