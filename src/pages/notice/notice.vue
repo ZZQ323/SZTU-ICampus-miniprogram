@@ -58,11 +58,23 @@ const channels = ref<Channel[]>([])
 
 const loading = ref(false)
 const refreshing = ref(false)
-const list = ref<InfoItemMeta[]>([])
 const page = ref(1)
 const hasMore = ref(true)
 const searchKeyword = ref('')
 const isSearchMode = ref(false)
+
+/**
+ * 本地列表（用于"非 store 驱动"的视图）：订阅模式、跨频道 feed、announcement 子分类。
+ * 这些视图内容是动态聚合 / 过滤的，不适合放进按 channelId 索引的 store 缓存。
+ */
+const localFeedList = ref<InfoItemMeta[]>([])
+
+/**
+ * 已初始化的视图集合（key: channelId 或 channelId:category 或 _sourceOrg）。
+ * <p>onShow 检查这个集合 —— 只有从未初始化的视图才在 onShow 触发 fetch。
+ * 已初始化的视图（detail 返回、tabBar 切回）不再 onShow 重 fetch，由 WS 推动更新。
+ */
+const initializedViews = ref<Record<string, boolean>>({})
 
 // ==================== 计算属性 ====================
 
@@ -114,6 +126,44 @@ const effectiveSourceIds = computed<string[]>(() =>
 /** 临时筛选是否处于激活状态 */
 const isTempFilterActive = computed(() => tempFilterIds.value !== null)
 
+/**
+ * 当前视图是否走 store 缓存（= 接受 WS 推送的真流式视图）。
+ * <p>条件：是固定频道 + 没在用 announcement 的 category 子筛选 + 没在订阅/搜索模式
+ */
+const useStoreList = computed(() => {
+  if (isSearchMode.value || isSubscribedMode.value) return false
+  const ch = sourceFilter.value.channelId
+  if (!isFixedChannel.value || !ch) return false
+  // announcement 的 category 子筛选 → 暂时降级到 fetch（store 缓存按 channelId 索引）
+  if (isAnnouncement.value && activeLayer2.value) return false
+  return true
+})
+
+/**
+ * ⭐ 列表数据源：固定频道走 store（自动接 WS 推送），其余走本地 ref。
+ * notice.vue 不再持有自己的"主列表" —— 数据所有权在 info store。
+ */
+const list = computed<InfoItemMeta[]>(() => {
+  if (useStoreList.value) {
+    return infoStore.getChannelList(sourceFilter.value.channelId!)
+  }
+  if (isSearchMode.value) return localFeedList.value
+  return localFeedList.value
+})
+
+/** 当前视图的初始化 key（决定 onShow 是否需要拉一次冷启动数据） */
+function currentViewKey(): string {
+  if (isSubscribedMode.value) return '_subscribed'
+  const ch = sourceFilter.value.channelId
+  if (ch) {
+    return isAnnouncement.value && activeLayer2.value ? `${ch}:${activeLayer2.value}` : ch
+  }
+  const org = sourceFilter.value.sourceOrg || 'all'
+  const t1 = activeLayer1.value || ''
+  const t2 = activeLayer2.value || ''
+  return `_feed:${org}:${t1}:${t2}`
+}
+
 // ==================== 方法 ====================
 
 async function fetchList(reset = false) {
@@ -126,7 +176,7 @@ async function fetchList(reset = false) {
 
   // 已订阅模式且订阅集为空 → 清空列表，不发请求
   if (isSubscribedMode.value && subscriptionStore.count === 0) {
-    list.value = []
+    localFeedList.value = []
     hasMore.value = false
     loading.value = false
     refreshing.value = false
@@ -171,15 +221,33 @@ async function fetchList(reset = false) {
     }
 
     const items = result.items || []
-    if (reset) {
-      list.value = items
+    const ch = sourceFilter.value.channelId
+    if (useStoreList.value && ch) {
+      // ⭐ 走 store 缓存（流式推送主路径）：reset/page=1 全量替换；分页追加
+      if (reset || page.value === 1) {
+        infoStore.setChannelList(ch, items)
+      } else {
+        infoStore.appendChannelItems(ch, items)
+      }
     } else {
-      list.value = [...list.value, ...items]
+      if (reset) {
+        localFeedList.value = items
+      } else {
+        localFeedList.value = [...localFeedList.value, ...items]
+      }
     }
+    // 记录该视图已完成冷启动 fetch，onShow 不会再自动重拉
+    initializedViews.value[currentViewKey()] = true
 
   } catch (e) {
     console.error('[Notice] 获取列表失败', e)
-    if (reset) list.value = []
+    if (reset) {
+      if (useStoreList.value && sourceFilter.value.channelId) {
+        infoStore.setChannelList(sourceFilter.value.channelId, [])
+      } else {
+        localFeedList.value = []
+      }
+    }
   } finally {
     loading.value = false
     refreshing.value = false
@@ -245,7 +313,8 @@ async function handleSearch() {
   try {
     const channelId = sourceFilter.value.channelId || undefined
     const result = await infoApi.search(keyword, channelId, 50)
-    list.value = result || []
+    // 搜索结果走本地 list（不挂 store 缓存，搜索是临时视图）
+    localFeedList.value = result || []
   } catch (e) {
     console.error('[Notice] 搜索失败', e)
   } finally {
@@ -381,7 +450,12 @@ function handleMarkAllRead() {
 
 onShow(async () => {
   await ensure({ requireSchoolLogin: false })
-  if (!isSearchMode.value) fetchList(true)
+  // ⭐ 流式推送规则（CLAUDE.md 硬规则）：onShow 不再无条件 fetch，
+  // 否则等于轮询。仅当当前视图从未冷启动过时拉一次；之后由 WS 推驱动列表更新。
+  // 用户主动操作（下拉刷新 / 切频道 / 切分类）才会再走 fetchList(true)。
+  if (!isSearchMode.value && !initializedViews.value[currentViewKey()]) {
+    fetchList(true)
+  }
   loadChannels()
 })
 
