@@ -12,10 +12,8 @@
  *   tag-style 属性替代 normalizeHtml 的 regex 注入，更稳。
  */
 import { ref, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onPageScroll } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
-import BackTop from '@/components/BackTop.vue'
-import { useBackTop } from '@/hooks/useBackTop'
 import { useUserStore } from '@/store/modules/user'
 import { useInfoStore } from '@/store/modules/info'
 import { useFavoriteStore } from '@/store/modules/favorite'
@@ -27,7 +25,10 @@ import type { InfoContent } from '@/types/info'
 const userStore = useUserStore()
 const infoStore = useInfoStore()
 const favoriteStore = useFavoriteStore()
-const { visible: backTopVisible, scrollToTop } = useBackTop()
+
+// 回顶按钮的 scrollTop 绑定
+const pageScrollTop = ref(0)
+onPageScroll((e) => { pageScrollTop.value = e.scrollTop })
 
 // ==================== 路由参数 ====================
 
@@ -364,8 +365,8 @@ onLoad((options) => {
                 </view>
             </view>
 
-            <!-- 回到顶部：自定义 BackTop，避开 FAB 位置 -->
-            <BackTop :visible="backTopVisible" @tap="scrollToTop" />
+            <!-- 回到顶部：TDesign t-back-top -->
+            <t-back-top :scroll-top="pageScrollTop" :visibility-height="200" text="顶部" />
 
             <!-- ⭐ 底部固定栏：导航 + 分享（不再被内容挤压） -->
             <view class="bottom-bar">
