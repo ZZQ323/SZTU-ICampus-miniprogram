@@ -316,7 +316,7 @@ TabBar:
 
 学期 ID 格式：`{year}-{year+1}-{1|2|3}`（如 `2025-2026-2`）。从当前年份倒推到 2017。第 3 学期（暑期）周次限制为 1-10 周，普通学期 1-22 周。
 
-### 课表 UI = 2D 画布（绝对定位，不用 flex 表格）
+### 课表 UI = 2D 画布（绝对定位，不用 flex 表格 / 不用 sticky）
 
 旧版 `schedule.vue` 用 flex 行/列 grid，每行固定 180rpx，导致"大课间 / 午休 / 晚餐"这种不等长休息时间视觉上全被压平成一样——刻度对不上课。2026-04 重写为**分钟刻度 2D 画布**：
 
@@ -324,12 +324,20 @@ TabBar:
 - **日窗口**：`DAY_START_MIN = 7:00`，`DAY_END_MIN = 23:00`（留跨日缓冲）
 - **画布尺寸**：宽 1540rpx（140+7×200）、高 2968rpx（88 头 + 16h×12×15）
 - **外层**：单 `scroll-view scroll-x scroll-y :enhanced="true"`（双轴都能拖）
-- **时间列**：`position: sticky; left: 0; z-index: 2`，每个 `SZTU_TIME_TABLE` 节次按 `startMin/5×15rpx` 绝对定位 label
-- **日期头**：`position: sticky; top: 0; z-index: 2`
-- **左上角 .corner**：同时 sticky-left + sticky-top，`z-index: 3`
-- **课程卡**：绝对定位，`top = (startMin - DAY_START)/5×15`, `height = (endMin - startMin)/5×15`，`left = TIME_COL + col×200`
-- **今日列**：半透明蓝背景绝对定位层（z-index 0 垫底）
-- **节次分割线**：每个 slot 的 `endMin` 处一条 1rpx 淡灰（z-index 0）
+- **所有元素都是 `position: absolute`**（corner / day-header / time-col / course-card / today-hint / divider），跟着画布一起滚
+- **课程卡**：`top = (startMin - DAY_START)/5×15`, `height = (endMin - startMin)/5×15`，`left = TIME_COL + col×200`
+- **时间列 label**：按 `SZTU_TIME_TABLE` 的 `startMin` 在 time-col 内部绝对定位（time-col 自己已偏移 HEADER_H_RPX）
+- **z-index**：底 today-hint/divider(0) → 中 course-card(1) → 上 day-header/time-col(2) → 最上 corner(3)
+
+**⚠️ 不要用 `position: sticky` —— 微信小程序的 scroll-view 不支持**
+
+小程序的 scroll-view 是 native scroller，里面的 CSS sticky 会被当成 static，所有 sticky 元素被打回 DOM 流顶部，导致日期头/时间列和课程卡错位。踩坑表现：真机纵向不能滑 + 星期名和第一节 label 叠在画布最左上角。
+
+这个妥协的代价：用户纵向滚远了 header 看不见、横向滚远了时间列看不见——滚回来即可。不值得为这个 UX 细节回头折腾两个 scroll-view 联动。
+
+**scroll-view 高度必须是实际像素值**
+
+`scroll-y` 生效的硬性前提是 scroll-view 被撑开到固定高度，且内容高于该高度。我们用 flex column 方案：`.schedule-page { display:flex; flex-direction:column; min-height:100vh }` + `.canvas-wrap { flex:1; min-height:0 }` + `.canvas-scroll { height:100% }`。**不要**用 `calc(100vh - Nrpx)`——rpx 和 vh 混算在部分真机上会得到奇怪的结果。
 
 **courseTime 是唯一定位真理源**：后端 `CrouseParser` 用 `(\d{2}:\d{2}-\d{2}:\d{2})` 从教务 HTML 的 `<th>` 扒原始时间字符串，前端 `parseCourseTime(s)` 解析成 `{ startMin, endMin }`。后端 `row` 字段保留但画布不读（仅防御性兜底）。
 

@@ -74,21 +74,26 @@
         课表 2D 画布
         ======================================================================
         · 单个 scroll-view 双轴（scroll-x + scroll-y），用户可横纵自由拖
-        · 画布按 5min = 15rpx 的刻度绘制；课程卡和时间列 label 都按分钟绝对定位
-        · 时间列 sticky-left（z-index 2）、日期头 sticky-top（z-index 2）
-        · 今日列半透明蓝色底
-        · 休息时间不画内容，留白比例 = 真实分钟比例
+        · 画布按 5min = 15rpx 的刻度绘制；所有元素（时间列 / 日期头 / 课程卡）
+          都按绝对定位，一起跟画布滚动
+        · ⚠️ 不用 position: sticky —— 微信小程序的 scroll-view 是 native scroller，
+          CSS sticky 在内部被当成 static，贴不住，会被打回 DOM 流顶部。
+        · 今日列半透明蓝色底、休息时间留白比例 = 真实分钟比例
       -->
       <view v-else class="canvas-wrap">
         <scroll-view class="canvas-scroll" scroll-x scroll-y :enhanced="true"
           :show-scrollbar="false" :bounces="true">
           <view class="canvas" :style="{ width: canvasWidthRpx + 'rpx', height: canvasHeightRpx + 'rpx' }">
 
-            <!-- 左上角：固定的"时段"角落（sticky 左上）-->
-            <view class="corner" :style="{ width: TIME_COL_RPX + 'rpx', height: HEADER_H_RPX + 'rpx' }" />
+            <!-- 左上角（absolute top-left，画布内固定角）-->
+            <view class="corner"
+              :style="{ width: TIME_COL_RPX + 'rpx', height: HEADER_H_RPX + 'rpx' }" />
 
-            <!-- 日期表头（sticky top）-->
-            <view class="day-header" :style="{ top: 0, left: TIME_COL_RPX + 'rpx', height: HEADER_H_RPX + 'rpx' }">
+            <!-- 日期表头（absolute，顶部一排）-->
+            <view class="day-header"
+              :style="{ left: TIME_COL_RPX + 'rpx', top: 0,
+                        width: (canvasWidthRpx - TIME_COL_RPX) + 'rpx',
+                        height: HEADER_H_RPX + 'rpx' }">
               <view v-for="(day, idx) in weekDays" :key="idx"
                 class="day-cell" :class="{ today: isToday(idx) }"
                 :style="{ width: DAY_WIDTH_RPX + 'rpx' }">
@@ -97,11 +102,14 @@
               </view>
             </view>
 
-            <!-- 时间列（sticky left），每节课 label 按 startMin 绝对定位 -->
-            <view class="time-col" :style="{ width: TIME_COL_RPX + 'rpx', top: HEADER_H_RPX + 'rpx' }">
+            <!-- 时间列（absolute，左侧一列，内部 slot label 再按 startMin 绝对定位）-->
+            <view class="time-col"
+              :style="{ left: 0, top: HEADER_H_RPX + 'rpx',
+                        width: TIME_COL_RPX + 'rpx',
+                        height: (canvasHeightRpx - HEADER_H_RPX) + 'rpx' }">
               <view v-for="slot in SZTU_TIME_TABLE" :key="slot.slot"
                 class="time-slot"
-                :style="{ top: yOfMin(slot.startMin) + 'rpx',
+                :style="{ top: ((slot.startMin - DAY_START_MIN) / 5 * CELL_UNIT_RPX) + 'rpx',
                           height: ((slot.endMin - slot.startMin) / 5 * CELL_UNIT_RPX) + 'rpx' }">
                 <text class="slot-label">{{ slot.label }}</text>
                 <text class="slot-time">{{ fmt(slot.startMin) }}-{{ fmt(slot.endMin) }}</text>
@@ -337,11 +345,6 @@ onShow(async () => {
 </script>
 
 <style lang="scss" scoped>
-.schedule-page {
-    min-height: 100vh;
-    background: #f5f5f5;
-}
-
 // ==================== 控制栏 ====================
 
 .control-bar {
@@ -474,11 +477,23 @@ onShow(async () => {
 
 // ==================== 课表 2D 画布 ====================
 //
-// 布局策略：
+// 布局策略（2026-04 修订）：
 //   · 外层 scroll-view 开双轴 scroll（scroll-x + scroll-y）
-//   · 画布内用绝对定位：课程卡 top/left/height/width 都按分钟刻度算
-//   · 时间列 position:sticky left:0、日期头 sticky top:0、左上角都 sticky
-//   · z-index 分层：底 today-hint(0) → 中 course-card(1) → 上 sticky 轴(2/3)
+//   · 画布内**全部绝对定位**：corner / day-header / time-col / course-card / today-hint
+//   · ⚠️ 不使用 position: sticky —— 微信小程序的 scroll-view 内部是 native
+//     scroller，CSS sticky 无法定位（会被打回 DOM 流顶部，破坏布局）
+//   · 所以日期头和时间列会跟着画布一起滚——这是 scroll-view 架构的妥协，
+//     用户滚回顶/左即可重新看见刻度
+//   · z-index 分层：底 today-hint/divider(0) → 中 course-card(1) →
+//     上 day-header/time-col(2) → 最上 corner(3)
+
+// .schedule-page 改成 flex column，让 canvas-wrap 能拿到实际像素高度
+.schedule-page {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: #f5f5f5;
+}
 
 .canvas-wrap {
     background: #fff;
@@ -486,8 +501,10 @@ onShow(async () => {
     border-radius: 12rpx;
     overflow: hidden;
     box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
-    // 给 scroll-view 限定高度，让纵向滚在它内部发生
-    height: calc(100vh - 280rpx);
+    // flex:1 + min-height:0 —— 让 scroll-view 真的能在剩余空间里纵向滚，
+    // 不用 calc(100vh - N rpx)（rpx/vh 混算在部分设备上结果诡异）
+    flex: 1;
+    min-height: 0;
 }
 
 .canvas-scroll {
@@ -501,9 +518,9 @@ onShow(async () => {
     background: #fff;
 }
 
-// ---- 左上角（双轴 sticky）----
+// ---- 左上角（绝对定位到 (0, 0)）----
 .corner {
-    position: sticky;
+    position: absolute;
     top: 0;
     left: 0;
     z-index: 3;
@@ -512,10 +529,9 @@ onShow(async () => {
     border-bottom: 2rpx solid #e0e0e0;
 }
 
-// ---- 日期表头（sticky top）----
+// ---- 日期表头（绝对定位到顶部一排）----
 .day-header {
-    position: sticky;
-    top: 0;
+    position: absolute;
     z-index: 2;
     display: flex;
     background: #f0f2f5;
@@ -530,6 +546,7 @@ onShow(async () => {
     background: #f0f2f5;
     border-right: 1rpx solid #e8e8e8;
     flex-shrink: 0;
+    height: 100%;
 
     &.today {
         background: #e3f2fd;
@@ -548,12 +565,10 @@ onShow(async () => {
     margin-top: 4rpx;
 }
 
-// ---- 时间列（sticky left）----
+// ---- 时间列（绝对定位到左侧一列，内部 .time-slot 按 slot startMin 再绝对定位）----
 .time-col {
-    position: sticky;
-    left: 0;
+    position: absolute;
     z-index: 2;
-    // top 由模板内联指定（偏移开 header）
     background: #fafafa;
     border-right: 1rpx solid #e0e0e0;
 }
