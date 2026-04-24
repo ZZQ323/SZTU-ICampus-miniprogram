@@ -13,15 +13,17 @@
 -->
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { onPageScroll } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
-import BackTop from '@/components/BackTop.vue'
-import { useBackTop } from '@/hooks/useBackTop'
 import { useFavoriteStore, MAX_FAVORITES } from '@/store/modules/favorite'
 import type { FavoriteItem } from '@/types/favorite'
 
 const favoriteStore = useFavoriteStore()
-const { visible: backTopVisible, scrollToTop } = useBackTop()
+
+// 回顶按钮的 scrollTop 绑定
+const pageScrollTop = ref(0)
+onPageScroll((e) => { pageScrollTop.value = e.scrollTop })
 
 const items = computed<FavoriteItem[]>(() => favoriteStore.items)
 
@@ -120,7 +122,7 @@ function handleClearAll() {
         </view>
       </view>
 
-      <BackTop :visible="backTopVisible" @tap="scrollToTop" />
+      <t-back-top :scroll-top="pageScrollTop" :visibility-height="200" text="顶部" />
     </view>
   </PageLayout>
 </template>

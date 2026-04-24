@@ -13,13 +13,11 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { onShow, onHide, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onShow, onHide, onReachBottom, onPullDownRefresh, onPageScroll } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
-import BackTop from '@/components/BackTop.vue'
 import InfoListItem from '@/components/info/InfoListItem.vue'
 import SourcePicker from '@/components/info/SourcePicker.vue'
 import FilterDrawer from '@/components/info/FilterDrawer.vue'
-import { useBackTop } from '@/hooks/useBackTop'
 import { useUserStore } from '@/store/modules/user'
 import { useInfoStore } from '@/store/modules/info'
 import { useSubscriptionStore } from '@/store/modules/subscription'
@@ -36,7 +34,10 @@ const userStore = useUserStore()
 const infoStore = useInfoStore()
 const subscriptionStore = useSubscriptionStore()
 const { ensure, isReady } = useAuthGuard()
-const { visible: backTopVisible, scrollToTop } = useBackTop()
+
+// 回顶按钮的 scrollTop 绑定（直接内联，不经 composable 免得 onPageScroll 不触发）
+const pageScrollTop = ref(0)
+onPageScroll((e) => { pageScrollTop.value = e.scrollTop })
 
 /** 已订阅视图上限（和 store 的 MAX_SUBSCRIPTIONS 是两回事：这是 feed 一次返回的条数） */
 const SUBSCRIBED_FEED_LIMIT = 20
@@ -679,8 +680,8 @@ onPullDownRefresh(() => {
       @close="showFilterDrawer = false"
     />
 
-    <!-- 回到顶部：自定义 BackTop，避开 FAB 位置 -->
-    <BackTop :visible="backTopVisible" @tap="scrollToTop" />
+    <!-- 回到顶部：TDesign t-back-top，:scroll-top 必须双向绑定才会显隐 -->
+    <t-back-top :scroll-top="pageScrollTop" :visibility-height="200" text="顶部" />
   </PageLayout>
 </template>
 
