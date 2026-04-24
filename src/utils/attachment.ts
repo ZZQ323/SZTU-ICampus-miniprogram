@@ -29,6 +29,37 @@ export function buildProxyImageUrl(rawUrl: string): string {
     return `${BASE_URL}/proxy/image?url=${encodeURIComponent(rawUrl)}`
 }
 
+/**
+ * 把正文 HTML 里所有指向学校域名的 <img src="..."> 改写成 /proxy/image？url=...
+ *
+ * 为什么要这么做（真机才暴露出来的坑）：
+ *   小程序 <image> 组件走的是 native 图片加载通道，不经过 axios 拦截器，
+ *   也不带 X-School-Cookies。直接访问学校 WebVPN 域名会：
+ *     1. 撞上学校自签 TLS 证书 → 真机 WeChat 握手超时
+ *     2. 撞上需要 cookie 的资源（少数） → 302 到登录页再挂
+ *   开发者工具因为和 PC 浏览器共享信任/会话，能跑通；真机就转圈，也没有 console
+ *   报错、没有网络请求记录（native loader 不在 devtools HTTP 面板里）。
+ *
+ *   解法：全部走后端 /proxy/image。后端用 trust-all HttpClient + Host/Referer 伪装，
+ *   一次性解决证书 + cookie + 反代问题。/proxy/image 在 CookieAuthFilter 白名单里，
+ *   不需要前端请求头也能用，正合适给 <image> 组件调。
+ *
+ * 仅改写学校域名（*.sztu.edu.cn），其它域名（比如公文里偶尔出现的 mp.weixin.qq.com
+ * 图）保持原样——我们的 proxy 白名单也只放行学校域，改了反而打不开。
+ */
+const IMG_TAG_RE = /<img\b[^>]*\bsrc\s*=\s*(["'])([^"']+)\1[^>]*>/gi
+
+export function rewriteSchoolImgs(html: string): string {
+    if (!html) return ''
+    return html.replace(IMG_TAG_RE, (tag, quote, src) => {
+        // 只改 http(s) 的绝对 URL；data:image base64、相对路径由后端 cleanHtml 先处理过
+        if (!/^https?:\/\//i.test(src)) return tag
+        if (!/\.sztu\.edu\.cn(?::\d+)?\//i.test(src)) return tag
+        const proxied = buildProxyImageUrl(src)
+        return tag.replace(`${quote}${src}${quote}`, `${quote}${proxied}${quote}`)
+    })
+}
+
 /** 返回 downloadFile 需要的 header（X-School-Cookies + X-User-Id） */
 export function attachmentHeaders(): Record<string, string> {
     return {

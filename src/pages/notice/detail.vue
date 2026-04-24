@@ -27,6 +27,7 @@ import {
     isArchiveAttachment,
     resolveOpenDocFileType,
     describeDownloadError,
+    rewriteSchoolImgs,
 } from '@/utils/attachment'
 
 // ==================== Store ====================
@@ -127,7 +128,13 @@ function linkifyPlainUrls(html: string): string {
     )
 }
 
-const renderedContent = computed(() => linkifyPlainUrls(content.value?.content || ''))
+// 正文 HTML 处理管线：
+//   1. linkifyPlainUrls：裸 URL 包成 <a>，让 mp-html 的 @linktap 能接管
+//   2. rewriteSchoolImgs：把学校域的 <img src> 改写成 /proxy/image —— 真机 <image>
+//      组件不带 cookie、撞学校自签 TLS 会无限转圈，必须走后端代理
+const renderedContent = computed(() =>
+    rewriteSchoolImgs(linkifyPlainUrls(content.value?.content || ''))
+)
 
 // ==================== mp-html 配置 ====================
 
