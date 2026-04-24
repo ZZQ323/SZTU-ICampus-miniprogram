@@ -12,13 +12,20 @@
  *   tag-style 属性替代 normalizeHtml 的 regex 注入，更稳。
  */
 import { ref, computed } from 'vue'
-import { onLoad, onPageScroll } from '@dcloudio/uni-app'
+import { onLoad, onPageScroll, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import PageLayout from '@/components/PageLayout.vue'
 import { useUserStore } from '@/store/modules/user'
 import { useInfoStore } from '@/store/modules/info'
 import { useFavoriteStore } from '@/store/modules/favorite'
 import { infoApi } from '@/api/info-api'
 import type { InfoContent } from '@/types/info'
+import {
+    buildProxyAttachmentUrl,
+    buildProxyImageUrl,
+    attachmentHeaders,
+    isImageAttachment,
+    describeDownloadError,
+} from '@/utils/attachment'
 
 // ==================== Store ====================
 
@@ -240,8 +247,28 @@ function navigateTo(item: NavItem | null) {
     })
 }
 
-/** 下载附件 */
-function downloadAttachment(url: string, name: string) {
+/**
+ * 下载/预览附件
+ *
+ * ⭐ 一律走后端代理 /proxy/attachment（图片走 /proxy/image）：
+ *   - uni.downloadFile 不走 http 拦截器，直连学校 URL 会拿到 200 + 登录页 HTML，
+ *     openDocument 再失败，用户看不到原因。
+ *   - 代理会带 X-School-Cookies 转给学校，并嗅探登录页伪 200 → 返回 404，
+ *     前端可以给出"登录过期"之类的清晰提示。
+ */
+function downloadAttachment(att: { url: string; name: string; type?: string }) {
+    // 图片类：走 /proxy/image + uni.previewImage（可双指缩放、长按保存、菜单转发）
+    if (isImageAttachment(att as any)) {
+        uni.previewImage({
+            urls: [buildProxyImageUrl(att.url)],
+            fail: (err) => {
+                console.error('[attachment] previewImage fail', err)
+                uni.showToast({ title: '图片打开失败', icon: 'none' })
+            }
+        })
+        return
+    }
+
     if (!isLoggedIn.value) {
         uni.showToast({ title: '请先登录', icon: 'none' })
         return
@@ -250,33 +277,51 @@ function downloadAttachment(url: string, name: string) {
     uni.showLoading({ title: '下载中...' })
 
     uni.downloadFile({
-        url,
+        url: buildProxyAttachmentUrl(att.url, att.name),
+        header: attachmentHeaders(),
         success: (res) => {
             if (res.statusCode === 200) {
                 uni.openDocument({
                     filePath: res.tempFilePath,
+                    // showMenu=true 让微信文档预览页带"…"菜单（发送给朋友、保存到手机、其他应用打开）
                     showMenu: true,
                     success: () => uni.hideLoading(),
-                    fail: () => {
+                    fail: (err) => {
                         uni.hideLoading()
-                        uni.showToast({ title: '打开失败', icon: 'error' })
+                        console.error('[attachment] openDocument fail', err)
+                        uni.showToast({ title: `打开失败：${err?.errMsg || '格式不支持'}`, icon: 'none' })
                     }
                 })
             } else {
                 uni.hideLoading()
-                uni.showToast({ title: '下载失败', icon: 'error' })
+                console.warn('[attachment] downloadFile non-200', res)
+                uni.showToast({ title: describeDownloadError(res.statusCode), icon: 'none' })
             }
         },
-        fail: () => {
+        fail: (err) => {
             uni.hideLoading()
-            uni.showToast({ title: '下载失败', icon: 'error' })
+            console.error('[attachment] downloadFile fail', err)
+            uni.showToast({ title: describeDownloadError(undefined, err?.errMsg), icon: 'none' })
         }
     })
 }
 
+/** 底部"分享"按钮：提示用户点右上角胶囊（转发到好友/朋友圈由 onShareAppMessage 接管）*/
 function handleShare() {
-    uni.showToast({ title: '请点击右上角分享', icon: 'none' })
+    uni.showToast({ title: '请点击右上角"…"分享', icon: 'none' })
 }
+
+/** 右上角"…"→ 发送给朋友：把小程序页面路径带上，好友点开直达本文章 */
+onShareAppMessage(() => ({
+    title: content.value?.title || '深技大校园',
+    path: `/pages/notice/detail?id=${id.value}&channelId=${channelId.value}&category=${category.value}`
+}))
+
+/** 右上角"…"→ 分享到朋友圈 */
+onShareTimeline(() => ({
+    title: content.value?.title || '深技大校园',
+    query: `id=${id.value}&channelId=${channelId.value}&category=${category.value}`
+}))
 
 // ==================== 生命周期 ====================
 
@@ -290,6 +335,13 @@ onLoad((options) => {
         const cached = uni.getStorageSync('detail_nav_list')
         if (cached) navList.value = JSON.parse(cached)
     } catch { /* ignore */ }
+
+    // 显式开启右上角"…"里的转发项（默认只有小程序 share 菜单；朋友圈需单独启用）
+    uni.showShareMenu({
+        withShareTicket: false,
+        menus: ['shareAppMessage', 'shareTimeline'],
+        fail: () => { /* H5/devtools 不支持，忽略 */ }
+    })
 
     fetchDetail()
 })
@@ -357,10 +409,10 @@ onLoad((options) => {
                         <text>附件 ({{ content.attachments.length }})</text>
                     </view>
                     <view v-for="(att, index) in content.attachments" :key="index" class="attachment-item"
-                        @click="downloadAttachment(att.url, att.name)">
-                        <t-icon name="file" size="36rpx" />
+                        @click="downloadAttachment(att)">
+                        <t-icon :name="isImageAttachment(att) ? 'image' : 'file'" size="36rpx" />
                         <text class="att-name">{{ att.name }}</text>
-                        <t-icon name="download" size="36rpx" class="download-icon" />
+                        <t-icon :name="isImageAttachment(att) ? 'view' : 'download'" size="36rpx" class="download-icon" />
                     </view>
                 </view>
             </view>
