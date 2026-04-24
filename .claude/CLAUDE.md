@@ -267,6 +267,26 @@ TabBar:
 
 **规则：显示问题从前端调，后端只管数据。**
 
+### 附件下载必须走 /proxy/attachment（不要 uni.downloadFile 直连学校 URL）
+
+**问题**：`uni.downloadFile` 不走 axios 拦截器，不会自动附加 `X-School-Cookies` header。直连学校/WebVPN URL 时学校看不到 cookie → 返回 200 + 登录表单 HTML → `openDocument` 拿到垃圾 HTML 打不开。现象：两边日志都没报错，但用户看到"打开失败"toast，没人看得见根因。
+
+**正确路径**：
+1. 前端把 URL 改写成 `${BASE_URL}/proxy/attachment?url=<原始URL>&filename=<文件名>`
+2. 同时把 `X-School-Cookies` + `X-User-Id` 通过 `uni.downloadFile({ header })` 传给后端
+3. 后端 `ProxyController.proxyAttachment` 带 cookie 请求学校，嗅探伪 200 HTML 登录页 → 判 404 → 前端给"登录过期"提示
+4. 下载成功后 `uni.openDocument({ showMenu: true })` — `showMenu` 必须为 `true`，微信文档预览页的"…"菜单才会出现"发送给朋友/保存到手机/其他应用打开"——**这就是附件的转发入口**
+
+**工具入口**：`src/utils/attachment.ts`
+- `buildProxyAttachmentUrl(rawUrl, filename)` / `buildProxyImageUrl(rawUrl)`
+- `attachmentHeaders()` 返回 `{ 'X-School-Cookies', 'X-User-Id' }`
+- `isImageAttachment(att)` 判 type==='image' 或扩展名
+- `describeDownloadError(statusCode, errMsg)` 统一错误文案
+
+**图片类附件**走 `uni.previewImage({ urls: [buildProxyImageUrl(url)] })`，不走 downloadFile；`/proxy/image` 是公开端点，不需要 cookie（学校图片资源多为公开）。
+
+**页面转发**（区别于"附件转发"）：`onShareAppMessage` + `onShareTimeline` + `uni.showShareMenu({ menus:['shareAppMessage','shareTimeline'] })`，用户点右上角胶囊即可。path 带上 channelId/id/category，好友点开直达详情页。
+
 ### 外链处理
 
 - `mp.weixin.qq.com` → 通过 `web-view` 页面在小程序内打开
