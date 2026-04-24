@@ -10,7 +10,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useUserStore } from './user'
 import { useInfoStore } from './info'
-import { getUserId } from '@/utils/cookie-manager'
+import { getUserId, setSchoolCookies } from '@/utils/cookie-manager'
 import { WsClient } from '@/utils/websocket'
 import type { WsConnectionState, WsMessage } from '@/utils/websocket'
 
@@ -100,6 +100,21 @@ export const useWsStore = defineStore('ws', () => {
 
             case 'HEARTBEAT':
                 break
+
+            case 'COOKIE_UPDATE': {
+                // 后端爬虫过程中学校 cookie 轮换时，StreamPushService.pushCookieUpdate
+                // 会通过 WS 下发最新 cookie；前端必须落盘，否则后续 HTTP 请求还会用旧 cookie。
+                // 历史 bug：这条 case 原本缺失，消息掉进 default 分支丢给 info.store 但被
+                // 那边的 switch 吞没（它只处理 NEW_ANNOUNCEMENTS / NEW_CONTENT 等）。
+                const cookiesJson = (msg as any)?.data?.cookiesJson
+                if (typeof cookiesJson === 'string' && cookiesJson.length > 0) {
+                    setSchoolCookies(cookiesJson)
+                    console.log('[WS Store] 已应用 COOKIE_UPDATE，本地 cookie 刷新')
+                } else {
+                    console.warn('[WS Store] COOKIE_UPDATE payload 无 cookiesJson，忽略')
+                }
+                break
+            }
 
             default:
                 infoStore.handleWsMessage(msg)
