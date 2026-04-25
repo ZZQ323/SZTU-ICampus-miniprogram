@@ -34,14 +34,11 @@ export function setSchoolCookies(cookiesJson: string): void {
  * thdportal_validate 那一跳 set 一次，此后所有流程都不再 re-issue）。浏览器按
  * (name, domain, path) 合并，不碰的 key 就保留旧值。
  *
- * 我们之前在 http.ts 响应拦截器里是"整体替换"：只要某个 API 返回 X-Set-Cookies 的子集
- * （例如公文通列表拉完只回了 2-4 个 cookie），前端就把 TWFID 擦了；紧接着附件 / 课表
- * 请求就发着缺 TWFID 的子集，学校 414 拒绝。
- *
- * 合并策略：
- *   - (name, domain, path) 三元组作为 cookie 唯一键
- *   - incoming 里有这个键 → 覆盖（按 school 的新值）
- *   - incoming 里没这个键 → 保留 existing（浏览器语义：server 没说删就继续带着）
+ * 合并语义（对齐浏览器）：
+ *   - 同 (name, domain, path) → 用 incoming 覆盖
+ *   - incoming 里没这个键 → 保留 existing
+ *   - incoming 的某条 cookie 是**过期**（expires 已过）或 **value 为空**
+ *     → 视为"删除"，从 jar 里抹掉，不写入垃圾占位
  *
  * 若要完全清空（logout / reset），走 {@link removeSchoolCookies} / {@link clearAuth}。
  */
@@ -51,11 +48,45 @@ export function mergeSchoolCookies(incomingJson: string): void {
   const incoming = parseCookieArray(incomingJson)
 
   const byKey = new Map<string, any>()
-  for (const c of existing) byKey.set(cookieKey(c), c)
-  for (const c of incoming) byKey.set(cookieKey(c), c)
+  for (const c of existing) {
+    if (isCookieDead(c)) continue   // 顺手把已有的死 cookie 也清掉（修先前积压）
+    byKey.set(cookieKey(c), c)
+  }
+
+  let added = 0, replaced = 0, deleted = 0
+  for (const c of incoming) {
+    const key = cookieKey(c)
+    if (isCookieDead(c)) {
+      // 浏览器语义：服务端 Set-Cookie name=; Max-Age=0 / Expires=过去 → 删该 cookie
+      if (byKey.delete(key)) deleted++
+      continue
+    }
+    if (byKey.has(key)) replaced++; else added++
+    byKey.set(key, c)
+  }
 
   const merged = [...byKey.values()]
   uni.setStorageSync(COOKIES_KEY, JSON.stringify(merged))
+  console.log(`[cookie] merge done: existing=${existing.length} incoming=${incoming.length} -> stored=${merged.length} (+${added} ~${replaced} -${deleted})`,
+              merged.map(c => c.name).join(','))
+}
+
+/**
+ * 是否是"死 cookie"——浏览器要从 jar 里删除的：
+ *  · expires 已过去（且非 session cookie）
+ *  · value 为空字符串
+ * 注意 SmartCookie.expired 字段可能由后端 isExpired() getter 序列化进来，
+ * 也可能没有；这里同时支持两种。
+ */
+function isCookieDead(c: any): boolean {
+  if (!c || !c.name) return true
+  if (c.value === '' || c.value == null) return true
+  if (c.expired === true) return true
+  if (c.expires) {
+    const t = typeof c.expires === 'string' ? Date.parse(c.expires) : Number(c.expires)
+    if (!Number.isNaN(t) && t > 0 && t < Date.now()) return true
+  }
+  return false
 }
 
 function cookieKey(c: any): string {
