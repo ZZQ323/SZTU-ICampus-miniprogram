@@ -61,6 +61,19 @@ instance.interceptors.request.use(
       config.headers['X-School-Cookies'] = cookies
     }
 
+    // cookie 诊断 log：每个 outgoing 请求附带的 cookie name 列表，方便对照后端
+    // log（/proxy/attachment 报 cookies(total/matched)=4/4 时，能立刻知道前端
+    // 究竟发的是哪 4 个）。
+    if (cookies) {
+      try {
+        const arr = JSON.parse(cookies)
+        const names = Array.isArray(arr) ? arr.map((c: any) => c?.name).join(',') : '?'
+        console.log(`[http→] ${config.method?.toUpperCase()} ${url} cookies=${Array.isArray(arr) ? arr.length : 0} [${names}]`)
+      } catch { /* ignore */ }
+    } else {
+      console.log(`[http→] ${config.method?.toUpperCase()} ${url} cookies=0`)
+    }
+
     return config
   },
   (error) => Promise.reject(_makeError(0, '请求配置错误', false, error))
@@ -94,6 +107,13 @@ instance.interceptors.response.use(
       const isResetEndpoint =
         /\/auth\/v1\/(session\/init|login|logout)\b/.test(url) ||
         /\/session\/v1\/reset\b/.test(url)
+      // 诊断 log：incoming X-Set-Cookies 的 name 列表 + 模式（replace/merge）
+      try {
+        const arr = JSON.parse(setCookies)
+        const names = Array.isArray(arr) ? arr.map((c: any) => c?.name).join(',') : '?'
+        console.log(`[http←] ${url} mode=${isResetEndpoint ? 'REPLACE' : 'merge'} incoming=${Array.isArray(arr) ? arr.length : 0} [${names}]`)
+      } catch { /* ignore */ }
+
       if (isResetEndpoint) {
         removeSchoolCookies()
         setSchoolCookies(setCookies)

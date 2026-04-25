@@ -110,8 +110,12 @@ export const useWsStore = defineStore('ws', () => {
                 if (typeof cookiesJson === 'string' && cookiesJson.length > 0) {
                     // 合并而非替换：后端爬虫只回推轮换过的 key，其它 cookie（如 TWFID）
                     // 前端必须保留原值，否则下一次 HTTP 请求会缺 key 被学校拒。
+                    try {
+                        const arr = JSON.parse(cookiesJson)
+                        const names = Array.isArray(arr) ? arr.map((c: any) => c?.name).join(',') : '?'
+                        console.log(`[WS COOKIE_UPDATE] incoming=${Array.isArray(arr) ? arr.length : 0} [${names}]`)
+                    } catch { /* ignore */ }
                     mergeSchoolCookies(cookiesJson)
-                    console.log('[WS Store] 已应用 COOKIE_UPDATE（合并），本地 cookie 刷新')
                 } else {
                     console.warn('[WS Store] COOKIE_UPDATE payload 无 cookiesJson，忽略')
                 }
