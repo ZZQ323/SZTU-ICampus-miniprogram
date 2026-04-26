@@ -47,28 +47,53 @@ export function mergeSchoolCookies(incomingJson: string): void {
   const existing = parseCookieArray(getSchoolCookies())
   const incoming = parseCookieArray(incomingJson)
 
+  console.log(`[cookie-merge] BEGIN existing=${existing.length} incoming=${incoming.length}`)
+  console.log('[cookie-merge] incoming raw:', incomingJson.length > 1500 ? incomingJson.substring(0, 1500) + '...(truncated)' : incomingJson)
+
   const byKey = new Map<string, any>()
   for (const c of existing) {
-    if (isCookieDead(c)) continue   // 顺手把已有的死 cookie 也清掉（修先前积压）
+    if (isCookieDead(c)) {
+      console.log(`[cookie-merge] existing DEAD-skipped name=${c?.name} reason=${describeDead(c)}`)
+      continue
+    }
     byKey.set(cookieKey(c), c)
   }
 
-  let added = 0, replaced = 0, deleted = 0
+  let added = 0, replaced = 0, deleted = 0, skippedDead = 0
   for (const c of incoming) {
     const key = cookieKey(c)
     if (isCookieDead(c)) {
-      // 浏览器语义：服务端 Set-Cookie name=; Max-Age=0 / Expires=过去 → 删该 cookie
-      if (byKey.delete(key)) deleted++
+      const wasDeleted = byKey.delete(key)
+      console.log(`[cookie-merge] incoming DEAD name=${c?.name} reason=${describeDead(c)} (existed=${wasDeleted})`)
+      if (wasDeleted) deleted++
+      else skippedDead++
       continue
     }
-    if (byKey.has(key)) replaced++; else added++
+    if (byKey.has(key)) {
+      replaced++
+      console.log(`[cookie-merge] REPLACE name=${c.name} domain=${c.domain} path=${c.path}`)
+    } else {
+      added++
+      console.log(`[cookie-merge] ADD name=${c.name} domain=${c.domain} path=${c.path}`)
+    }
     byKey.set(key, c)
   }
 
   const merged = [...byKey.values()]
   uni.setStorageSync(COOKIES_KEY, JSON.stringify(merged))
-  console.log(`[cookie] merge done: existing=${existing.length} incoming=${incoming.length} -> stored=${merged.length} (+${added} ~${replaced} -${deleted})`,
-              merged.map(c => c.name).join(','))
+  console.log(`[cookie-merge] END stored=${merged.length} (+${added} ~${replaced} -${deleted} skipDead${skippedDead}) names=[${merged.map(c => c.name).join(',')}]`)
+}
+
+/** debug 用：cookie 为何被判 dead */
+function describeDead(c: any): string {
+  if (!c || !c.name) return 'noName'
+  if (c.value === '' || c.value == null) return `emptyValue(value=${JSON.stringify(c.value)})`
+  if (c.expired === true) return 'expired=true'
+  if (c.expires) {
+    const t = typeof c.expires === 'string' ? Date.parse(c.expires) : Number(c.expires)
+    if (!Number.isNaN(t) && t > 0 && t < Date.now()) return `expires=${c.expires}(past)`
+  }
+  return 'alive'
 }
 
 /**
