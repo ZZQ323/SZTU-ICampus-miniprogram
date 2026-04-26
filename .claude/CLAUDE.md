@@ -18,6 +18,27 @@
 
 ## 关键开发规范
 
+### -1. ⚠️⚠️ Cookies 是用户私产，**任何 transient 失败都不能清**
+
+**铁规**：除了用户主动 reset / 紧急逃生 / 切换账号，**任何 API 失败 / status 检查异常 / refresh 报错 / WS 断 / 网络挂**，**都不准动本地 cookies**。
+
+浏览器原生行为：refresh 失败、status 401、用户登出、重启浏览器，cookies 都**完整保留**，等用户下次手动操作（清浏览器数据 / 关 incognito 窗口）才清。
+
+我们之前每次掉链子的根因都是这一条：
+- ❌ `useAuthGuard.ts` 在 `checkSchoolSession` 抛错时 `clearSchoolSession()`（包含 clearAuth）→ logout 后立刻被这条触发，TWFID 死亡
+- ❌ `login.vue` refresh 失败 fallback `initSession`（initSession=REPLACE）→ 同样毁 TWFID
+- ❌ `userStore.logoutSchool` 早期版本调 `clearAuth` → 主动毁 cookies（违反浏览器语义）
+
+只有这些入口允许清 cookies：
+| 入口 | 语义 |
+|---|---|
+| 用户点"重置会话"（home 页）| 主动 |
+| 用户点"清除本地状态"（紧急逃生按钮）| 主动 |
+| `userStore.resetSession()` | 显式 reset 流程 |
+| login.vue 的"清除缓存"按钮 | 用户主动 |
+
+**所有其它"异常路径"必须只 reset UI 状态**（`userStore.resetUiState()`，只清 userInfo + loginTypes），cookies 留着——下次 login 流程靠它们走完 SSO，学校 IDP 会按需求重新认证。
+
 ### 0. ⚠️ X-Set-Cookies **永远 merge，不 replace**
 
 **铁规**：前端收到后端 `X-Set-Cookies` / WS `COOKIE_UPDATE` / body 兜底 cookiesJson 时，**按 (name, domain, path) 三元组合并**写入本地存储，**不得整体替换**。入口统一走 `mergeSchoolCookies(incoming)`，**不要再用 `setSchoolCookies(full)`**（后者只保留给真正需要"全量替换"的极少数场景，比如测试夹具）。

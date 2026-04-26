@@ -137,7 +137,17 @@ export function useAuthGuard() {
                     return { success: false, logined: false, error: e?.message }
                 }
 
-                userStore.clearSchoolSession()
+                // ⚠️ 关键：状态检查失败**不能清本地 cookies**！
+                //
+                // 浏览器原生行为：refresh / status 调用失败时只是显示登录页，cookie jar
+                // 完全保留。我们之前在这里 clearSchoolSession() 把 jar 清掉，触发了：
+                //   logout 后 status 检查抛 401 → 这里 wipe → TWFID 等关键 cookie 没了
+                //   → 下次 login 流程没法用旧 TWFID → 学校 nbw 414
+                //
+                // 状态检查的失败只代表"现在不知道有没有登录"，不代表"必须忘记 cookies"。
+                // 只 reset UI 层（userInfo / loginTypes）即可，cookies 留给下次 login
+                // 流程使用（学校 IDP 会自己根据 cookies 决定要不要要求重新输密码）。
+                userStore.resetUiState()
                 return { success: true, logined: false }
             }
         }
