@@ -103,9 +103,15 @@ export const useWsStore = defineStore('ws', () => {
 
             case 'COOKIE_UPDATE': {
                 // 后端爬虫过程中学校 cookie 轮换时，StreamPushService.pushCookieUpdate
-                // 会通过 WS 下发最新 cookie；前端必须落盘，否则后续 HTTP 请求还会用旧 cookie。
-                // 历史 bug：这条 case 原本缺失，消息掉进 default 分支丢给 info.store 但被
-                // 那边的 switch 吞没（它只处理 NEW_ANNOUNCEMENTS / NEW_CONTENT 等）。
+                // 会通过 WS 下发最新 cookie；前端 merge 进本地。
+                //
+                // ⚠️ 硬守卫：登出后必须丢弃 COOKIE_UPDATE，**不要 merge**。否则 in-flight
+                // 爬虫推过来的 cookie 会落进已登出的前端 → 本地 cookies 复活 → 下次请求
+                // 又带着复活的 cookies 出去，违反"登出 = 立即不再为这个用户做事"的约定。
+                if (!userStore.isSchoolLoggedIn) {
+                    console.warn('[WS COOKIE_UPDATE] 已登出，丢弃 cookie 更新')
+                    break
+                }
                 const cookiesJson = (msg as any)?.data?.cookiesJson
                 if (typeof cookiesJson === 'string' && cookiesJson.length > 0) {
                     // 合并而非替换：后端爬虫只回推轮换过的 key，其它 cookie（如 TWFID）

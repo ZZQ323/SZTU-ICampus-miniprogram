@@ -93,19 +93,18 @@ instance.interceptors.response.use(
     // 会把学校没重发的关键 cookie（比如一辈子只 set 一次的 TWFID）擦掉，
     // 下个请求带着"缺 TWFID 的子集"被学校 414。
     //
-    // 例外：以下端点是"重置/重建会话"语义，要把本地旧 cookies **整体替换**，
-    // 否则旧的 JSESSIONID / SESSION（已被学校服务端失效）会和新 cookies 一起发，
-    // 学校 IDP 拿到一组矛盾 cookie 后直接返 HTML 登录页 → 登录卡死。
-    //   - /auth/v1/session/init      重建匿名预登录会话
-    //   - /auth/v1/login             登录成功后 session 全新，旧的 pre-login 票据可丢
-    //   - /auth/v1/logout            登出后下一个 fetch 拿到的也是 fresh
+    // 例外：以下端点是"重置/重建匿名会话"语义，要把本地旧 cookies **整体替换**，
+    // 否则旧的 IDP 票据和新 cookies 一起发，学校 IDP 拿到矛盾 cookie 直接返 HTML
+    // 登录页 → 登录卡死。
+    //   - /auth/v1/session/init      重建匿名预登录会话（无 user 上下文）
     //   - /session/v1/reset          主动重置
-    // refresh / status / 业务接口    走默认的合并语义
+    // 其它（包括 logout / login / refresh）走默认 merge —— logout 后浏览器保留 cookies
+    // 是学校 IDP 期望的正常流程（HAR 实证），login 也只是增量补 _idp_session 等。
     const setCookies = _getHeader(headers, 'x-set-cookies')
     if (setCookies) {
       const url = (response.config?.url || '').toString()
       const isResetEndpoint =
-        /\/auth\/v1\/(session\/init|login|logout)\b/.test(url) ||
+        /\/auth\/v1\/session\/init\b/.test(url) ||
         /\/session\/v1\/reset\b/.test(url)
       // 诊断 log：incoming X-Set-Cookies 的 name 列表 + 模式（replace/merge）
       try {
