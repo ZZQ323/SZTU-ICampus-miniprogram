@@ -79,12 +79,21 @@ async function handleRefreshSession() {
   uni.showLoading({ title: '刷新中...' })
   try {
     // 一次刷新做三件事：
-    //   1. 网关（WebVPN / 公文通）session 续期 —— 主路径，失败会弹重新登录
+    //   1. 网关（WebVPN / 公文通）session 续期 —— 主路径
     //   2. 教务系统 cookie 续期 —— 课表、已收公告、消息通知的 session 载体，
     //      与网关走不同域名（jwxt-...webvpn），refresh-session 自己不管；
     //      静默重试，失败不打扰用户（他下次点"课表"时会再触发一次自愈）
     //   3. 信息流未读计数拉取
-    await userStore.refreshSession()
+    const result = await userStore.refreshSession()
+
+    // 后端不再为"会话过期"抛错，而是 logined=false 返回 result（保留 loginTypes）
+    // —— 这里前端按 logined 字段判断。**不要 clearSchoolSession**（cookies 留着给下次登录用）。
+    if (!result.logined) {
+      uni.showToast({ title: '会话已过期，请重新登录', icon: 'none' })
+      setTimeout(() => uni.navigateTo({ url: '/pages/common/login/login' }), 1000)
+      return
+    }
+
     // fire-and-forget：并发发起，不 await，不 block 主流程
     academicApi.initAcademic().catch((e: any) => {
       console.warn('[Home] 教务系统 cookie 静默刷新失败', e?.message)
@@ -92,8 +101,9 @@ async function handleRefreshSession() {
     await infoStore.init().catch(() => { /* info init 失败不影响主流程 */ })
     uni.showToast({ title: '会话已刷新', icon: 'success' })
   } catch (e: any) {
+    // 真异常（网络挂、5xx、其它非 401）才走这里
     if (e?.code === 401 || e?.code === 400) {
-      userStore.clearSchoolSession()
+      // 兜底（理论上不会到这里，因为后端已经不抛 401 而是返 logined=false）
       uni.showToast({ title: '会话已过期，请重新登录', icon: 'none' })
       setTimeout(() => uni.navigateTo({ url: '/pages/common/login/login' }), 1000)
     } else {
