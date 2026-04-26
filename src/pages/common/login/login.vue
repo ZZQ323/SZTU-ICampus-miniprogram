@@ -217,13 +217,19 @@ onLoad(async (options) => {
           return
         }
       } catch (e: any) {
-        // refreshSession 失败（会话真的过期了）→ fallback 到 initSession
-        console.warn('[Login] refreshSession 失败，fallback 到 initSession:', e?.message)
-        authStore.setCheckingMessage('正在获取登录信息...')
-
-        const result = await userStore.initSession()
-        if (result.loginTypes?.length) {
-          loginTypes.value = result.loginTypes
+        // refreshSession 失败（会话真的过期了）→ **不要 fallback initSession**！
+        //
+        // initSession 是 REPLACE 语义，会把本地 jar 整个换成 anonymous 的 1-2 个
+        // 预登录 cookie，毁掉旧 TWFID。学校再登录的链路不会再补 TWFID（client_id=home
+        // 流程不经过 thdportal_validate），导致后续附件 nbw 请求缺 TWFID 被 414。
+        //
+        // 正确做法：refresh 失败只意味着学校 IDP 觉得我们没登录，需要用户重新输密码。
+        // cookies 留着，让 user 直接走登录表单提交。loginSchool 会 merge 学校新 set
+        // 的 cookies 进去，TWFID 等关键 cookie 自然被保留。
+        // loginTypes 用上次缓存或默认 SMS 兜底（下面会处理）。
+        console.warn('[Login] refreshSession 失败，跳过 initSession 保留 cookies:', e?.message)
+        if (userStore.loginTypes?.length) {
+          loginTypes.value = userStore.loginTypes
         }
       }
     } else {

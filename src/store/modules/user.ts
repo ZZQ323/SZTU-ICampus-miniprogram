@@ -284,6 +284,20 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /**
+   * 只 reset UI 层状态（userInfo / loginTypes），**保留本地 cookies**。
+   * <p>
+   * 用途：status / refreshSession 失败时调用 —— 浏览器原生行为是"我不知道
+   * 你是否登录了"而不是"忘掉所有 cookie"。把 jar 留着，下次 login 流程能用
+   * 旧 TWFID 走完 SSO，对齐学校 IDP 期望。
+   * <p>
+   * **绝不 clearAuth**。
+   */
+  function resetUiState(): void {
+    userInfo.value = null
+    loginTypes.value = []
+  }
+
+  /**
    * 完全清除所有状态
    */
   function clearAll(): void {
@@ -344,6 +358,7 @@ export const useUserStore = defineStore('user', () => {
     loginSchool,
     logoutSchool,
     clearSchoolSession,
+    resetUiState,
     clearAll,
   }
 })
