@@ -121,7 +121,17 @@ export class WsClient {
 
         if (this.socket) {
             try {
-                this.socket.close({})
+                // 显式 fail noop —— uni-app 的 close 失败（如 task not found）走的是
+                // fail callback，不会被 try/catch 捕获，会被 errorReport 全局抛出
+                // 弹"appServiceSDKScriptError"。我们 logout / reconnect 经常需要无脑
+                // close，已经断开的 socket close 失败不是错误，直接吞掉。
+                this.socket.close({
+                    code: 1000,
+                    reason: 'manual',
+                    success: () => {},
+                    fail: () => {},
+                    complete: () => {}
+                } as any)
             } catch (e) {
                 // ignore
             }
