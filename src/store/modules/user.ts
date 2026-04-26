@@ -236,18 +236,46 @@ export const useUserStore = defineStore('user', () => {
 
   /**
    * 登出学校系统
+   * <p>
+   * ⚠️ 不清本地 cookies！HAR 实证：浏览器 logout 后 cookies 整体保留，学校只
+   * Set-Cookie 轮换 SESSION + 加 AD_SESSION_FLAG。TWFID / _idp_session 等都
+   * 保留下来，下次登录浏览器把这些一起发，学校 IDP 看 SESSION 已轮换会强制
+   * 走登录表单——再登录顺畅。
+   * <p>
+   * 关键时序：
+   *   1. **先**断 WS 连接 —— 防止 backend in-flight 爬虫推过来的 COOKIE_UPDATE
+   *      落进还连着的 WS，把本地 cookies 复活
+   *   2. 调 logout API（后端会清 Redis + 发 UserLogoutEvent + 踢 WS 兜底）
+   *   3. reset UI 层状态（userInfo / loginTypes），cookies 留着
+   * 完全清空请走 resetSession。
    */
   async function logoutSchool(): Promise<void> {
+    // 1. 先断 WS（关键：防止登出过程中 backend 推 COOKIE_UPDATE 复活本地 cookies）
+    //    动态 import 避免和 ws.ts 互相 import 循环。
+    try {
+      const { useWsStore } = await import('@/store/modules/ws')
+      useWsStore().disconnect()
+    } catch (e) {
+      console.warn('[UserStore] 断 WS 失败（不致命）', e)
+    }
+
+    // 2. 调后端 logout（后端会清 Redis cookies + 发 UserLogoutEvent → 踢 WS 兜底）
     try {
       await authApi.logout()
     } catch (e) {
       console.warn('[UserStore] 登出请求失败', e)
     }
-    clearSchoolSession()
+
+    // 3. 只 reset UI 状态，cookies 留给学校自己决定（logout 响应里它会更新 SESSION）
+    userInfo.value = null
+    loginTypes.value = []
   }
 
   /**
    * 清除学校会话状态（包括本地 cookies）
+   * <p>
+   * 真正"删一切"的入口，由 resetSession / 紧急逃生 / 切换账号触发，不要在 logout
+   * 里调用。
    */
   function clearSchoolSession(): void {
     userInfo.value = null
