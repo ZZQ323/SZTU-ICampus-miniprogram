@@ -48,6 +48,38 @@ export const useUserStore = defineStore('user', () => {
   /** 是否已登录学校 */
   const isSchoolLoggedIn = computed(() => !!userInfo.value?.userId)
 
+  // ==================== sessionInvalid 计数器 ====================
+  //
+  // 长闲置后，学校服务端 TWFID/SESSION 失效但本地 cookies 仍在；按铁规不能
+  // 自动清，一直 retry 也救不回来。计数到阈值 → 弹 modal 引导用户走"重置会话"。
+  // 持久化到 storage，跨进程/冷启动也累计。
+
+  const SESSION_INVALID_COUNT_KEY = 'icampus_session_invalid_count'
+  const SESSION_INVALID_THRESHOLD = 2
+
+  function getSessionInvalidCount(): number {
+    return Number(uni.getStorageSync(SESSION_INVALID_COUNT_KEY)) || 0
+  }
+  function resetSessionInvalidCount(): void {
+    uni.removeStorageSync(SESSION_INVALID_COUNT_KEY)
+  }
+  function handleSessionInvalid(): void {
+    const next = getSessionInvalidCount() + 1
+    console.warn(`[UserStore] 会话无效，需要重新初始化 (count=${next})`)
+    if (next >= SESSION_INVALID_THRESHOLD) {
+      // 弹一次后清零，避免连发；用户走完重置流程也会再清一次。
+      resetSessionInvalidCount()
+      uni.showModal({
+        title: '会话异常',
+        content: '会话已多次失效。请到首页 → 高级操作 → 重置会话，清空状态后重新登录。',
+        showCancel: false,
+        confirmText: '我知道了',
+      })
+    } else {
+      uni.setStorageSync(SESSION_INVALID_COUNT_KEY, next)
+    }
+  }
+
   // ==================== 监听器：自动持久化 ====================
 
   watch(userInfo, (newVal) => {
@@ -71,6 +103,8 @@ export const useUserStore = defineStore('user', () => {
     loginTypes.value = status.loginTypes || []
 
     if (status.logined && status.userId) {
+      // 登录成功 → 重置 sessionInvalid 计数（按铁规也不动 cookies）
+      resetSessionInvalidCount()
       userInfo.value = {
         userId: status.userId,
         realName: status.realName || '',
@@ -86,7 +120,7 @@ export const useUserStore = defineStore('user', () => {
     }
 
     if (status.sessionInvalid) {
-      console.warn('[UserStore] 会话无效，需要重新初始化')
+      handleSessionInvalid()
     }
 
     return status
@@ -131,6 +165,7 @@ export const useUserStore = defineStore('user', () => {
   async function resetSession(): Promise<boolean> {
     console.log('[UserStore] 重置会话')
     userInfo.value = null
+    resetSessionInvalidCount()
 
     try {
       await sessionApi.resetSession()
@@ -207,6 +242,7 @@ export const useUserStore = defineStore('user', () => {
     const result = await authApi.login(params)
 
     if (result.logined) {
+      resetSessionInvalidCount()
       // cookies 通过 response header 自动存储 + body 兜底
       if (result.cookiesJson) {
         mergeSchoolCookies(result.cookiesJson)
