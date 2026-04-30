@@ -266,8 +266,10 @@ watch(isLoggedIn, (val) => {
         </t-cell-group>
       </view>
 
-      <!-- ==================== 高级操作（登录后） ==================== -->
-      <view v-if="isLoggedIn" class="section">
+      <!-- ==================== 高级操作（始终显示） ====================
+           登录与否都常驻：长闲置后 cookies 服务端死亡导致 IDP 路由污染时，
+           "重置会话"是用户唯一可靠的逃生口，不能藏在 isLoggedIn 后面。 -->
+      <view class="section">
         <view class="section-header">
           <text class="section-title">高级操作</text>
         </view>
