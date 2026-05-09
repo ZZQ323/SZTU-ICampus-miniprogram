@@ -36,6 +36,7 @@ const userInfo = computed(() => userStore.userInfo)
 
 const greeting = computed(() => {
   const h = new Date().getHours()
+  console.log("Date"+h);
   if (h < 6) return '夜深了'
   if (h < 11) return '上午好'
   if (h < 14) return '中午好'

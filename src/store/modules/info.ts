@@ -291,8 +291,9 @@ export const useInfoStore = defineStore('info', () => {
                     prependChannelItems(channelId, items)
                 }
                 // 仅登录态才入队（未登录下 WS 理论上不会连，但加道保险）
+                // ⭐ 反向循环：backend 推来的 ids 顺序是 [newest, ..., oldest]（学校 CMS
                 if (isLoggedInForQueue() && ids.length > 0) {
-                    for (const id of ids) {
+                    for (const id of [...ids].reverse()) {
                         enqueueToast({
                             articleId: String(id),
                             channelId: channelId || 'announcement',
