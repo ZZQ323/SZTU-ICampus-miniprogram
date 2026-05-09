@@ -146,14 +146,66 @@ const useStoreList = computed(() => {
 /**
  * ⭐ 列表数据源：固定频道走 store（自动接 WS 推送），其余走本地 ref。
  * notice.vue 不再持有自己的"主列表" —— 数据所有权在 info store。
+ *
+ * <p>⚠️ feed 视图（无具体 channelId）补丁：将 store 里 channelLists 各频道的
+ * WS 推送合并进 localFeedList 顶部。否则在"全部来源"或 sourceOrg 视图下，
+ * WS 推来的新公告进了 channelLists[announcement] 但用户看不到（list 走的
+ * 是 localFeedList），导致出现"未读队列 +N 但列表里只显示 N-x 条"的不一致。
+ * 合并时按 sourceOrg / contentType / sourceIds 客户端再过滤一次，确保和后端
+ * getFeed 返回的子集一致。
  */
 const list = computed<InfoItemMeta[]>(() => {
   if (useStoreList.value) {
     return infoStore.getChannelList(sourceFilter.value.channelId!)
   }
   if (isSearchMode.value) return localFeedList.value
-  return localFeedList.value
+
+  // feed 视图：合并 channelLists 全频道推送进列表顶部
+  const wsPushed = collectWsPushedFeedItems()
+  if (wsPushed.length === 0) return localFeedList.value
+
+  const seen = new Set<string>()
+  const merged: InfoItemMeta[] = []
+  for (const item of [...wsPushed, ...localFeedList.value]) {
+    const id = String(item.id)
+    if (seen.has(id)) continue
+    seen.add(id)
+    merged.push(item)
+  }
+  return merged
 })
+
+/**
+ * 收集所有 channelLists 里的 item，按当前 feed 视图的筛选条件过滤。
+ * 与后端 getFeed 的过滤维度一致：sourceOrg / contentType / subContentType / sourceIds。
+ */
+function collectWsPushedFeedItems(): InfoItemMeta[] {
+  const all: InfoItemMeta[] = []
+  const subOrg = sourceFilter.value.sourceOrg
+  const layer1 = activeLayer1.value
+  const layer2 = activeLayer2.value
+  const subscribedMode = isSubscribedMode.value
+  const subSet = subscribedMode ? new Set(effectiveSourceIds.value) : null
+
+  for (const items of Object.values(infoStore.channelLists || {})) {
+    for (const item of items) {
+      // sourceOrg 过滤（"全部来源"时 subOrg 为 undefined，跳过这个过滤；
+      // "subscribed" 模式下 subOrg='subscribed' 走 sourceIds 白名单分支，不在这里过滤）
+      if (subOrg && subOrg !== 'subscribed' && item.sourceOrg !== subOrg) continue
+      if (layer1 && item.contentType !== layer1) continue
+      if (layer2 && item.subContentType !== layer2) continue
+      if (subSet && !subSet.has(item.sourceId || '')) continue
+      all.push(item)
+    }
+  }
+  // 按 id 倒序（数字 ID 直接比较；非数字 ID 字符串倒序兜底）
+  all.sort((a, b) => {
+    const an = Number(a.id), bn = Number(b.id)
+    if (!isNaN(an) && !isNaN(bn)) return bn - an
+    return String(b.id).localeCompare(String(a.id))
+  })
+  return all
+}
 
 /** 当前视图的初始化 key（决定 onShow 是否需要拉一次冷启动数据） */
 function currentViewKey(): string {

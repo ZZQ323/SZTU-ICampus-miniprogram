@@ -292,6 +292,9 @@ export const useInfoStore = defineStore('info', () => {
                 }
                 // 仅登录态才入队（未登录下 WS 理论上不会连，但加道保险）
                 // ⭐ 反向循环：backend 推来的 ids 顺序是 [newest, ..., oldest]（学校 CMS
+                // 列表页顺序）。enqueueToast 是 unshift 到队首，正向循环会让最旧的留在
+                // 队首（与信息流页面 prependChannelItems 的展示顺序相反）。反转后从
+                // oldest 开始 unshift，最后 unshift 的 newest 停在队首，与信息流一致。
                 if (isLoggedInForQueue() && ids.length > 0) {
                     for (const id of [...ids].reverse()) {
                         enqueueToast({
