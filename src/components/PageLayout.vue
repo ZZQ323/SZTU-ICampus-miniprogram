@@ -30,6 +30,14 @@
         <!-- 全局 FAB：登录态才渲染，登录页等可 :enable-fab="false" 关闭 -->
         <FloatingNotification v-if="enableFab" />
 
+        <!-- 全局新消息浮窗：跟 FAB 同等开关 -->
+        <NewMessageToast
+            v-if="enableFab"
+            :message="infoStore.newMessage"
+            @tap="onToastTap"
+            @close="infoStore.clearNewMessage()"
+        />
+
         <!-- 认证遮罩 -->
         <view v-if="authStore.showMask" class="auth-mask" @touchmove.stop.prevent>
             <view class="mask-backdrop" />
@@ -115,14 +123,30 @@
  */
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useAuthStore } from '@/store/modules/auth'
+import { useInfoStore } from '@/store/modules/info'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 import FloatingNotification from '@/components/FloatingNotification.vue'
+import NewMessageToast from '@/components/common/NewMessageToast.vue'
 import { clearAuth } from '@/utils/cookie-manager'
 
 withDefaults(defineProps<{ enableFab?: boolean }>(), { enableFab: true })
 
 const authStore = useAuthStore()
+const infoStore = useInfoStore()
 const { forceCheck } = useAuthGuard()
+
+function onToastTap(msg: any) {
+    infoStore.clearNewMessage()
+    const ch = msg?.channelId || 'announcement'
+    const id = msg?.latestId
+    if (id) {
+        uni.navigateTo({ url: `/pages/notice/detail?id=${id}&channelId=${ch}`, fail: () => {
+            uni.switchTab({ url: '/pages/notice/notice' })
+        } })
+    } else {
+        uni.switchTab({ url: '/pages/notice/notice' })
+    }
+}
 
 // ==================== mask 卡死逃生 ====================
 
