@@ -206,13 +206,7 @@ export const useInfoStore = defineStore('info', () => {
         const newLatest = Number(latestId) || 0
 
         if (newLatest > oldLatest && oldLatest > 0) {
-            newMessage.value = {
-                channelId,
-                latestId,
-                count: newLatest - oldLatest,
-                sourceName: extra?.sourceName,
-                title: extra?.title,
-            }
+            // tabBar 红点更新；弹窗职责已由 handleWsMessage 接管
             updateTabBarBadge()
         }
         state.serverLatestId = latestId
@@ -283,6 +277,15 @@ export const useInfoStore = defineStore('info', () => {
                 // 统一处理：抬水位线 + 入队（若登录态）
                 if (latestId) {
                     updateServerLatestId(channelId || 'announcement', latestId, extra)
+                }
+                // 收到 WS push 一律弹新消息浮窗，不依赖水位线递增判定。
+                // 水位线只决定 tabBar/未读数；弹窗的语义是"刚来了一条 push"。
+                newMessage.value = {
+                    channelId: channelId || 'announcement',
+                    latestId: latestId || (ids[0] ? String(ids[0]) : ''),
+                    count: ids.length || 1,
+                    sourceName: sourceOrgName,
+                    title: latestTitle,
                 }
                 // ⭐ 流式推送核心：把 backend 推来的完整 items 直接 unshift 进列表
                 // 注意：这条之前是缺的，导致 notice.vue 必须 onShow 重 fetch（伪推送）
