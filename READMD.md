@@ -1,11 +1,57 @@
 # SZTU-Icampus-miniprogramme
 
-SmartHttp上线
+校园小程序前端，uni-app（Vue 3 + Vite + TypeScript），目标平台微信小程序。
 
-项目前端：https://github.com/ZZQ323/SZTU-ICampus-miniprogram  
-项目后端：https://github.com/ZZQ323/SZTU-iCampus-backend
+- 项目前端：https://github.com/ZZQ323/SZTU-ICampus-miniprogram
+- 项目后端：https://github.com/ZZQ323/SZTU-iCampus-backend
+
+---
+
+## 本地启动（从仓库 clone 起步）
+
+### 环境要求
+
+- Node.js 18+
+- pnpm 8+（**本项目使用 pnpm 管理依赖**，仓库内有 `pnpm-lock.yaml`；不要用 npm/yarn 安装，否则 lockfile 会失配）
+- 微信开发者工具（用于预览编译产物）
+
+未安装 pnpm 时：
+
+```bash
+npm i -g pnpm
+# 或用 corepack：corepack enable && corepack prepare pnpm@latest --activate
+```
+
+### 安装依赖
+
+```bash
+pnpm install
+```
+
+依赖在 `package.json` 中已配齐：`pinia`、`pinia-plugin-persistedstate`、`axios`、
+`@uni-helper/axios-adapter`、`tdesign-uniapp`、`less` 等。
+
+> ⚠️ 如出现 peer 依赖冲突，可加 `--strict-peer-dependencies=false`，或
+> `pnpm install --shamefully-hoist`。
+
+### 开发与构建
+
+```bash
+pnpm dev:mp-weixin       # 开发：编译到 dist/dev/mp-weixin
+pnpm build:mp-weixin     # 生产构建：dist/build/mp-weixin
+pnpm dev:h5              # 可选：H5 调试
+pnpm build:h5            # 可选：H5 构建
+```
+
+打开微信开发者工具，导入 `dist/dev/mp-weixin` 目录即可预览。
+若首页能看到 **TDesign 的蓝色按钮**，说明环境正常。
+
+---
 
 ## 第一步：创建项目（2 分钟）
+
+> 下面是"从零脚手架开始搭"的历史说明，仅供参考；
+> 如果你是从本仓库 clone 下来跑，按上面"本地启动"那节即可，**跳过这一节**。
 
 ```bash
 # 1. 用 npx 创建 uniapp 项目
