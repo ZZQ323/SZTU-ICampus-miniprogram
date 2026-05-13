@@ -58,7 +58,7 @@ pnpm build:h5            # 可选：H5 构建
 npx degit dcloudio/uni-preset-vue#vite-ts sztu-icampus
 cd sztu-icampus
 
-# 2. 删掉默认生成的文件（我们用自己的）
+# 2. 删掉默认生成的文件
 rm -rf src/pages src/App.vue src/main.ts src/pages.json src/manifest.json
 # Windows CMD:
 # rmdir /s /q src\pages
@@ -81,7 +81,7 @@ pnpm add pinia pinia-plugin-persistedstate axios @uni-helper/axios-adapter tdesi
 
 ```
 项目根目录/
-├── package.json          ← 覆盖（已经帮你写好依赖了，装完再覆盖的话要重新 pnpm install）
+├── package.json          ← 覆盖（装完再覆盖的话要重新 pnpm install）
 ├── tsconfig.json         ← 覆盖（宽松的 TS 配置）
 ├── vite.config.ts        ← 覆盖（极简配置）
 ├── index.html            ← 覆盖
@@ -161,7 +161,6 @@ TDesign 在 uniapp 中需要三个条件同时满足：
 2. **pages.json 配 easycom**：让编译器知道 `<t-button>` 去哪找
 3. **App.vue 引入主题 CSS**：没有这行，组件有但没样式
 
-这三步我都已经帮你配好了。
 
 ## 怎么用 TDesign 组件？
 
